@@ -1,0 +1,32 @@
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from .db import initialize
+from .routes import episodes, exports, health, sessions
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    initialize()
+    yield
+
+
+app = FastAPI(title="RoboData Studio API", version="0.1.0", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://127.0.0.1:3000", "http://localhost:3000"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.include_router(health.router, prefix="/api")
+app.include_router(sessions.router, prefix="/api")
+app.include_router(episodes.router, prefix="/api")
+app.include_router(exports.router, prefix="/api")
+
+
+@app.get("/")
+def root():
+    return {"name": "RoboData Studio API", "docs": "/docs"}
