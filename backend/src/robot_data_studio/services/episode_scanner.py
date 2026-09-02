@@ -5,9 +5,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
+from robot_data_contracts.validation import inspect_episode
 
 from ..db import transaction
-from ..episode_contract import inspect_episode
 from .session_service import get_session
 
 
@@ -19,13 +19,17 @@ def scan_session(session_id: str) -> dict:
     session = get_session(session_id)
     if not session:
         raise KeyError(session_id)
+    if session["status"] == "trashed":
+        raise ValueError("restore the session before scanning episodes")
     root = Path(session["config"]["episode_root"]).resolve()
     indexed = skipped = invalid = 0
+    invalid_episodes: list[dict[str, str]] = []
     for manifest_path in sorted(root.glob("episode_*/manifest.json")):
         try:
             episode = inspect_episode(manifest_path, engine_id=session["engine_id"])
-        except (OSError, ValueError, KeyError, json.JSONDecodeError):
+        except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
             invalid += 1
+            invalid_episodes.append({"path": str(manifest_path.parent), "error": str(error)})
             continue
         with transaction() as connection:
             existing = connection.execute(
@@ -53,18 +57,25 @@ def scan_session(session_id: str) -> dict:
                 ),
             )
             indexed += 1
-    return {"indexed": indexed, "skipped": skipped, "invalid": invalid}
+    return {"indexed": indexed, "skipped": skipped, "invalid": invalid, "invalid_episodes": invalid_episodes}
 
 
-def list_episodes(session_id: str | None = None, qa_status: str | None = None) -> list[dict]:
-    clauses: list[str] = []
-    params: list[str] = []
+def list_episodes(
+    session_id: str | None = None,
+    qa_status: str | None = None,
+    dataset_id: int | None = None,
+) -> list[dict]:
+    clauses: list[str] = ["s.status != 'trashed'"]
+    params: list[str | int] = []
     if session_id:
         clauses.append("e.session_id = ?")
         params.append(session_id)
     if qa_status:
         clauses.append("e.qa_status = ?")
         params.append(qa_status)
+    if dataset_id is not None:
+        clauses.append("s.dataset_id = ?")
+        params.append(dataset_id)
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     with transaction() as connection:
         rows = connection.execute(

@@ -1,9 +1,16 @@
 from fastapi import APIRouter, HTTPException
 
 from ..adapters import engine_descriptors
-from ..models import SessionCreate
+from ..models import SessionCreate, SessionDeleteConfirm
 from ..services.episode_scanner import scan_session
-from ..services.session_service import create_session, get_session, list_sessions
+from ..services.session_service import (
+    create_session,
+    get_session,
+    list_sessions,
+    permanently_delete_session,
+    restore_session,
+    trash_session,
+)
 from ..services.worker_manager import worker_manager
 
 
@@ -29,8 +36,8 @@ def create(payload: SessionCreate):
 
 
 @router.get("/sessions")
-def index():
-    return list_sessions()
+def index(include_trashed: bool = False):
+    return list_sessions(include_trashed=include_trashed)
 
 
 @router.get("/sessions/{session_id}")
@@ -47,6 +54,8 @@ def scan(session_id: str):
         return scan_session(session_id)
     except KeyError:
         raise HTTPException(404, "session not found") from None
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
 
 
 @router.post("/sessions/{session_id}/workers/start")
@@ -67,3 +76,41 @@ def worker_status(session_id: str):
 @router.post("/sessions/{session_id}/workers/stop")
 def stop(session_id: str):
     return worker_manager.stop(session_id)
+
+
+@router.post("/sessions/{session_id}/trash")
+def trash(session_id: str):
+    if worker_manager.is_running(session_id):
+        raise HTTPException(409, "stop the session worker before moving it to trash")
+    try:
+        return trash_session(session_id)
+    except KeyError:
+        raise HTTPException(404, "session not found") from None
+    except (OSError, ValueError) as error:
+        raise HTTPException(409, str(error)) from error
+
+
+@router.post("/sessions/{session_id}/restore")
+def restore(session_id: str):
+    try:
+        return restore_session(session_id)
+    except KeyError:
+        raise HTTPException(404, "session not found") from None
+    except (OSError, ValueError) as error:
+        raise HTTPException(409, str(error)) from error
+
+
+@router.delete("/sessions/{session_id}")
+def delete(session_id: str, payload: SessionDeleteConfirm):
+    if worker_manager.is_running(session_id):
+        raise HTTPException(409, "stop the session worker before deleting it")
+    try:
+        return permanently_delete_session(
+            session_id,
+            confirm_session_id=payload.confirm_session_id,
+            delete_accepted_data=payload.delete_accepted_data,
+        )
+    except KeyError:
+        raise HTTPException(404, "session not found") from None
+    except (OSError, ValueError) as error:
+        raise HTTPException(409, str(error)) from error

@@ -13,12 +13,25 @@ export type Session = {
   episode_count?: number;
   accepted_count?: number;
   pending_count?: number;
+  created_at: string;
+  updated_at: string;
   config: Record<string, unknown>;
+};
+
+export type Dataset = {
+  id: number;
+  name: string;
+  root_path: string;
+  session_count: number;
+  episode_count: number;
+  accepted_count: number;
+  created_at: string;
 };
 
 export type Episode = {
   id: number;
   session_id: string;
+  dataset_id: number;
   episode_uuid: string;
   path: string;
   task: string;
@@ -39,5 +52,11 @@ export type ExportJob = {
   status: string;
   output_path: string;
   error: string | null;
+  output_name: string | null;
+  repo_id: string | null;
+  images: number | null;
+  profile: 'physical_joint8' | 'openpi_franka_joint8' | 'fastwam_franka_joint8' | null;
+  episode_count: number;
+  episode_ids: number[];
   created_at: string;
 };

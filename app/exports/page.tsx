@@ -1,18 +1,22 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Box, Database, FileArchive, RefreshCw } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { api } from '@/lib/api';
-import type { ExportJob, Session } from '@/lib/types';
+import type { Dataset, Episode, ExportJob } from '@/lib/types';
+
+type ExportFormat = 'lerobot' | 'rlds' | 'robomimic';
+type TrainingProfile = 'physical_joint8' | 'openpi_franka_joint8' | 'fastwam_franka_joint8';
 
 const formats = [
   { id: 'lerobot', title: 'LeRobot v3', note: 'Parquet + MP4/images，适合主流 VLA 数据管线', icon: Box },
@@ -20,10 +24,212 @@ const formats = [
   { id: 'robomimic', title: 'Robomimic HDF5', note: 'HDF5 demos、mask 与相机观测', icon: FileArchive },
 ] as const;
 
+const profiles: Array<{ id: TrainingProfile; label: string }> = [
+  { id: 'physical_joint8', label: 'Physical joint8（原生 8D）' },
+  { id: 'openpi_franka_joint8', label: 'OpenPI Franka joint8' },
+  { id: 'fastwam_franka_joint8', label: 'FastWAM Franka joint8' },
+];
+
 export default function ExportsPage() {
-  const [sessions, setSessions] = useState<Session[]>([]); const [jobs, setJobs] = useState<ExportJob[]>([]); const [datasetId, setDatasetId] = useState(''); const [format, setFormat] = useState<'lerobot' | 'rlds' | 'robomimic'>('lerobot'); const [name, setName] = useState('dataset_v1'); const [error, setError] = useState<string>(); const [busy, setBusy] = useState(false);
-  const load = useCallback(async () => { try { const [nextSessions, nextJobs] = await Promise.all([api<Session[]>('/sessions'), api<ExportJob[]>('/exports')]); setSessions(nextSessions); setJobs(nextJobs); if (!datasetId && nextSessions[0]) setDatasetId(String(nextSessions[0].dataset_id)); setError(undefined); } catch (caught) { setError(caught instanceof Error ? caught.message : '加载失败'); } }, [datasetId]);
+  const [datasets, setDatasets] = useState<Dataset[]>([]);
+  const [episodes, setEpisodes] = useState<Episode[]>([]);
+  const [jobs, setJobs] = useState<ExportJob[]>([]);
+  const [datasetId, setDatasetId] = useState('');
+  const [selectedEpisodeIds, setSelectedEpisodeIds] = useState<number[]>([]);
+  const [format, setFormat] = useState<ExportFormat>('lerobot');
+  const [profile, setProfile] = useState<TrainingProfile>('physical_joint8');
+  const [images, setImages] = useState(false);
+  const [name, setName] = useState('dataset_v1');
+  const [error, setError] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const [episodesLoading, setEpisodesLoading] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const [nextDatasets, nextJobs] = await Promise.all([
+        api<Dataset[]>('/datasets'),
+        api<ExportJob[]>('/exports'),
+      ]);
+      setDatasets(nextDatasets);
+      setJobs(nextJobs);
+      setDatasetId((current) => (
+        nextDatasets.some((dataset) => String(dataset.id) === current)
+          ? current
+          : nextDatasets[0] ? String(nextDatasets[0].id) : ''
+      ));
+      setError(undefined);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '加载失败');
+    }
+  }, []);
+
   useEffect(() => { void load(); }, [load]);
-  async function start() { setBusy(true); try { await api('/exports', { method: 'POST', body: JSON.stringify({ dataset_id: Number(datasetId), format, output_name: name, repo_id: format === 'lerobot' ? `local/${name}` : null }) }); await load(); } catch (caught) { setError(caught instanceof Error ? caught.message : '导出失败'); } finally { setBusy(false); } }
-  return <AppShell current="exports"><div className="space-y-5"><div><Badge variant="outline" className="mb-3">TRAINING FORMATS</Badge><h1 className="text-2xl font-semibold">导出中心</h1><p className="mt-1 text-sm text-muted-foreground">原始数据保持不变，按训练生态生成派生数据集。</p></div>{error && <div className="rounded-lg border border-destructive/40 p-3 text-sm text-destructive">{error}</div>}<div className="grid gap-3 md:grid-cols-3">{formats.map((item) => { const Icon = item.icon; const active = format === item.id; return <button key={item.id} onClick={() => setFormat(item.id)} className={`rounded-xl border p-4 text-left transition-colors ${active ? 'border-primary bg-primary/8' : 'border-border/70 bg-card hover:border-primary/40'}`}><Icon className={active ? 'size-5 text-primary' : 'size-5 text-muted-foreground'} /><strong className="mt-4 block">{item.title}</strong><span className="mt-1 block text-xs leading-5 text-muted-foreground">{item.note}</span></button>; })}</div><Card className="instrument-card"><CardHeader><CardTitle>新建导出任务</CardTitle><CardDescription>导出由 allowlist 命令异步执行，日志保存在 dataset/exports。</CardDescription></CardHeader><CardContent className="grid items-end gap-4 md:grid-cols-[1fr_1fr_auto]"><div className="space-y-2"><Label>Dataset</Label><NativeSelect className="w-full" value={datasetId} onChange={(event) => setDatasetId(event.target.value)}>{sessions.map((session) => <NativeSelectOption key={session.dataset_id} value={session.dataset_id}>{session.dataset_name ?? session.dataset_id}</NativeSelectOption>)}</NativeSelect></div><div className="space-y-2"><Label>输出名称</Label><Input value={name} onChange={(event) => setName(event.target.value)} /></div><Button disabled={busy || !datasetId || !name} onClick={start}>{busy ? '提交中…' : `导出 ${format}`}</Button></CardContent></Card><Card className="instrument-card"><CardHeader><CardTitle>任务记录</CardTitle><CardDescription>依赖不完整时保留失败状态和日志，不会伪装成功。</CardDescription></CardHeader><CardContent><Table><TableHeader><TableRow><TableHead>Job</TableHead><TableHead>Format</TableHead><TableHead>Status</TableHead><TableHead>Output</TableHead><TableHead><Button variant="ghost" size="sm" onClick={load}><RefreshCw /></Button></TableHead></TableRow></TableHeader><TableBody>{jobs.map((job) => <TableRow key={job.id}><TableCell className="font-mono text-xs">{job.id}</TableCell><TableCell>{job.format}</TableCell><TableCell><Badge variant={job.status === 'completed' ? 'default' : 'outline'}>{job.status}</Badge></TableCell><TableCell className="max-w-sm truncate font-mono text-xs">{job.output_path}</TableCell><TableCell className="text-xs text-destructive">{job.error}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card></div></AppShell>;
+
+  useEffect(() => {
+    let cancelled = false;
+    setSelectedEpisodeIds([]);
+    if (!datasetId) {
+      setEpisodes([]);
+      return () => { cancelled = true; };
+    }
+    setEpisodesLoading(true);
+    void api<Episode[]>(`/episodes?dataset_id=${encodeURIComponent(datasetId)}&qa_status=accepted`)
+      .then((nextEpisodes) => {
+        if (!cancelled) setEpisodes(nextEpisodes);
+      })
+      .catch((caught: unknown) => {
+        if (!cancelled) setError(caught instanceof Error ? caught.message : 'Episode 候选集加载失败');
+      })
+      .finally(() => {
+        if (!cancelled) setEpisodesLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [datasetId]);
+
+  const selected = useMemo(() => new Set(selectedEpisodeIds), [selectedEpisodeIds]);
+
+  function toggleEpisode(episodeId: number, checked: boolean) {
+    setSelectedEpisodeIds((current) => (
+      checked
+        ? current.includes(episodeId) ? current : [...current, episodeId]
+        : current.filter((id) => id !== episodeId)
+    ));
+  }
+
+  async function start() {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await api('/exports', {
+        method: 'POST',
+        body: JSON.stringify({
+          dataset_id: Number(datasetId),
+          episode_ids: selectedEpisodeIds,
+          format,
+          output_name: name,
+          repo_id: format === 'lerobot' ? `local/${name}` : null,
+          images: format === 'lerobot' && images,
+          profile,
+        }),
+      });
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '导出失败');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <AppShell current="exports">
+      <div className="space-y-5">
+        <div>
+          <Badge variant="outline" className="mb-3">TRAINING FORMATS</Badge>
+          <h1 className="text-2xl font-semibold">导出中心</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Accepted 是候选门槛；每次导出仍需明确选择 Episode。</p>
+        </div>
+
+        {error && <div className="rounded-lg border border-destructive/40 p-3 text-sm text-destructive">{error}</div>}
+
+        <div className="grid gap-3 md:grid-cols-3">
+          {formats.map((item) => {
+            const Icon = item.icon;
+            const active = format === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setFormat(item.id)}
+                className={`rounded-xl border p-4 text-left transition-colors ${active ? 'border-primary bg-primary/8' : 'border-border/70 bg-card hover:border-primary/40'}`}
+              >
+                <Icon className={active ? 'size-5 text-primary' : 'size-5 text-muted-foreground'} />
+                <strong className="mt-4 block">{item.title}</strong>
+                <span className="mt-1 block text-xs leading-5 text-muted-foreground">{item.note}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <Card className="instrument-card">
+          <CardHeader>
+            <CardTitle>1. 选择 Dataset 与 Episodes</CardTitle>
+            <CardDescription>这里只列出未回收 session 中 QA accepted 的 Episode。</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="max-w-xl space-y-2">
+              <Label>Dataset</Label>
+              <NativeSelect className="w-full" value={datasetId} onChange={(event) => setDatasetId(event.target.value)}>
+                {datasets.map((dataset) => (
+                  <NativeSelectOption key={dataset.id} value={dataset.id}>
+                    {dataset.name} · {dataset.session_count} sessions · {dataset.accepted_count} accepted
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline">已选择 {selectedEpisodeIds.length} / {episodes.length}</Badge>
+              <Button type="button" size="sm" variant="outline" disabled={!episodes.length} onClick={() => setSelectedEpisodeIds(episodes.map((episode) => episode.id))}>全选</Button>
+              <Button type="button" size="sm" variant="ghost" disabled={!selectedEpisodeIds.length} onClick={() => setSelectedEpisodeIds([])}>清空</Button>
+            </div>
+            <Table>
+              <TableHeader>
+                <TableRow><TableHead>选择</TableHead><TableHead>Episode</TableHead><TableHead>Task</TableHead><TableHead>Frames</TableHead><TableHead>结果</TableHead><TableHead>采集时间</TableHead></TableRow>
+              </TableHeader>
+              <TableBody>
+                {episodes.map((episode) => (
+                  <TableRow key={episode.id}>
+                    <TableCell><Checkbox checked={selected.has(episode.id)} onCheckedChange={(checked) => toggleEpisode(episode.id, checked)} aria-label={`选择 ${episode.episode_uuid}`} /></TableCell>
+                    <TableCell><p className="font-mono text-xs">{episode.episode_uuid.slice(0, 12)}</p><p className="max-w-72 break-all text-xs text-muted-foreground">{episode.session_id}</p></TableCell>
+                    <TableCell className="max-w-sm whitespace-normal">{episode.task}</TableCell>
+                    <TableCell className="font-mono">{episode.num_frames}</TableCell>
+                    <TableCell className="text-xs">operator: {resultLabel(episode.operator_success)}<br />auto: {resultLabel(episode.auto_success)}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{formatChinaTime(episode.created_at)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            {!episodesLoading && !episodes.length && <p className="py-8 text-center text-sm text-muted-foreground">这个 Dataset 当前没有可导出的 accepted Episode。</p>}
+            {episodesLoading && <p className="py-8 text-center text-sm text-muted-foreground">正在加载候选 Episode…</p>}
+          </CardContent>
+        </Card>
+
+        <Card className="instrument-card">
+          <CardHeader>
+            <CardTitle>2. 配置并提交</CardTitle>
+            <CardDescription>选择范围和训练视图会随任务保存，原始 Episode 不会改变。</CardDescription>
+          </CardHeader>
+          <CardContent className="grid items-end gap-4 md:grid-cols-[1fr_1fr_1fr_auto]">
+            {format === 'lerobot' && <div className="space-y-2"><Label>Training profile</Label><NativeSelect className="w-full" value={profile} onChange={(event) => setProfile(event.target.value as TrainingProfile)}>{profiles.map((item) => <NativeSelectOption key={item.id} value={item.id}>{item.label}</NativeSelectOption>)}</NativeSelect></div>}
+            <div className="space-y-2"><Label>输出名称</Label><Input value={name} onChange={(event) => setName(event.target.value)} /></div>
+            {format === 'lerobot' && <label className="flex h-8 items-center gap-2 text-sm"><Checkbox checked={images} onCheckedChange={setImages} />保存图片而不是 MP4</label>}
+            <Button disabled={busy || !datasetId || !name || selectedEpisodeIds.length === 0} onClick={start}>{busy ? '提交中…' : `导出 ${selectedEpisodeIds.length} 条 ${format}`}</Button>
+          </CardContent>
+        </Card>
+
+        <Card className="instrument-card">
+          <CardHeader><CardTitle>任务记录</CardTitle><CardDescription>失败记录会保留；新任务同时记录 Episode 范围和训练 profile。</CardDescription></CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader><TableRow><TableHead>Job</TableHead><TableHead>Format / Profile</TableHead><TableHead>Episodes</TableHead><TableHead>Status</TableHead><TableHead>Output</TableHead><TableHead><Button variant="ghost" size="sm" onClick={load}><RefreshCw /></Button></TableHead></TableRow></TableHeader>
+              <TableBody>{jobs.map((job) => <TableRow key={job.id}><TableCell className="font-mono text-xs">{job.id}</TableCell><TableCell>{job.format}<p className="text-xs text-muted-foreground">{job.profile ?? 'legacy job'}</p></TableCell><TableCell className="font-mono">{job.episode_count}</TableCell><TableCell><Badge variant={job.status === 'completed' ? 'default' : 'outline'}>{job.status}</Badge></TableCell><TableCell className="max-w-sm truncate font-mono text-xs">{job.output_path}</TableCell><TableCell className="text-xs text-destructive">{job.error}</TableCell></TableRow>)}</TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </div>
+    </AppShell>
+  );
+}
+
+function resultLabel(value: number | null): string {
+  return value == null ? 'N/A' : value ? 'success' : 'failure';
+}
+
+function formatChinaTime(value: string | null): string {
+  if (!value) return 'N/A';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).format(date);
 }

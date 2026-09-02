@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .db import initialize
-from .routes import episodes, exports, health, sessions
+from .routes import datasets, episodes, exports, health, sessions
 
 
 @asynccontextmanager
@@ -22,6 +22,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(health.router, prefix="/api")
+app.include_router(datasets.router, prefix="/api")
 app.include_router(sessions.router, prefix="/api")
 app.include_router(episodes.router, prefix="/api")
 app.include_router(exports.router, prefix="/api")

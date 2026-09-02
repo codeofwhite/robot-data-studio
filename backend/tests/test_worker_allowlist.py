@@ -10,7 +10,8 @@ def test_keyboard_and_gello_have_separate_allowlisted_modules():
     adapter = ClothTwinAdapter()
     base = {
         "scene_id": "rigid_pick_place", "port": 8080, "control_fps": 10,
-        "physics_steps_per_control": 2, "width": 640, "height": 480, "scene_params": {},
+        "sim_dt": 0.01, "physics_steps_per_control": 10,
+        "width": 640, "height": 480, "scene_params": {},
         "camera_profile_id": "lab_d435i_dual_v1",
     }
     keyboard = adapter.build_collect_command({**base, "control_mode": "keyboard"}, Path("/tmp/data"))
@@ -21,13 +22,15 @@ def test_keyboard_and_gello_have_separate_allowlisted_modules():
     assert keyboard[keyboard.index("--control-source") + 1] == "keyboard"
     assert gello[gello.index("--control-source") + 1] == "gello"
     assert keyboard[keyboard.index("--camera-profile-file") + 1].endswith("lab_d435i_dual_v1.json")
+    assert keyboard[keyboard.index("--sim-dt") + 1] == "0.01"
 
 
 def test_genesis_worker_is_launched_from_gello_remote():
     adapter = ClothTwinAdapter()
     config = {
         "scene_id": "rigid_pick_place", "control_mode": "gello", "gpu": 2,
-        "port": 8080, "control_fps": 10, "physics_steps_per_control": 2,
+        "port": 8080, "control_fps": 10, "sim_dt": 0.01,
+        "physics_steps_per_control": 10,
         "width": 640, "height": 480, "scene_params": {},
         "camera_profile_id": "lab_d435i_dual_v1",
     }
@@ -42,7 +45,8 @@ def test_rejects_unallowlisted_scene_parameter():
     with pytest.raises(ValueError, match="not allowlisted"):
         adapter.build_collect_command({
             "scene_id": "cloth_corner_lift", "control_mode": "gello", "port": 8080,
-            "control_fps": 10, "physics_steps_per_control": 2, "width": 640, "height": 480,
+            "control_fps": 10, "sim_dt": 0.01, "physics_steps_per_control": 10,
+            "width": 640, "height": 480,
             "scene_params": {"dangerous_option": 1},
         }, Path("/tmp/data"))
 
@@ -54,7 +58,8 @@ def test_genesis_rigid_scene_passes_work_surface_height() -> None:
         "control_mode": "gello",
         "port": 8080,
         "control_fps": 10,
-        "physics_steps_per_control": 2,
+        "sim_dt": 0.01,
+        "physics_steps_per_control": 10,
         "width": 640,
         "height": 480,
         "scene_params": {"work_surface_height_m": 0.28},
@@ -62,6 +67,24 @@ def test_genesis_rigid_scene_passes_work_surface_height() -> None:
     }
     command = adapter.build_collect_command(config, Path("/tmp/data"))
     assert command[command.index("--scene-param") + 1] == "work_surface_height_m=0.28"
+
+
+def test_genesis_rejects_mismatched_control_and_simulation_time() -> None:
+    adapter = ClothTwinAdapter()
+    config = {
+        "scene_id": "rigid_pick_place",
+        "control_mode": "keyboard",
+        "port": 8080,
+        "control_fps": 10,
+        "sim_dt": 0.01,
+        "physics_steps_per_control": 2,
+        "width": 640,
+        "height": 480,
+        "scene_params": {},
+        "camera_profile_id": "lab_d435i_dual_v1",
+    }
+    with pytest.raises(ValueError, match="inconsistent Genesis timing"):
+        adapter.build_collect_command(config, Path("/tmp/data"))
 
 
 def test_isaac_launch_uses_gpu_id_and_single_cuda_visibility():

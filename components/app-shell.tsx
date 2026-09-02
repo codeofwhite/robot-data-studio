@@ -2,7 +2,7 @@ import { Activity, Boxes, Database, Download, LayoutDashboard, Radio, Settings2 
 
 const nav = [
   { id: 'dashboard', label: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { id: 'sessions', label: '采集会话', href: '/sessions/new', icon: Radio },
+  { id: 'sessions', label: '采集会话', href: '/sessions', icon: Radio },
   { id: 'episodes', label: 'Episodes', href: '/episodes', icon: Database },
   { id: 'exports', label: '导出中心', href: '/exports', icon: Download },
 ] as const;

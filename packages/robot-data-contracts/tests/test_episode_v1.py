@@ -1,0 +1,79 @@
+import json
+
+import numpy as np
+
+from robot_data_contracts import (
+    TRAINING_PROFILES,
+    AugmentationLineageV1,
+    EpisodeWriter,
+    EvaluatorResultV1,
+    SceneProvenanceV1,
+    SoftwareProvenanceV1,
+    WorkerDescriptorV1,
+    adapt_franka_joint8,
+    inspect_episode,
+)
+from robot_data_contracts.profiles.franka import FRANKA_JOINT8_ACTION, franka_feature_specs
+
+
+def test_episode_v1_contains_required_action_stages_and_timestamps(tmp_path) -> None:
+    writer = EpisodeWriter(
+        tmp_path, fps=20, robot_id="franka_panda", control_source="gello_joint_targets",
+        features=franka_feature_specs(), action_profile=FRANKA_JOINT8_ACTION,
+        camera_names=(), camera_calibration={},
+        scene=SceneProvenanceV1(scene_id="rigid_pick_place", seed=7),
+        software=SoftwareProvenanceV1(
+            python_version="test", platform="test", engine_id="genesis",
+            engine_version="test", worker_id="genesis_worker",
+        ),
+        lineage=AugmentationLineageV1(generation_method="teleoperation"),
+    )
+    writer.start("pick the object")
+    writer.add_frame(
+        images={}, simulation_time_s=0.0, control_source_timestamp_ns=100,
+        control_receive_timestamp_ns=110, capture_timestamp_ns=120, control_sequence=3,
+        values={
+            "native_state": np.zeros(18, np.float32),
+            "policy_state": np.zeros(16, np.float32),
+            "operator_action": np.zeros(7, np.float32),
+            "requested_action": np.zeros(8, np.float32),
+            "safe_action": np.zeros(8, np.float32),
+            "applied_action": np.zeros(8, np.float32),
+        },
+    )
+    episode = writer.finish(
+        operator_success=True,
+        evaluator=EvaluatorResultV1(
+            evaluator_id="pick_v1", evaluator_version="1", available=True,
+            success=True, metrics={"hold_frames": 5},
+        ),
+    )
+
+    descriptor = inspect_episode(episode / "manifest.json")
+    with np.load(episode / "trajectory.npz") as arrays:
+        assert arrays["control_sequence"].tolist() == [3]
+        assert arrays["control_source_timestamp_ns"].tolist() == [100]
+        assert arrays["control_receive_timestamp_ns"].tolist() == [110]
+        assert arrays["capture_timestamp_ns"].tolist() == [120]
+    assert descriptor.auto_success is True
+    assert json.loads((episode / "manifest.json").read_text())["scene"]["seed"] == 7
+
+
+def test_training_profiles_are_explicit_and_do_not_mutate_physical_values() -> None:
+    state = np.asarray([0.0] * 7 + [0.08] + [0.0] * 8, dtype=np.float32)
+    action = np.asarray([0.0] * 7 + [0.0], dtype=np.float32)
+    openpi_state, openpi_action = adapt_franka_joint8(state, action, "openpi_franka_joint8")
+    fastwam_state, fastwam_action = adapt_franka_joint8(state, action, "fastwam_franka_joint8")
+    assert openpi_state.shape == openpi_action.shape == (8,)
+    assert openpi_state[7] == 0.0 and openpi_action[7] == 1.0
+    assert fastwam_state[7] == 0.08 and fastwam_action[7] == 0.0
+    assert TRAINING_PROFILES["fastwam_franka_joint8"].action_dimension == 8
+
+
+def test_worker_descriptor_v1_round_trip() -> None:
+    descriptor = WorkerDescriptorV1(
+        worker_id="gello_remote_genesis", engine_id="genesis",
+        entrypoint="gello_remote.genesis_worker", control_modes=("keyboard", "gello"),
+        capabilities={"recording": True, "automatic_outcome": True},
+    )
+    assert descriptor.contract_version == 1

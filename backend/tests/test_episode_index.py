@@ -4,7 +4,7 @@ import numpy as np
 
 from robot_data_studio.models import SessionCreate
 from robot_data_studio.services.episode_scanner import episode_detail, list_episodes, scan_session, update_qa
-from robot_data_studio.services.session_service import create_session
+from robot_data_studio.services.session_service import create_session, restore_session, trash_session
 
 
 def test_scan_detail_and_qa_keep_outcomes_separate(isolated_settings):
@@ -31,13 +31,22 @@ def test_scan_detail_and_qa_keep_outcomes_separate(isolated_settings):
         policy_action=np.ones((3, 8)),
         reward=np.zeros(3),
     )
-    assert scan_session(session["id"]) == {"indexed": 1, "skipped": 0, "invalid": 0}
+    result = scan_session(session["id"])
+    assert {key: result[key] for key in ("indexed", "skipped", "invalid")} == {"indexed": 1, "skipped": 0, "invalid": 0}
+    assert result["invalid_episodes"] == []
     episode = list_episodes()[0]
     assert episode["operator_success"] == 1
     assert episode["auto_success"] == 0
     assert episode["qa_status"] == "pending"
+    assert list_episodes(dataset_id=session["dataset_id"])[0]["id"] == episode["id"]
+    assert list_episodes(dataset_id=session["dataset_id"] + 1) == []
     update_qa(episode["id"], "accepted", "human override after replay")
     detail = episode_detail(episode["id"])
     assert detail["qa_status"] == "accepted"
     assert detail["operator_success"] == 1 and detail["auto_success"] == 0
     assert len(detail["trajectory"]["policy_action"]) == 3
+
+    trash_session(session["id"])
+    assert list_episodes() == []
+    restore_session(session["id"])
+    assert list_episodes()[0]["episode_uuid"] == "stable-uuid"

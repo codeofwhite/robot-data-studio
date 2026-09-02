@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import subprocess
 from functools import cached_property
@@ -28,6 +29,7 @@ class ClothTwinAdapter(CollectionAdapter):
         "keyboard": "gello_remote.genesis_worker",
         "gello": "gello_remote.genesis_worker",
     }
+    worker_entrypoint = "gello_remote.genesis_worker"
 
     def __init__(self) -> None:
         # Adapter registration freezes the configured plugin location. Tests may
@@ -83,6 +85,15 @@ class ClothTwinAdapter(CollectionAdapter):
         if profile_id not in self.camera_profile_ids:
             raise ValueError(f"unsupported Genesis camera profile: {profile_id}")
         validate_session_camera_profile(profile_id, width=int(config["width"]), height=int(config["height"]))
+        control_dt = 1.0 / float(config["control_fps"])
+        sim_dt = float(config.get("sim_dt", 0.01))
+        simulated_dt = sim_dt * int(config["physics_steps_per_control"])
+        if not math.isclose(control_dt, simulated_dt, rel_tol=1e-6, abs_tol=1e-9):
+            raise ValueError(
+                "inconsistent Genesis timing: "
+                f"1/control_fps={control_dt:.9g}s but "
+                f"sim_dt*physics_steps_per_control={simulated_dt:.9g}s"
+            )
 
     def build_collect_command(self, config: dict[str, Any], output_dir: Path) -> list[str]:
         self.validate_config(config)
@@ -96,6 +107,7 @@ class ClothTwinAdapter(CollectionAdapter):
             "--port", str(config["port"]),
             "--data-dir", str(output_dir),
             "--control-fps", str(config["control_fps"]),
+            "--sim-dt", str(config.get("sim_dt", 0.01)),
             "--physics-steps-per-control", str(config["physics_steps_per_control"]),
             "--width", str(config["width"]),
             "--height", str(config["height"]),
@@ -140,4 +152,6 @@ class ClothTwinAdapter(CollectionAdapter):
             command += ["--repo-id", str(kwargs["repo_id"])]
         if kwargs.get("images"):
             command.append("--images")
+        if format_name == "lerobot" and kwargs.get("profile"):
+            command += ["--profile", str(kwargs["profile"])]
         return command

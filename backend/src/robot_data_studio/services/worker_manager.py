@@ -36,10 +36,16 @@ class WorkerManager:
                 return managed_session_id, worker
         return None
 
+    def is_running(self, session_id: str) -> bool:
+        worker = self._workers.get(session_id)
+        return bool(worker and worker.process.poll() is None)
+
     def start(self, session_id: str) -> dict:
         session = get_session(session_id)
         if not session:
             raise KeyError(session_id)
+        if session["status"] == "trashed":
+            raise ValueError("restore the session before starting its worker")
         with self._lock:
             existing = self._workers.get(session_id)
             if existing and existing.process.poll() is None:

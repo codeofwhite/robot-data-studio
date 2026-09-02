@@ -3,7 +3,9 @@
 Local-first, engine-neutral simulation data collection platform. Genesis/ClothTwin
 and Isaac Sim/Isaac Lab are the first engine plugins. The Studio owns sessions,
 worker lifecycle, a common Episode contract and indexing; each engine retains its
-native simulation, rendering and safety implementation.
+native simulation, rendering and safety implementation. The versioned schemas and
+runtime-light writer/validator live in `packages/robot-data-contracts`; workers
+depend on that package and never import Studio.
 
 ## Start locally
 
@@ -15,7 +17,8 @@ cp .env.example .env
 set -a
 source .env
 set +a
-backend/.venv/bin/python -m uvicorn robot_data_studio.main:app --app-dir backend/src --host 127.0.0.1 --port 8010 --reload
+PYTHONPATH=packages/robot-data-contracts/src \
+  backend/.venv/bin/python -m uvicorn robot_data_studio.main:app --app-dir backend/src --host 127.0.0.1 --port 8010 --reload
 ```
 
 Frontend (terminal 2):
@@ -47,13 +50,13 @@ Keep the same local port numbers so the browser URLs remain
 
 The worker launcher builds argv arrays, never shell command strings. Both
 simulator workers are launched from `gello-remote`. Genesis uses its dedicated
-interpreter, loads ClothTwin's scene/data implementation, and receives
+interpreter, loads ClothTwin's scene implementation, and receives
 `CUDA_VISIBLE_DEVICES`; Isaac Sim uses the Isaac Lab
 launcher with `--gpu-id` and a one-device `CUDA_VISIBLE_DEVICES` mask. Isaac
 routes RTX/Vulkan by the selected physical id and Isaac Lab/PhysX by the masked
 logical `cuda:0`, so the worker does not create contexts on unselected GPUs. Existing
-ClothTwin manifests and the engine-neutral `robot_data_studio_episode` format are
-both validated before indexing. Raw manifests are not rewritten by QA.
+legacy ClothTwin manifests and the engine-neutral `robot_data_episode` v1 format
+are both validated before indexing. Raw manifests are not rewritten by QA.
 
 The checked-in `lab_d435i_dual_v1` Sensor Profile selects the active laboratory
 D435i pair: `261722075807` for `agentview` and `261622075579` for `wrist`.
@@ -62,16 +65,18 @@ launched by the platform profile. Its RGB intrinsics are intentionally null
 until they are extracted from the physical cameras, so episodes are labeled
 `nominal_pending_intrinsics` instead of calibrated.
 
-The Isaac P0 scene records synchronized base and wrist RGB cameras, Franka joint/finger state,
-applied joint targets, simulation time, and GELLO sequence/source timestamps.
+Every v1 episode records native and policy state, operator/requested/safety-filtered/
+actually-submitted actions, control/simulation/capture timestamps, camera calibration,
+scene/asset/seed provenance, software revisions/dependencies, and evaluator version/metrics.
 Because `franka_empty` has no task evaluator, its automatic outcome is explicitly
 `unavailable`; operator success/failure remains independent.
 
 ## Verification
 
 ```bash
-cd /data/zhanghejun/robot-data-studio/backend
-.venv/bin/python -m pytest -q
+cd /data/zhanghejun/robot-data-studio
+PYTHONPATH=backend/src:packages/robot-data-contracts/src \
+  backend/.venv/bin/python -m pytest -q backend/tests packages/robot-data-contracts/tests
 
 cd /data/zhanghejun/robot-data-studio
 npm run build
@@ -80,3 +85,11 @@ npm run build
 Hardware/Genesis execution depends on the interpreter selected by `ROBOT_DATA_STUDIO_COLLECTOR_PYTHON`. The Studio backend environment intentionally does not duplicate the Genesis environment.
 
 Current dependency preflight on this machine: the `genesis` environment can run collection but does not contain LeRobot or TensorFlow Datasets; `softmimicgen` contains `h5py` for Robomimic. The UI exposes all three standard formats now, but LeRobot/RLDS jobs will fail with an explicit log until their dedicated interpreter variables point to environments containing those exporters. No packages are installed implicitly by Studio.
+
+LeRobot export accepts `physical_joint8`, `openpi_franka_joint8`, or
+`fastwam_franka_joint8`. These are explicit export-time views; the raw episode is
+never normalized or overwritten. The FastWAM profile emits 8-D proprio/action and
+must be paired with `action_dim=8` and `proprio_dim=8` (its upstream default action
+dimension is 7). The OpenPI profile emits an 8-D Franka view and is padded by the
+model configuration; it is not interchangeable with DROID's joint-velocity action
+semantics.

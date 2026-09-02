@@ -31,6 +31,6 @@ def transaction(db_path: Path | None = None):
 
 
 def initialize(db_path: Path | None = None) -> None:
-    migration = (BACKEND_ROOT / "migrations" / "001_initial.sql").read_text(encoding="utf-8")
     with transaction(db_path) as connection:
-        connection.executescript(migration)
+        for migration_path in sorted((BACKEND_ROOT / "migrations").glob("*.sql")):
+            connection.executescript(migration_path.read_text(encoding="utf-8"))

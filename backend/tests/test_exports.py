@@ -1,8 +1,19 @@
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from robot_data_studio.adapters.clothtwin import ClothTwinAdapter
+from robot_data_studio.db import transaction
+from robot_data_studio.models import ExportCreate, SessionCreate
+from robot_data_studio.services.export_service import (
+    _export_environment,
+    _resolve_selected_episodes,
+    _stage_selected_episodes,
+    create_export,
+    list_exports,
+)
+from robot_data_studio.services.session_service import create_session, trash_session
 
 
 @pytest.mark.parametrize("format_name", ["lerobot", "rlds", "robomimic"])
@@ -17,3 +28,109 @@ def test_export_format_is_allowlisted(format_name):
 def test_unknown_export_is_rejected():
     with pytest.raises(ValueError, match="unsupported export format"):
         ClothTwinAdapter().build_export_command("unknown", Path("/tmp/raw"), Path("/tmp/out"))
+
+
+def test_export_request_requires_distinct_selected_episodes():
+    with pytest.raises(ValidationError, match="at least 1 item"):
+        ExportCreate(dataset_id=1, episode_ids=[], format="lerobot", output_name="pilot")
+    with pytest.raises(ValidationError, match="must not contain duplicates"):
+        ExportCreate(dataset_id=1, episode_ids=[1, 1], format="lerobot", output_name="pilot")
+
+
+def test_selected_export_resolves_only_accepted_episodes(isolated_settings):
+    session = create_session(
+        SessionCreate(dataset_name="pilot", scene_id="rigid_pick_place", control_mode="keyboard")
+    )
+    other = create_session(
+        SessionCreate(dataset_name="other", scene_id="rigid_pick_place", control_mode="keyboard")
+    )
+    episode_ids: dict[str, int] = {}
+    with transaction() as connection:
+        for owner, status, name in (
+            (session, "accepted", "accepted"),
+            (session, "pending", "pending"),
+            (other, "accepted", "other"),
+        ):
+            episode_root = Path(owner["config"]["episode_root"]) / name
+            episode_root.mkdir(parents=True)
+            cursor = connection.execute(
+                """INSERT INTO episodes(session_id, episode_uuid, path, task, operator_success,
+                   auto_success, qa_status, failure_reason, num_frames, manifest_json, created_at, indexed_at)
+                   VALUES (?, ?, ?, 'task', 1, 1, ?, NULL, 1, '{}', NULL, 'now')""",
+                (owner["id"], f"episode-{name}", str(episode_root), status),
+            )
+            episode_ids[name] = cursor.lastrowid
+
+    selected = _resolve_selected_episodes(session["dataset_id"], [episode_ids["accepted"]])
+    assert [episode["id"] for episode in selected] == [episode_ids["accepted"]]
+    staging = _stage_selected_episodes(selected, isolated_settings.data_root / "staging")
+    assert [path.name for path in staging.iterdir()] == ["episode-accepted"]
+
+    with pytest.raises(ValueError, match="not QA-accepted"):
+        _resolve_selected_episodes(session["dataset_id"], [episode_ids["pending"]])
+    with pytest.raises(ValueError, match="does not belong"):
+        _resolve_selected_episodes(session["dataset_id"], [episode_ids["other"]])
+
+    trash_session(session["id"])
+    with pytest.raises(ValueError, match="trashed session"):
+        _resolve_selected_episodes(session["dataset_id"], [episode_ids["accepted"]])
+
+
+def test_export_environment_includes_local_contracts_source():
+    paths = _export_environment()["PYTHONPATH"].split(":")
+    assert any(path.endswith("packages/robot-data-contracts/src") for path in paths)
+
+
+def test_export_persists_selection_and_rejects_reserved_output(
+    isolated_settings, monkeypatch
+):
+    session = create_session(
+        SessionCreate(dataset_name="pilot", scene_id="rigid_pick_place", control_mode="keyboard")
+    )
+    episode_root = Path(session["config"]["episode_root"]) / "accepted"
+    episode_root.mkdir(parents=True)
+    with transaction() as connection:
+        cursor = connection.execute(
+            """INSERT INTO episodes(session_id, episode_uuid, path, task, operator_success,
+               auto_success, qa_status, failure_reason, num_frames, manifest_json, created_at, indexed_at)
+               VALUES (?, 'episode-selected', ?, 'task', 1, 1, 'accepted', NULL, 1, '{}', NULL, 'now')""",
+            (session["id"], str(episode_root)),
+        )
+        episode_id = cursor.lastrowid
+
+    class FakeProcess:
+        pid = 1234
+
+    class NoopThread:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(
+        "robot_data_studio.services.export_service.subprocess.Popen",
+        lambda *args, **kwargs: FakeProcess(),
+    )
+    monkeypatch.setattr(
+        "robot_data_studio.services.export_service.threading.Thread", NoopThread
+    )
+    payload = ExportCreate(
+        dataset_id=session["dataset_id"],
+        episode_ids=[episode_id],
+        format="lerobot",
+        output_name="selected_v1",
+        repo_id="local/selected_v1",
+        images=True,
+        profile="openpi_franka_joint8",
+    )
+
+    job = create_export(payload)
+
+    assert job["episode_ids"] == [episode_id]
+    assert job["episode_count"] == 1
+    assert job["profile"] == "openpi_franka_joint8"
+    assert job["images"] == 1
+    assert list_exports()[0]["episode_ids"] == [episode_id]
+    with pytest.raises(ValueError, match="already reserved"):
+        create_export(payload)

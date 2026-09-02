@@ -48,6 +48,7 @@ class IsaacSimAdapter(CollectionAdapter):
         "automatic_outcome": False,
         "scene_reconfigure": False,
     }
+    worker_entrypoint = "gello_remote.isaaclab_gello"
 
     def validate_config(self, config: dict[str, Any]) -> None:
         if config.get("control_mode") not in self.control_modes:

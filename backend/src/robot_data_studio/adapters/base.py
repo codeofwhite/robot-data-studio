@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from robot_data_contracts import WorkerDescriptorV1
+
 from ..camera_profiles import camera_profile_descriptors
 
 
@@ -25,6 +27,11 @@ class CollectionAdapter(ABC):
     camera_profile_ids: tuple[str, ...]
 
     def descriptor(self) -> dict[str, Any]:
+        worker = WorkerDescriptorV1(
+            worker_id=f"gello_remote_{self.adapter_id}", engine_id=self.adapter_id,
+            entrypoint=self.worker_entrypoint, control_modes=self.control_modes,
+            capabilities=self.capabilities,
+        )
         return {
             "id": self.adapter_id,
             "label": self.label,
@@ -32,7 +39,12 @@ class CollectionAdapter(ABC):
             "control_modes": list(self.control_modes),
             "scenes": self.scene_descriptors(),
             "camera_profiles": camera_profile_descriptors(self.camera_profile_ids),
+            "worker": worker.model_dump(mode="json"),
         }
+
+    @property
+    def worker_entrypoint(self) -> str:
+        return f"gello_remote.{self.adapter_id}_worker"
 
     def scene_descriptors(self) -> dict[str, dict[str, Any]]:
         return self.scenes
