@@ -15,10 +15,26 @@ def test_keyboard_and_gello_have_separate_allowlisted_modules():
     }
     keyboard = adapter.build_collect_command({**base, "control_mode": "keyboard"}, Path("/tmp/data"))
     gello = adapter.build_collect_command({**base, "control_mode": "gello"}, Path("/tmp/data"))
-    assert "franka_only.keyboard_collect" in keyboard
-    assert "franka_only.gello_collect" in gello
+    assert "gello_remote.genesis_worker" in keyboard
+    assert "gello_remote.genesis_worker" in gello
     assert keyboard != gello
+    assert keyboard[keyboard.index("--control-source") + 1] == "keyboard"
+    assert gello[gello.index("--control-source") + 1] == "gello"
     assert keyboard[keyboard.index("--camera-profile-file") + 1].endswith("lab_d435i_dual_v1.json")
+
+
+def test_genesis_worker_is_launched_from_gello_remote():
+    adapter = ClothTwinAdapter()
+    config = {
+        "scene_id": "rigid_pick_place", "control_mode": "gello", "gpu": 2,
+        "port": 8080, "control_fps": 10, "physics_steps_per_control": 2,
+        "width": 640, "height": 480, "scene_params": {},
+        "camera_profile_id": "lab_d435i_dual_v1",
+    }
+    launch = adapter.build_worker_launch(config, Path("/tmp/data"))
+    assert launch.cwd.name == "gello-remote"
+    assert launch.env_updates["CUDA_VISIBLE_DEVICES"] == "2"
+    assert "ClothTwin" in launch.env_updates["PYTHONPATH"]
 
 
 def test_rejects_unallowlisted_scene_parameter():
@@ -31,7 +47,24 @@ def test_rejects_unallowlisted_scene_parameter():
         }, Path("/tmp/data"))
 
 
-def test_isaac_launch_uses_gpu_id_and_removes_cuda_visibility():
+def test_genesis_rigid_scene_passes_work_surface_height() -> None:
+    adapter = ClothTwinAdapter()
+    config = {
+        "scene_id": "rigid_pick_place",
+        "control_mode": "gello",
+        "port": 8080,
+        "control_fps": 10,
+        "physics_steps_per_control": 2,
+        "width": 640,
+        "height": 480,
+        "scene_params": {"work_surface_height_m": 0.28},
+        "camera_profile_id": "lab_d435i_dual_v1",
+    }
+    command = adapter.build_collect_command(config, Path("/tmp/data"))
+    assert command[command.index("--scene-param") + 1] == "work_surface_height_m=0.28"
+
+
+def test_isaac_launch_uses_gpu_id_and_single_cuda_visibility():
     adapter = IsaacSimAdapter()
     config = {
         "scene_id": "franka_empty",
@@ -47,6 +80,32 @@ def test_isaac_launch_uses_gpu_id_and_removes_cuda_visibility():
     launch = adapter.build_worker_launch(config, Path("/tmp/isaac-data"))
     assert launch.command[launch.command.index("--gpu-id") + 1] == "6"
     assert launch.command[launch.command.index("--data-dir") + 1] == "/tmp/isaac-data"
-    assert "CUDA_VISIBLE_DEVICES" in launch.unset_env
-    assert "CUDA_VISIBLE_DEVICES" not in launch.env_updates
+    assert launch.env_updates["CUDA_VISIBLE_DEVICES"] == "6"
+    assert "CUDA_VISIBLE_DEVICES" not in launch.unset_env
     assert launch.command[launch.command.index("--camera-profile-file") + 1].endswith("lab_d435i_dual_v1.json")
+    kit_args = launch.command[launch.command.index("--kit_args") + 1]
+    assert "--/app/window/width=960" in kit_args
+    assert "--/app/window/height=720" in kit_args
+
+
+def test_isaac_rigid_scene_passes_work_surface_height() -> None:
+    adapter = IsaacSimAdapter()
+    config = {
+        "scene_id": "rigid_pick_place",
+        "control_mode": "gello",
+        "gpu": 6,
+        "port": 8080,
+        "control_fps": 20,
+        "width": 640,
+        "height": 480,
+        "scene_params": {"work_surface_height_m": 0.28},
+        "camera_profile_id": "lab_d435i_dual_v1",
+    }
+    command = adapter.build_collect_command(config, Path("/tmp/isaac-data"))
+    assert command[command.index("--scene") + 1] == "rigid_pick_place"
+    assert command[command.index("--work-surface-height-m") + 1] == "0.28"
+
+    with pytest.raises(ValueError, match="not allowlisted"):
+        adapter.build_collect_command(
+            {**config, "scene_params": {"unsupported": 1}}, Path("/tmp/isaac-data")
+        )

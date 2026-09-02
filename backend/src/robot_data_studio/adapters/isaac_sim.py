@@ -12,9 +12,27 @@ from .base import CollectionAdapter, WorkerLaunch
 SCENES = {
     "franka_empty": {
         "label": "Franka 空场景遥操采集",
+        "description": "Isaac Lab Franka 空场景采集。",
         "family": "general",
-        "params": [],
-    }
+        "parameters": [],
+    },
+    "rigid_pick_place": {
+        "label": "刚体抓取放置",
+        "description": "Isaac Lab 刚体抓取放置场景。",
+        "family": "general",
+        "parameters": [
+            {
+                "key": "work_surface_height_m",
+                "label": "工作面相对底座高度",
+                "unit": "m",
+                "minimum": 0.18,
+                "maximum": 0.32,
+                "step": 0.01,
+                "default": 0.25,
+                "scale": "linear",
+            }
+        ],
+    },
 }
 
 
@@ -36,8 +54,14 @@ class IsaacSimAdapter(CollectionAdapter):
             raise ValueError("Isaac Sim P0 supports GELLO control only")
         if config.get("scene_id") not in self.scenes:
             raise ValueError("unsupported Isaac Sim scene")
-        if config.get("scene_params"):
-            raise ValueError("Isaac Sim franka_empty does not accept scene parameters")
+        allowed_params = {
+            item["key"] for item in self.scenes[config["scene_id"]]["parameters"]
+        }
+        unknown_params = sorted(set(config.get("scene_params", {})) - allowed_params)
+        if unknown_params:
+            raise ValueError(
+                f"Isaac Sim scene parameter is not allowlisted: {', '.join(unknown_params)}"
+            )
         profile_id = str(config.get("camera_profile_id", "lab_d435i_dual_v1"))
         if profile_id not in self.camera_profile_ids:
             raise ValueError(f"unsupported Isaac Sim camera profile: {profile_id}")
@@ -45,7 +69,7 @@ class IsaacSimAdapter(CollectionAdapter):
 
     def build_collect_command(self, config: dict[str, Any], output_dir: Path) -> list[str]:
         self.validate_config(config)
-        return [
+        command = [
             str(settings.isaaclab_launcher),
             "-p",
             "-m",
@@ -87,11 +111,18 @@ class IsaacSimAdapter(CollectionAdapter):
             settings.isaac_franka_usd,
             "--kit_args",
             "--/UJITSO/geometry=false --/persistent/UJITSO/geometry=false "
-            "--/app/window/width=1280 --/app/window/height=720",
+            "--/app/window/width=960 --/app/window/height=720",
         ]
+        if config["scene_id"] == "rigid_pick_place":
+            height = config.get("scene_params", {}).get("work_surface_height_m", 0.25)
+            command += ["--work-surface-height-m", str(height)]
+        return command
 
     def build_worker_launch(self, config: dict[str, Any], output_dir: Path) -> WorkerLaunch:
-        python_paths = [str(settings.gello_remote_root / "src"), str(BACKEND_ROOT / "src")]
+        python_paths = [
+            str(settings.gello_remote_root / "src"),
+            str(BACKEND_ROOT / "src"),
+        ]
         if os.environ.get("PYTHONPATH"):
             python_paths.append(os.environ["PYTHONPATH"])
         return WorkerLaunch(
@@ -99,9 +130,9 @@ class IsaacSimAdapter(CollectionAdapter):
             cwd=settings.gello_remote_root,
             env_updates={
                 "CONDA_PREFIX": str(settings.isaaclab_conda_prefix),
+                "CUDA_VISIBLE_DEVICES": str(config["gpu"]),
                 "PYTHONPATH": ":".join(python_paths),
             },
-            unset_env=("CUDA_VISIBLE_DEVICES",),
         )
 
     def build_export_command(self, format_name: str, input_root: Path, output: Path, **kwargs: Any) -> list[str]:

@@ -45,9 +45,13 @@ Keep the same local port numbers so the browser URLs remain
 5. Save episodes through the engine console, then scan the session directory.
 6. Mark QA accepted/rejected. Exports use only accepted episodes by default.
 
-The worker launcher builds argv arrays, never shell command strings. Genesis uses
-its dedicated interpreter and `CUDA_VISIBLE_DEVICES`; Isaac Sim uses the Isaac Lab
-launcher with `--gpu-id` and removes inherited `CUDA_VISIBLE_DEVICES`. Existing
+The worker launcher builds argv arrays, never shell command strings. Both
+simulator workers are launched from `gello-remote`. Genesis uses its dedicated
+interpreter, loads ClothTwin's scene/data implementation, and receives
+`CUDA_VISIBLE_DEVICES`; Isaac Sim uses the Isaac Lab
+launcher with `--gpu-id` and a one-device `CUDA_VISIBLE_DEVICES` mask. Isaac
+routes RTX/Vulkan by the selected physical id and Isaac Lab/PhysX by the masked
+logical `cuda:0`, so the worker does not create contexts on unselected GPUs. Existing
 ClothTwin manifests and the engine-neutral `robot_data_studio_episode` format are
 both validated before indexing. Raw manifests are not rewritten by QA.
 

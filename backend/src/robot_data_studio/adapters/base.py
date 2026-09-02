@@ -30,9 +30,12 @@ class CollectionAdapter(ABC):
             "label": self.label,
             "capabilities": self.capabilities,
             "control_modes": list(self.control_modes),
-            "scenes": self.scenes,
+            "scenes": self.scene_descriptors(),
             "camera_profiles": camera_profile_descriptors(self.camera_profile_ids),
         }
+
+    def scene_descriptors(self) -> dict[str, dict[str, Any]]:
+        return self.scenes
 
     @abstractmethod
     def validate_config(self, config: dict[str, Any]) -> None: ...

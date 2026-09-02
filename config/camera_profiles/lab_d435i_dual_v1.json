@@ -77,14 +77,29 @@
         "eye_world_m": [2.2, 1.6, 1.7],
         "target_world_m": [0.45, 0.0, 0.65]
       },
+      "top": {
+        "eye_world_m": [0.45, 0.0, 2.4],
+        "target_world_m": [0.45, 0.0, 0.45],
+        "nominal_vertical_fov_deg": 52.0,
+        "virtual_auxiliary": true,
+        "role": "top-down XY alignment"
+      },
+      "side": {
+        "eye_world_m": [0.45, 1.8, 1.0],
+        "target_world_m": [0.45, 0.0, 0.55],
+        "nominal_vertical_fov_deg": 55.0,
+        "virtual_auxiliary": true,
+        "role": "side-view height and contact"
+      },
       "wrist": {
         "parent_prim": "/World/Franka/panda_hand",
         "prim_path": "/World/Franka/panda_hand/wrist_cam",
-        "position_parent_m": [0.13, 0.0, -0.15],
+        "position_parent_m": [0.13, 0.0, -0.19],
         "rotation_parent_xyzw": [0.03701, 0.03701, -0.70614, -0.70614],
         "convention": "ros",
         "reference": "IsaacLab stack_ik_rel_visuomotor_env_cfg.py",
-        "reference_revision": "28a37cecdd433c22d9eabd6a5954add9f13a8951"
+        "reference_revision": "28a37cecdd433c22d9eabd6a5954add9f13a8951",
+        "tuning_note": "Lowered 0.04 m along panda_hand z to keep the gripper visible"
       }
     }
   }
