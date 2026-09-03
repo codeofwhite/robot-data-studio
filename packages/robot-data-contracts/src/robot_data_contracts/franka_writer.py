@@ -17,7 +17,8 @@ class FrankaEpisodeWriter:
     def __init__(self, root, *, fps: int, engine_id: str, engine_version: str, scene_id: str,
                  control_source: str, operator_command_names: list[str], camera_names: list[str],
                  run_metadata: dict[str, Any], seed: int = 0, worker_id: str = "unknown",
-                 state_names=None, action_names=None) -> None:
+                 state_names=None, action_names=None,
+                 generation_method: str | None = None) -> None:
         camera_profile = run_metadata.get("camera_profile", {})
         camera_roles = run_metadata.get("camera_roles", {})
         intrinsics = run_metadata.get("camera_intrinsic_matrices", {})
@@ -70,7 +71,13 @@ class FrankaEpisodeWriter:
                                     parameters=scene_parameters,
                                     assets=assets),
             software=software,
-            lineage=AugmentationLineageV1(generation_method=("scripted" if control_source.startswith("scripted") else "teleoperation")),
+            lineage=AugmentationLineageV1(
+                generation_method=(
+                    generation_method
+                    if generation_method is not None
+                    else ("scripted" if control_source.startswith("scripted") else "teleoperation")
+                )
+            ),
         )
         self.camera_names = list(camera_names)
 
@@ -123,7 +130,7 @@ class FrankaEpisodeWriter:
             unavailable_reason=None if available else "task evaluator unavailable",
         )
         failure = (
-            "operator_marked_failure" if not operator_success
+            "operator_marked_failure" if operator_success is False
             else ("automatic_criterion_not_met" if auto_success is False else None)
         )
         return self._writer.finish(operator_success=operator_success, evaluator=evaluator, failure_reason=failure)

@@ -71,4 +71,18 @@ export type ConsumerSmoke = {
   error: string | null;
   created_at: string;
   updated_at: string;
+  report: {
+    weight_forward?: {
+      weights_loaded: boolean;
+      model_forward_passed: boolean;
+      contract_compatible?: boolean;
+      deployment_compatible: boolean;
+      closed_loop_validated?: boolean;
+      training_evidence?: string;
+      actions?: { shape: number[] | null; dtype: string | null };
+      policy_infer_ms?: number;
+      compatibility_reason?: string;
+    };
+  } | null;
+  report_read_error?: string;
 };

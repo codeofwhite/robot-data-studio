@@ -48,7 +48,14 @@ class EvaluatorResultV1(BaseModel):
 class AugmentationLineageV1(BaseModel):
     model_config = ConfigDict(extra="forbid")
     parent_episode_uuid: str | None = None
-    generation_method: Literal["teleoperation", "scripted", "visual_rerender", "physics_replay", "retargeted"]
+    generation_method: Literal[
+        "teleoperation",
+        "scripted",
+        "policy_rollout",
+        "visual_rerender",
+        "physics_replay",
+        "retargeted",
+    ]
     randomization_spec_id: str | None = None
     randomization_seed: int | None = Field(default=None, ge=0)
     resolved_parameters: dict[str, Any] = Field(default_factory=dict)

@@ -4,6 +4,7 @@ import argparse
 import json
 import platform
 import sys
+import time
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,7 +29,14 @@ def _tensor_summary(value: Any) -> dict[str, Any]:
     return {"shape": _shape(value), "dtype": _dtype(value)}
 
 
-def smoke_openpi(dataset_root: Path, repo_id: str) -> dict[str, Any]:
+def smoke_openpi(
+    dataset_root: Path,
+    repo_id: str,
+    *,
+    checkpoint: Path | None = None,
+    config_name: str = "pi05_libero",
+    inference_steps: int = 2,
+) -> dict[str, Any]:
     import jax
     import numpy as np
     from lerobot.common.datasets.lerobot_dataset import LeRobotDataset, LeRobotDatasetMetadata
@@ -84,7 +92,7 @@ def smoke_openpi(dataset_root: Path, repo_id: str) -> dict[str, Any]:
     for key, expected in expected_observation.images.items():
         if tuple(observation.images[key].shape) != tuple(expected.shape):
             raise ValueError(f"OpenPI image {key} does not match the pi0 model input spec")
-    return {
+    report = {
         "consumer": "openpi",
         "consumer_version": "local-openpi-lerobot-v2.1",
         "video_backend": "pyav",
@@ -111,6 +119,106 @@ def smoke_openpi(dataset_root: Path, repo_id: str) -> dict[str, Any]:
             "tokenized_prompt": _tensor_summary(observation.tokenized_prompt),
             "tokenized_prompt_mask": _tensor_summary(observation.tokenized_prompt_mask),
         },
+    }
+    if checkpoint is not None:
+        report["weight_forward"] = _run_openpi_weight_forward(
+            input_data,
+            dataset_root=dataset_root,
+            checkpoint=checkpoint,
+            config_name=config_name,
+            inference_steps=inference_steps,
+        )
+    return report
+
+
+def _run_openpi_weight_forward(
+    input_data: dict[str, Any],
+    *,
+    dataset_root: Path,
+    checkpoint: Path,
+    config_name: str,
+    inference_steps: int,
+) -> dict[str, Any]:
+    import jax
+    import numpy as np
+    from openpi.policies import policy_config
+
+    checkpoint = checkpoint.expanduser().resolve()
+    if not (checkpoint / "params").is_dir():
+        raise FileNotFoundError(f"OpenPI checkpoint params are unavailable: {checkpoint}")
+    if inference_steps < 1:
+        raise ValueError("OpenPI inference_steps must be positive")
+
+    if config_name == "pi05_franka_joint8_lora":
+        from consumers.openpi_franka_joint8.config import make_train_config
+
+        config = make_train_config(
+            dataset_root=dataset_root,
+            training_root=dataset_root / ".consumer_smoke_config",
+            base_checkpoint=checkpoint,
+            experiment_name="consumer_smoke",
+            num_train_steps=1,
+        )
+        expected_action_dim = 8
+        checkpoint_domain = "Franka joint8"
+        deployment_compatible = True
+        compatibility_reason = "checkpoint and dataset use the same Franka joint8 adapter contract"
+    else:
+        from openpi.training import config as training_config
+
+        config = training_config.get_config(config_name)
+        expected_action_dim = 7
+        checkpoint_domain = "LIBERO EEF state/action"
+        deployment_compatible = False
+        compatibility_reason = (
+            "pi05_libero returns 7-D LIBERO EEF actions, while this dataset profile uses "
+            "8-D absolute Franka joint targets; a matching Franka policy/data config is required"
+        )
+    load_started = time.monotonic()
+    policy = policy_config.create_trained_policy(
+        config,
+        checkpoint,
+        sample_kwargs={"num_steps": inference_steps},
+    )
+    load_seconds = time.monotonic() - load_started
+    observation = {
+        "observation/image": input_data["observation/image"],
+        "observation/wrist_image": input_data["observation/wrist_image"],
+        "observation/state": input_data["observation/state"],
+        "prompt": input_data["prompt"],
+    }
+    infer_started = time.monotonic()
+    output = policy.infer(observation)
+    infer_seconds = time.monotonic() - infer_started
+    actions = np.asarray(output["actions"])
+    if not np.isfinite(actions).all():
+        raise ValueError("OpenPI weight forward produced non-finite actions")
+    if actions.shape[-1] != expected_action_dim:
+        raise ValueError(
+            f"OpenPI policy output dimension {actions.shape[-1]} does not match {expected_action_dim}"
+        )
+    devices = [str(device) for device in jax.devices()]
+    return {
+        "checkpoint": str(checkpoint),
+        "config_name": config_name,
+        "weights_loaded": True,
+        "model_forward_passed": True,
+        "inference_steps": inference_steps,
+        "load_seconds": load_seconds,
+        "end_to_end_infer_seconds": infer_seconds,
+        "policy_infer_ms": float(output.get("policy_timing", {}).get("infer_ms", infer_seconds * 1000)),
+        "devices": devices,
+        "actions": _tensor_summary(actions),
+        "actions_finite": True,
+        "checkpoint_domain": checkpoint_domain,
+        "dataset_profile": "openpi_franka_joint8 absolute joint state/action",
+        "contract_compatible": deployment_compatible,
+        "deployment_compatible": deployment_compatible,
+        "closed_loop_validated": False,
+        "training_evidence": (
+            "one_episode_pipeline_sanity" if deployment_compatible else "pretrained_domain_mismatch"
+        ),
+        "compatibility_reason": compatibility_reason,
     }
 
 
@@ -208,12 +316,23 @@ def main() -> None:
     parser.add_argument("--dataset-root", type=Path, required=True)
     parser.add_argument("--repo-id", required=True)
     parser.add_argument("--report", type=Path, required=True)
+    parser.add_argument("--checkpoint", type=Path)
+    parser.add_argument("--config-name", default="pi05_libero")
+    parser.add_argument("--inference-steps", type=int, default=2)
     args = parser.parse_args()
     started_at = _now()
     report: dict[str, Any]
     try:
-        runner = smoke_openpi if args.consumer == "openpi" else smoke_fastwam
-        report = runner(args.dataset_root.expanduser().resolve(), args.repo_id)
+        if args.consumer == "openpi":
+            report = smoke_openpi(
+                args.dataset_root.expanduser().resolve(),
+                args.repo_id,
+                checkpoint=args.checkpoint,
+                config_name=args.config_name,
+                inference_steps=args.inference_steps,
+            )
+        else:
+            report = smoke_fastwam(args.dataset_root.expanduser().resolve(), args.repo_id)
         report.update(status="passed", started_at=started_at, finished_at=_now())
         exit_code = 0
     except Exception as error:

@@ -14,7 +14,7 @@ from robot_data_studio.services.export_service import (
     create_export,
     list_exports,
 )
-from robot_data_studio.services.consumer_smoke_service import start_automatic_smoke
+from robot_data_studio.services.consumer_smoke_service import _smoke_environment, start_automatic_smoke
 from robot_data_studio.services.session_service import create_session, trash_session
 
 
@@ -214,3 +214,52 @@ def test_fastwam_export_creates_separate_processor_smoke_job(
     assert smoke["status"] == "running"
     assert smoke["command"][0].endswith("envs/lerobot-fastwam/bin/python")
     assert smoke["report_path"].endswith("consumer_smoke/fastwam.json")
+
+
+def test_openpi_smoke_uses_local_checkpoint_and_one_visible_gpu(
+    isolated_settings, monkeypatch
+):
+    session = create_session(
+        SessionCreate(dataset_name="pilot", scene_id="rigid_pick_place", control_mode="keyboard")
+    )
+    with transaction() as connection:
+        connection.execute(
+            """INSERT INTO exports(id, dataset_id, format, status, output_path, created_at, updated_at)
+               VALUES ('openpi-job', ?, 'openpi_lerobot_v21', 'completed', ?, 'now', 'now')""",
+            (
+                session["dataset_id"],
+                str(isolated_settings.data_root / "exports" / "openpi"),
+            ),
+        )
+        connection.execute(
+            """INSERT INTO export_specs(export_id, output_name, repo_id, images, profile)
+               VALUES ('openpi-job', 'openpi', 'local/openpi', 0, 'openpi_franka_joint8')"""
+        )
+
+    class FakeProcess:
+        pid = 9876
+
+    class NoopThread:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(
+        "robot_data_studio.services.consumer_smoke_service.subprocess.Popen",
+        lambda *args, **kwargs: FakeProcess(),
+    )
+    monkeypatch.setattr(
+        "robot_data_studio.services.consumer_smoke_service.threading.Thread", NoopThread,
+    )
+    smoke = start_automatic_smoke("openpi-job")
+    command = smoke["command"]
+    assert command[command.index("--checkpoint") + 1].endswith(
+        "checkpoints/pi05_franka_joint8_lora/seed0_sanity/9"
+    )
+    assert command[command.index("--config-name") + 1] == "pi05_franka_joint8_lora"
+    assert command[command.index("--inference-steps") + 1] == "2"
+    environment = _smoke_environment("openpi")
+    assert environment["CUDA_VISIBLE_DEVICES"] == "7"
+    assert environment["JAX_PLATFORMS"] == "cuda"

@@ -100,3 +100,22 @@ loads the task instruction, assembles one state/action batch through the real
 consumer loader and processor, and writes a JSON report below
 `<export>/consumer_smoke/`. A completed export with a failed smoke is not considered
 training-ready.
+
+The OpenPI smoke additionally loads the configured checkpoint and runs one real
+JAX policy forward on a single explicitly selected GPU. The
+`pi05_franka_joint8_lora` integration computes dataset-specific normalization,
+trains on seven joint deltas plus an absolute gripper channel, and converts policy
+outputs back to 8-D absolute Franka joint targets. The report records model
+execution, action-contract compatibility, and closed-loop validation separately.
+The included seed-0 checkpoint is a one-episode pipeline sanity artifact: it is
+interface-compatible with the worker safety layer, but it is not evidence of task
+robustness or generalization.
+
+Closed-loop validation is a separate two-process evaluation. The OpenPI environment
+serves the custom checkpoint, while the Genesis environment runs the simulation-only
+worker from `gello-remote`. The worker replans from current base/wrist images and
+joint state, applies every predicted command through the scene's joint-limit and
+slew-rate safety layer, and records an EpisodeContract trajectory plus four videos.
+An episode passes only after grasp closure, a later release, the native task
+evaluator, and ten stable target frames all pass; offline inference alone never sets
+`closed_loop_validated=true`.

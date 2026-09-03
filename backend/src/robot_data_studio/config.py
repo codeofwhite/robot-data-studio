@@ -45,6 +45,20 @@ class Settings:
     openpi_python: str = os.getenv(
         "ROBOT_DATA_STUDIO_OPENPI_PYTHON", "/data/zhanghejun/openpi/.venv/bin/python"
     )
+    openpi_checkpoint: Path = Path(
+        os.getenv(
+            "ROBOT_DATA_STUDIO_OPENPI_CHECKPOINT",
+            "/data/zhanghejun/robot-data-studio/data/training/openpi_franka_joint8/"
+            "checkpoints/pi05_franka_joint8_lora/seed0_sanity/9",
+        )
+    )
+    openpi_config: str = os.getenv(
+        "ROBOT_DATA_STUDIO_OPENPI_CONFIG", "pi05_franka_joint8_lora"
+    )
+    openpi_gpu_id: int = int(os.getenv("ROBOT_DATA_STUDIO_OPENPI_GPU_ID", "7"))
+    openpi_inference_steps: int = int(
+        os.getenv("ROBOT_DATA_STUDIO_OPENPI_INFERENCE_STEPS", "2")
+    )
     fastwam_python: str = os.getenv(
         "ROBOT_DATA_STUDIO_FASTWAM_PYTHON",
         "/data/zhanghejun/envs/lerobot-fastwam/bin/python",

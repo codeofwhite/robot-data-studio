@@ -81,6 +81,11 @@ def test_worker_descriptor_v1_round_trip() -> None:
     assert descriptor.contract_version == 1
 
 
+def test_policy_rollout_lineage_is_explicit() -> None:
+    lineage = AugmentationLineageV1(generation_method="policy_rollout")
+    assert lineage.generation_method == "policy_rollout"
+
+
 def test_canonical_reader_exposes_paths_and_training_view(tmp_path) -> None:
     writer = EpisodeWriter(
         tmp_path, fps=10, robot_id="franka_panda", control_source="keyboard_cartesian",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import threading
@@ -67,6 +68,17 @@ def start_automatic_smoke(export_id: str) -> dict | None:
         "--report",
         str(report_path),
     ]
+    if consumer == "openpi":
+        command.extend(
+            [
+                "--checkpoint",
+                str(settings.openpi_checkpoint),
+                "--config-name",
+                settings.openpi_config,
+                "--inference-steps",
+                str(settings.openpi_inference_steps),
+            ]
+        )
     timestamp = _now()
     with transaction() as connection:
         connection.execute(
@@ -102,6 +114,10 @@ def _smoke_environment(consumer: str) -> dict[str, str]:
             str(settings.openpi_root / "src"),
             str(settings.openpi_root / "packages" / "openpi-client" / "src"),
         ]
+        env["CUDA_VISIBLE_DEVICES"] = str(settings.openpi_gpu_id)
+        env["JAX_PLATFORMS"] = "cuda"
+        env["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.9"
+        env["JAX_COMPILATION_CACHE_DIR"] = str(settings.data_root / "cache" / "jax")
     if env.get("PYTHONPATH"):
         paths.append(env["PYTHONPATH"])
     env["PYTHONPATH"] = os.pathsep.join(paths)
@@ -113,10 +129,21 @@ def _smoke_environment(consumer: str) -> dict[str, str]:
 def get_consumer_smoke(smoke_id: str) -> dict | None:
     with transaction() as connection:
         row = connection.execute("SELECT * FROM consumer_smokes WHERE id = ?", (smoke_id,)).fetchone()
-    return None if row is None else dict(row)
+    return None if row is None else _with_report(dict(row))
 
 
 def list_consumer_smokes() -> list[dict]:
     with transaction() as connection:
         rows = connection.execute("SELECT * FROM consumer_smokes ORDER BY created_at DESC").fetchall()
-    return [dict(row) for row in rows]
+    return [_with_report(dict(row)) for row in rows]
+
+
+def _with_report(smoke: dict) -> dict:
+    report_path = Path(smoke["report_path"])
+    if not report_path.is_file():
+        return smoke | {"report": None}
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        return smoke | {"report": None, "report_read_error": str(error)}
+    return smoke | {"report": report}
