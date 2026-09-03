@@ -84,12 +84,19 @@ npm run build
 
 Hardware/Genesis execution depends on the interpreter selected by `ROBOT_DATA_STUDIO_COLLECTOR_PYTHON`. The Studio backend environment intentionally does not duplicate the Genesis environment.
 
-Current dependency preflight on this machine: the `genesis` environment can run collection but does not contain LeRobot or TensorFlow Datasets; `softmimicgen` contains `h5py` for Robomimic. The UI exposes all three standard formats now, but LeRobot/RLDS jobs will fail with an explicit log until their dedicated interpreter variables point to environments containing those exporters. No packages are installed implicitly by Studio.
+Current dependency preflight on this machine: the `genesis` environment can run collection but does not contain LeRobot or TensorFlow Datasets; `softmimicgen` contains `h5py` for Robomimic. Export and consumer interpreters are configured independently. No packages are installed implicitly by Studio.
 
-LeRobot export accepts `physical_joint8`, `openpi_franka_joint8`, or
-`fastwam_franka_joint8`. These are explicit export-time views; the raw episode is
-never normalized or overwritten. The FastWAM profile emits 8-D proprio/action and
-must be paired with `action_dim=8` and `proprio_dim=8` (its upstream default action
-dimension is 7). The OpenPI profile emits an 8-D Franka view and is padded by the
-model configuration; it is not interchangeable with DROID's joint-velocity action
-semantics.
+The export UI distinguishes current LeRobot v3 from OpenPI's vendored LeRobot
+v2.1. Current v3 accepts `physical_joint8` and `fastwam_franka_joint8`; v2.1
+requires `openpi_franka_joint8`. These are explicit export-time views and never
+overwrite the raw episode. The FastWAM view uses 8-D proprio/action with a 32-step
+action horizon. The OpenPI view stores absolute 7-joint targets plus an absolute
+closed-fraction gripper channel; its consumer transform converts the seven joint
+channels to deltas and pads the model tensors to 32 dimensions.
+
+Successful OpenPI v2.1 and FastWAM v3 exports automatically launch a consumer
+smoke. Export and smoke status are independent. Each smoke decodes actual images,
+loads the task instruction, assembles one state/action batch through the real
+consumer loader and processor, and writes a JSON report below
+`<export>/consumer_smoke/`. A completed export with a failed smoke is not considered
+training-ready.

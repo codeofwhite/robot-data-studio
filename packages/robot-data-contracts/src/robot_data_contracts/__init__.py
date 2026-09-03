@@ -7,6 +7,7 @@ from .franka_writer import FrankaEpisodeWriter
 from .validation import EpisodeDescriptor, inspect_episode
 from .worker import WorkerDescriptorV1
 from .training import TRAINING_PROFILES, TrainingAdapterProfileV1, adapt_franka_joint8
+from .reader import CanonicalEpisode, iter_training_frames, open_canonical_episode
 from .writer import EpisodeWriter
 
 from .scene import (
@@ -25,7 +26,8 @@ __all__ = [
     "SceneRuntime",
     "ActionProfileV1", "AugmentationLineageV1", "CameraProfileV1", "EpisodeDescriptor",
     "EpisodeManifestV1", "EpisodeWriter", "EvaluatorResultV1", "FeatureRole", "FeatureSpecV1", "FrankaEpisodeWriter",
-    "TRAINING_PROFILES", "TrainingAdapterProfileV1", "adapt_franka_joint8",
+    "CanonicalEpisode", "TRAINING_PROFILES", "TrainingAdapterProfileV1", "adapt_franka_joint8",
     "SceneProvenanceV1", "SoftwareProvenanceV1", "WorkerDescriptorV1",
-    "camera_profile_metadata", "inspect_episode", "load_camera_profile",
+    "camera_profile_metadata", "inspect_episode", "iter_training_frames", "load_camera_profile",
+    "open_canonical_episode",
 ]

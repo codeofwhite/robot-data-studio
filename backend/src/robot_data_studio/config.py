@@ -41,6 +41,14 @@ class Settings:
         "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.1/Isaac/IsaacLab/Robots/FrankaEmika/panda_instanceable.usd",
     )
     lerobot_python: str = os.getenv("ROBOT_DATA_STUDIO_LEROBOT_PYTHON", "python")
+    openpi_root: Path = Path(os.getenv("ROBOT_DATA_STUDIO_OPENPI_ROOT", "/data/zhanghejun/openpi"))
+    openpi_python: str = os.getenv(
+        "ROBOT_DATA_STUDIO_OPENPI_PYTHON", "/data/zhanghejun/openpi/.venv/bin/python"
+    )
+    fastwam_python: str = os.getenv(
+        "ROBOT_DATA_STUDIO_FASTWAM_PYTHON",
+        "/data/zhanghejun/envs/lerobot-fastwam/bin/python",
+    )
     rlds_python: str = os.getenv("ROBOT_DATA_STUDIO_RLDS_PYTHON", "python")
     robomimic_python: str = os.getenv(
         "ROBOT_DATA_STUDIO_ROBOMIMIC_PYTHON", "/home/zhanghejun/miniconda3/envs/softmimicgen/bin/python"

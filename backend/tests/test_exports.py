@@ -7,12 +7,14 @@ from robot_data_studio.adapters.clothtwin import ClothTwinAdapter
 from robot_data_studio.db import transaction
 from robot_data_studio.models import ExportCreate, SessionCreate
 from robot_data_studio.services.export_service import (
+    _build_export_launch,
     _export_environment,
     _resolve_selected_episodes,
     _stage_selected_episodes,
     create_export,
     list_exports,
 )
+from robot_data_studio.services.consumer_smoke_service import start_automatic_smoke
 from robot_data_studio.services.session_service import create_session, trash_session
 
 
@@ -28,6 +30,30 @@ def test_export_format_is_allowlisted(format_name):
 def test_unknown_export_is_rejected():
     with pytest.raises(ValueError, match="unsupported export format"):
         ClothTwinAdapter().build_export_command("unknown", Path("/tmp/raw"), Path("/tmp/out"))
+
+
+def test_openpi_v21_requires_its_explicit_profile_and_repo_id():
+    with pytest.raises(ValidationError, match="requires profile openpi_franka_joint8"):
+        ExportCreate(
+            dataset_id=1, episode_ids=[1], format="openpi_lerobot_v21",
+            output_name="openpi", repo_id="local/openpi", profile="physical_joint8",
+        )
+    with pytest.raises(ValidationError, match="require repo_id"):
+        ExportCreate(
+            dataset_id=1, episode_ids=[1], format="openpi_lerobot_v21",
+            output_name="openpi", profile="openpi_franka_joint8",
+        )
+
+
+def test_openpi_v21_uses_openpi_interpreter_and_studio_exporter(isolated_settings):
+    payload = ExportCreate(
+        dataset_id=1, episode_ids=[1], format="openpi_lerobot_v21",
+        output_name="openpi", repo_id="local/openpi", profile="openpi_franka_joint8",
+    )
+    command, cwd = _build_export_launch(payload, Path("/tmp/raw"), Path("/tmp/out"))
+    assert command[0].endswith("openpi/.venv/bin/python")
+    assert command[1:3] == ["-m", "robot_data_studio.exporters.openpi_lerobot_v21"]
+    assert cwd.name == "robot-data-studio"
 
 
 def test_export_request_requires_distinct_selected_episodes():
@@ -118,7 +144,7 @@ def test_export_persists_selection_and_rejects_reserved_output(
     payload = ExportCreate(
         dataset_id=session["dataset_id"],
         episode_ids=[episode_id],
-        format="lerobot",
+        format="openpi_lerobot_v21",
         output_name="selected_v1",
         repo_id="local/selected_v1",
         images=True,
@@ -134,3 +160,57 @@ def test_export_persists_selection_and_rejects_reserved_output(
     assert list_exports()[0]["episode_ids"] == [episode_id]
     with pytest.raises(ValueError, match="already reserved"):
         create_export(payload)
+
+
+def test_fastwam_export_creates_separate_processor_smoke_job(
+    isolated_settings, monkeypatch
+):
+    session = create_session(
+        SessionCreate(dataset_name="pilot", scene_id="rigid_pick_place", control_mode="keyboard")
+    )
+    episode_root = Path(session["config"]["episode_root"]) / "accepted"
+    episode_root.mkdir(parents=True)
+    with transaction() as connection:
+        cursor = connection.execute(
+            """INSERT INTO episodes(session_id, episode_uuid, path, task, operator_success,
+               auto_success, qa_status, failure_reason, num_frames, manifest_json, created_at, indexed_at)
+               VALUES (?, 'episode-fastwam', ?, 'task', 1, 1, 'accepted', NULL, 1, '{}', NULL, 'now')""",
+            (session["id"], str(episode_root)),
+        )
+        episode_id = cursor.lastrowid
+
+    class FakeProcess:
+        pid = 4321
+
+    class NoopThread:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(
+        "robot_data_studio.services.export_service.subprocess.Popen",
+        lambda *args, **kwargs: FakeProcess(),
+    )
+    monkeypatch.setattr(
+        "robot_data_studio.services.export_service.threading.Thread", NoopThread,
+    )
+    job = create_export(
+        ExportCreate(
+            dataset_id=session["dataset_id"], episode_ids=[episode_id], format="lerobot",
+            output_name="fastwam", repo_id="local/fastwam", profile="fastwam_franka_joint8",
+        )
+    )
+    monkeypatch.setattr(
+        "robot_data_studio.services.consumer_smoke_service.subprocess.Popen",
+        lambda *args, **kwargs: FakeProcess(),
+    )
+    monkeypatch.setattr(
+        "robot_data_studio.services.consumer_smoke_service.threading.Thread", NoopThread,
+    )
+    smoke = start_automatic_smoke(job["id"])
+    assert smoke["consumer"] == "fastwam"
+    assert smoke["status"] == "running"
+    assert smoke["command"][0].endswith("envs/lerobot-fastwam/bin/python")
+    assert smoke["report_path"].endswith("consumer_smoke/fastwam.json")

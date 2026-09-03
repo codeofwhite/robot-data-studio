@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .db import initialize
-from .routes import datasets, episodes, exports, health, sessions
+from .routes import consumer_smokes, datasets, episodes, exports, health, sessions
 
 
 @asynccontextmanager
@@ -26,6 +26,7 @@ app.include_router(datasets.router, prefix="/api")
 app.include_router(sessions.router, prefix="/api")
 app.include_router(episodes.router, prefix="/api")
 app.include_router(exports.router, prefix="/api")
+app.include_router(consumer_smokes.router, prefix="/api")
 
 
 @app.get("/")

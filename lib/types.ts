@@ -48,7 +48,7 @@ export type Episode = {
 export type ExportJob = {
   id: string;
   dataset_id: number;
-  format: 'lerobot' | 'rlds' | 'robomimic';
+  format: 'lerobot' | 'openpi_lerobot_v21' | 'rlds' | 'robomimic';
   status: string;
   output_path: string;
   error: string | null;
@@ -59,4 +59,16 @@ export type ExportJob = {
   episode_count: number;
   episode_ids: number[];
   created_at: string;
+};
+
+export type ConsumerSmoke = {
+  id: string;
+  export_id: string;
+  consumer: 'openpi' | 'fastwam';
+  status: 'queued' | 'running' | 'passed' | 'failed';
+  report_path: string;
+  log_path: string;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
 };

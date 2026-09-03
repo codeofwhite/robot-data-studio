@@ -13,20 +13,20 @@ import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { api } from '@/lib/api';
-import type { Dataset, Episode, ExportJob } from '@/lib/types';
+import type { ConsumerSmoke, Dataset, Episode, ExportJob } from '@/lib/types';
 
-type ExportFormat = 'lerobot' | 'rlds' | 'robomimic';
+type ExportFormat = 'lerobot' | 'openpi_lerobot_v21' | 'rlds' | 'robomimic';
 type TrainingProfile = 'physical_joint8' | 'openpi_franka_joint8' | 'fastwam_franka_joint8';
 
 const formats = [
-  { id: 'lerobot', title: 'LeRobot v3', note: 'Parquet + MP4/images，适合主流 VLA 数据管线', icon: Box },
+  { id: 'lerobot', title: 'LeRobot v3', note: '当前 LeRobot 与 FastWAM consumer', icon: Box },
+  { id: 'openpi_lerobot_v21', title: 'OpenPI LeRobot v2.1', note: 'OpenPI vendored loader 的原生兼容格式', icon: Box },
   { id: 'rlds', title: 'RLDS', note: 'TensorFlow Datasets episode/step 结构', icon: Database },
   { id: 'robomimic', title: 'Robomimic HDF5', note: 'HDF5 demos、mask 与相机观测', icon: FileArchive },
 ] as const;
 
 const profiles: Array<{ id: TrainingProfile; label: string }> = [
   { id: 'physical_joint8', label: 'Physical joint8（原生 8D）' },
-  { id: 'openpi_franka_joint8', label: 'OpenPI Franka joint8' },
   { id: 'fastwam_franka_joint8', label: 'FastWAM Franka joint8' },
 ];
 
@@ -34,6 +34,7 @@ export default function ExportsPage() {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [jobs, setJobs] = useState<ExportJob[]>([]);
+  const [smokes, setSmokes] = useState<ConsumerSmoke[]>([]);
   const [datasetId, setDatasetId] = useState('');
   const [selectedEpisodeIds, setSelectedEpisodeIds] = useState<number[]>([]);
   const [format, setFormat] = useState<ExportFormat>('lerobot');
@@ -46,12 +47,14 @@ export default function ExportsPage() {
 
   const load = useCallback(async () => {
     try {
-      const [nextDatasets, nextJobs] = await Promise.all([
+      const [nextDatasets, nextJobs, nextSmokes] = await Promise.all([
         api<Dataset[]>('/datasets'),
         api<ExportJob[]>('/exports'),
+        api<ConsumerSmoke[]>('/consumer-smokes'),
       ]);
       setDatasets(nextDatasets);
       setJobs(nextJobs);
+      setSmokes(nextSmokes);
       setDatasetId((current) => (
         nextDatasets.some((dataset) => String(dataset.id) === current)
           ? current
@@ -87,6 +90,16 @@ export default function ExportsPage() {
   }, [datasetId]);
 
   const selected = useMemo(() => new Set(selectedEpisodeIds), [selectedEpisodeIds]);
+  const smokeByExport = useMemo(
+    () => new Map(smokes.map((smoke) => [smoke.export_id, smoke])),
+    [smokes],
+  );
+
+  function chooseFormat(nextFormat: ExportFormat) {
+    setFormat(nextFormat);
+    if (nextFormat === 'openpi_lerobot_v21') setProfile('openpi_franka_joint8');
+    if (nextFormat === 'lerobot' && profile === 'openpi_franka_joint8') setProfile('physical_joint8');
+  }
 
   function toggleEpisode(episodeId: number, checked: boolean) {
     setSelectedEpisodeIds((current) => (
@@ -107,8 +120,8 @@ export default function ExportsPage() {
           episode_ids: selectedEpisodeIds,
           format,
           output_name: name,
-          repo_id: format === 'lerobot' ? `local/${name}` : null,
-          images: format === 'lerobot' && images,
+          repo_id: (format === 'lerobot' || format === 'openpi_lerobot_v21') ? `local/${name}` : null,
+          images: (format === 'lerobot' || format === 'openpi_lerobot_v21') && images,
           profile,
         }),
       });
@@ -131,14 +144,14 @@ export default function ExportsPage() {
 
         {error && <div className="rounded-lg border border-destructive/40 p-3 text-sm text-destructive">{error}</div>}
 
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-4">
           {formats.map((item) => {
             const Icon = item.icon;
             const active = format === item.id;
             return (
               <button
                 key={item.id}
-                onClick={() => setFormat(item.id)}
+                onClick={() => chooseFormat(item.id)}
                 className={`rounded-xl border p-4 text-left transition-colors ${active ? 'border-primary bg-primary/8' : 'border-border/70 bg-card hover:border-primary/40'}`}
               >
                 <Icon className={active ? 'size-5 text-primary' : 'size-5 text-muted-foreground'} />
@@ -199,8 +212,9 @@ export default function ExportsPage() {
           </CardHeader>
           <CardContent className="grid items-end gap-4 md:grid-cols-[1fr_1fr_1fr_auto]">
             {format === 'lerobot' && <div className="space-y-2"><Label>Training profile</Label><NativeSelect className="w-full" value={profile} onChange={(event) => setProfile(event.target.value as TrainingProfile)}>{profiles.map((item) => <NativeSelectOption key={item.id} value={item.id}>{item.label}</NativeSelectOption>)}</NativeSelect></div>}
+            {format === 'openpi_lerobot_v21' && <div className="space-y-2"><Label>Training profile</Label><Input value="OpenPI Franka joint8（固定）" disabled /></div>}
             <div className="space-y-2"><Label>输出名称</Label><Input value={name} onChange={(event) => setName(event.target.value)} /></div>
-            {format === 'lerobot' && <label className="flex h-8 items-center gap-2 text-sm"><Checkbox checked={images} onCheckedChange={setImages} />保存图片而不是 MP4</label>}
+            {(format === 'lerobot' || format === 'openpi_lerobot_v21') && <label className="flex h-8 items-center gap-2 text-sm"><Checkbox checked={images} onCheckedChange={setImages} />保存图片而不是 MP4</label>}
             <Button disabled={busy || !datasetId || !name || selectedEpisodeIds.length === 0} onClick={start}>{busy ? '提交中…' : `导出 ${selectedEpisodeIds.length} 条 ${format}`}</Button>
           </CardContent>
         </Card>
@@ -209,8 +223,8 @@ export default function ExportsPage() {
           <CardHeader><CardTitle>任务记录</CardTitle><CardDescription>失败记录会保留；新任务同时记录 Episode 范围和训练 profile。</CardDescription></CardHeader>
           <CardContent>
             <Table>
-              <TableHeader><TableRow><TableHead>Job</TableHead><TableHead>Format / Profile</TableHead><TableHead>Episodes</TableHead><TableHead>Status</TableHead><TableHead>Output</TableHead><TableHead><Button variant="ghost" size="sm" onClick={load}><RefreshCw /></Button></TableHead></TableRow></TableHeader>
-              <TableBody>{jobs.map((job) => <TableRow key={job.id}><TableCell className="font-mono text-xs">{job.id}</TableCell><TableCell>{job.format}<p className="text-xs text-muted-foreground">{job.profile ?? 'legacy job'}</p></TableCell><TableCell className="font-mono">{job.episode_count}</TableCell><TableCell><Badge variant={job.status === 'completed' ? 'default' : 'outline'}>{job.status}</Badge></TableCell><TableCell className="max-w-sm truncate font-mono text-xs">{job.output_path}</TableCell><TableCell className="text-xs text-destructive">{job.error}</TableCell></TableRow>)}</TableBody>
+              <TableHeader><TableRow><TableHead>Job</TableHead><TableHead>Format / Profile</TableHead><TableHead>Episodes</TableHead><TableHead>Export</TableHead><TableHead>Consumer smoke</TableHead><TableHead>Output</TableHead><TableHead><Button variant="ghost" size="sm" onClick={load}><RefreshCw /></Button></TableHead></TableRow></TableHeader>
+              <TableBody>{jobs.map((job) => { const smoke = smokeByExport.get(job.id); return <TableRow key={job.id}><TableCell className="font-mono text-xs">{job.id}</TableCell><TableCell>{job.format}<p className="text-xs text-muted-foreground">{job.profile ?? 'legacy job'}</p></TableCell><TableCell className="font-mono">{job.episode_count}</TableCell><TableCell><Badge variant={job.status === 'completed' ? 'default' : 'outline'}>{job.status}</Badge></TableCell><TableCell>{smoke ? <><Badge variant={smoke.status === 'passed' ? 'default' : 'outline'}>{smoke.consumer}: {smoke.status}</Badge><p className="mt-1 max-w-56 truncate font-mono text-xs text-muted-foreground" title={smoke.report_path}>{smoke.report_path}</p><p className="text-xs text-destructive">{smoke.error}</p></> : <span className="text-xs text-muted-foreground">N/A</span>}</TableCell><TableCell className="max-w-sm truncate font-mono text-xs">{job.output_path}</TableCell><TableCell className="text-xs text-destructive">{job.error}</TableCell></TableRow>; })}</TableBody>
             </Table>
           </CardContent>
         </Card>

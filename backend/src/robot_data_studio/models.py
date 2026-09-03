@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 ControlMode = Literal["keyboard", "gello"]
 EngineId = Literal["genesis", "isaac_sim"]
 QaStatus = Literal["pending", "accepted", "rejected"]
-ExportFormat = Literal["lerobot", "rlds", "robomimic"]
+ExportFormat = Literal["lerobot", "openpi_lerobot_v21", "rlds", "robomimic"]
 
 
 class SessionCreate(BaseModel):
@@ -54,6 +54,16 @@ class ExportCreate(BaseModel):
     repo_id: str | None = Field(default=None, max_length=200)
     images: bool = False
     profile: Literal["physical_joint8", "openpi_franka_joint8", "fastwam_franka_joint8"] = "physical_joint8"
+
+    @model_validator(mode="after")
+    def validate_format_profile(self) -> "ExportCreate":
+        if self.format in {"lerobot", "openpi_lerobot_v21"} and not self.repo_id:
+            raise ValueError("LeRobot exports require repo_id")
+        if self.format == "openpi_lerobot_v21" and self.profile != "openpi_franka_joint8":
+            raise ValueError("OpenPI LeRobot v2.1 requires profile openpi_franka_joint8")
+        if self.format == "lerobot" and self.profile == "openpi_franka_joint8":
+            raise ValueError("OpenPI profile requires format openpi_lerobot_v21")
+        return self
 
     @field_validator("output_name")
     @classmethod

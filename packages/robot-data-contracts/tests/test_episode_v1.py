@@ -12,6 +12,8 @@ from robot_data_contracts import (
     WorkerDescriptorV1,
     adapt_franka_joint8,
     inspect_episode,
+    iter_training_frames,
+    open_canonical_episode,
 )
 from robot_data_contracts.profiles.franka import FRANKA_JOINT8_ACTION, franka_feature_specs
 
@@ -77,3 +79,47 @@ def test_worker_descriptor_v1_round_trip() -> None:
         capabilities={"recording": True, "automatic_outcome": True},
     )
     assert descriptor.contract_version == 1
+
+
+def test_canonical_reader_exposes_paths_and_training_view(tmp_path) -> None:
+    writer = EpisodeWriter(
+        tmp_path, fps=10, robot_id="franka_panda", control_source="keyboard_cartesian",
+        features=franka_feature_specs(), action_profile=FRANKA_JOINT8_ACTION,
+        camera_names=(), camera_calibration={},
+        scene=SceneProvenanceV1(scene_id="rigid_pick_place", seed=0),
+        software=SoftwareProvenanceV1(
+            python_version="test", platform="test", engine_id="genesis",
+            engine_version="test", worker_id="genesis_worker",
+        ),
+        lineage=AugmentationLineageV1(generation_method="teleoperation"),
+    )
+    writer.start("pick the cube")
+    policy_state = np.asarray([0.0] * 7 + [0.08] + [0.0] * 8, dtype=np.float32)
+    applied_action = np.asarray([0.0] * 7 + [0.0], dtype=np.float32)
+    writer.add_frame(
+        images={}, simulation_time_s=0.0, control_source_timestamp_ns=100,
+        control_receive_timestamp_ns=110, capture_timestamp_ns=120, control_sequence=0,
+        values={
+            "native_state": np.zeros(18, np.float32), "policy_state": policy_state,
+            "operator_action": np.zeros(7, np.float32), "requested_action": applied_action,
+            "safe_action": applied_action, "applied_action": applied_action,
+        },
+    )
+    episode_path = writer.finish(
+        operator_success=True,
+        evaluator=EvaluatorResultV1(
+            evaluator_id="pick_v1", evaluator_version="1", available=True, success=True,
+        )
+    )
+
+    episode = open_canonical_episode(episode_path)
+    frame = next(iter_training_frames(episode, "openpi_franka_joint8"))
+    assert episode.length == 1
+    assert frame["task"] == "pick the cube"
+    assert frame["state"].shape == frame["action"].shape == (8,)
+    assert frame["state"][7] == 0.0
+    assert frame["action"][7] == 1.0
+    selected = open_canonical_episode(
+        episode_path, array_keys={"policy_state", "applied_action"}
+    )
+    assert set(selected.arrays) == {"policy_state", "applied_action"}

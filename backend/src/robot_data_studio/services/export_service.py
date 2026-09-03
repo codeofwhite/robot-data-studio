@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ..adapters.clothtwin import ClothTwinAdapter
-from ..config import CONTRACTS_SRC, settings
+from ..config import BACKEND_ROOT, CONTRACTS_SRC, PROJECT_ROOT, settings
 from ..db import transaction
 from ..models import ExportCreate
 
@@ -27,7 +27,13 @@ def _update(export_id: str, status: str, error: str | None = None, pid: int | No
 
 def _wait_for_export(export_id: str, process: subprocess.Popen) -> None:
     return_code = process.wait()
-    _update(export_id, "completed" if return_code == 0 else "failed", None if return_code == 0 else f"export process exited {return_code}")
+    if return_code != 0:
+        _update(export_id, "failed", f"export process exited {return_code}")
+        return
+    _update(export_id, "completed")
+    from .consumer_smoke_service import start_automatic_smoke
+
+    start_automatic_smoke(export_id)
 
 
 def create_export(payload: ExportCreate) -> dict:
@@ -43,10 +49,7 @@ def create_export(payload: ExportCreate) -> dict:
     _validate_output_available(payload.dataset_id, output_path)
     output_root.mkdir(parents=True, exist_ok=True)
     input_root = _stage_selected_episodes(episodes, output_root / "inputs" / export_id)
-    command = ClothTwinAdapter().build_export_command(
-        payload.format, input_root, output_path, repo_id=payload.repo_id,
-        images=payload.images, profile=payload.profile,
-    )
+    command, cwd = _build_export_launch(payload, input_root, output_path)
     timestamp = _now()
     with transaction() as connection:
         connection.execute(
@@ -69,7 +72,7 @@ def create_export(payload: ExportCreate) -> dict:
         with log_path.open("ab", buffering=0) as log_file:
             process = subprocess.Popen(
                 command,
-                cwd=settings.clothtwin_root,
+                cwd=cwd,
                 env=_export_environment(),
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
@@ -81,6 +84,33 @@ def create_export(payload: ExportCreate) -> dict:
         _update(export_id, "running", pid=process.pid)
         threading.Thread(target=_wait_for_export, args=(export_id, process), daemon=True).start()
     return get_export(export_id) | {"command": command, "log_path": str(log_path)}
+
+
+def _build_export_launch(payload: ExportCreate, input_root: Path, output_path: Path) -> tuple[list[str], Path]:
+    if payload.format == "openpi_lerobot_v21":
+        command = [
+            settings.openpi_python,
+            "-m",
+            "robot_data_studio.exporters.openpi_lerobot_v21",
+            "--input-root",
+            str(input_root),
+            "--output",
+            str(output_path),
+            "--repo-id",
+            str(payload.repo_id),
+        ]
+        if payload.images:
+            command.append("--images")
+        return command, PROJECT_ROOT
+    command = ClothTwinAdapter().build_export_command(
+        payload.format,
+        input_root,
+        output_path,
+        repo_id=payload.repo_id,
+        images=payload.images,
+        profile=payload.profile,
+    )
+    return command, settings.clothtwin_root
 
 
 def _resolve_selected_episodes(dataset_id: int, episode_ids: list[int]) -> list[dict]:
@@ -145,10 +175,11 @@ def _validate_output_available(dataset_id: int, output_path: Path) -> None:
 
 def _export_environment() -> dict[str, str]:
     env = dict(os.environ)
-    python_paths = [str(CONTRACTS_SRC)]
+    python_paths = [str(BACKEND_ROOT / "src"), str(CONTRACTS_SRC)]
     if env.get("PYTHONPATH"):
         python_paths.append(env["PYTHONPATH"])
     env["PYTHONPATH"] = os.pathsep.join(python_paths)
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
     return env
 
 
