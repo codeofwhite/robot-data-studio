@@ -60,7 +60,7 @@ def test_rejects_unsafe_dataset_name(isolated_settings):
         SessionCreate(dataset_name="../escape", scene_id="rigid_pick_place", control_mode="keyboard")
 
 
-def test_isaac_session_persists_engine_and_rejects_unsupported_control(isolated_settings):
+def test_isaac_session_persists_engine_and_accepts_keyboard_control(isolated_settings):
     payload = SessionCreate(
         engine_id="isaac_sim",
         dataset_name="isaac_pilot",
@@ -71,15 +71,17 @@ def test_isaac_session_persists_engine_and_rejects_unsupported_control(isolated_
     assert session["engine_id"] == "isaac_sim"
     assert session["adapter_id"] == "isaac_sim"
 
-    with pytest.raises(ValueError, match="GELLO"):
-        create_session(
-            SessionCreate(
-                engine_id="isaac_sim",
-                dataset_name="bad_isaac",
-                scene_id="franka_empty",
-                control_mode="keyboard",
-            )
+    keyboard_session = create_session(
+        SessionCreate(
+            engine_id="isaac_sim",
+            dataset_name="isaac_keyboard_pilot",
+            scene_id="franka_empty",
+            control_mode="keyboard",
         )
+    )
+    assert keyboard_session["engine_id"] == "isaac_sim"
+    assert keyboard_session["control_mode"] == "keyboard"
+    assert keyboard_session["config"]["control_mode"] == "keyboard"
 
 
 def test_session_can_move_to_trash_and_restore(isolated_settings) -> None:

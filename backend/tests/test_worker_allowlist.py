@@ -4,6 +4,7 @@ import pytest
 
 from robot_data_studio.adapters.clothtwin import ClothTwinAdapter
 from robot_data_studio.adapters.isaac_sim import IsaacSimAdapter
+from robot_data_studio.config import CONTRACTS_SRC
 
 
 def test_keyboard_and_gello_have_separate_allowlisted_modules():
@@ -103,12 +104,34 @@ def test_isaac_launch_uses_gpu_id_and_single_cuda_visibility():
     launch = adapter.build_worker_launch(config, Path("/tmp/isaac-data"))
     assert launch.command[launch.command.index("--gpu-id") + 1] == "6"
     assert launch.command[launch.command.index("--data-dir") + 1] == "/tmp/isaac-data"
+    assert launch.command[launch.command.index("--control-source") + 1] == "gello"
     assert launch.env_updates["CUDA_VISIBLE_DEVICES"] == "6"
     assert "CUDA_VISIBLE_DEVICES" not in launch.unset_env
+    assert str(CONTRACTS_SRC) in launch.env_updates["PYTHONPATH"].split(":")
     assert launch.command[launch.command.index("--camera-profile-file") + 1].endswith("lab_d435i_dual_v1.json")
     kit_args = launch.command[launch.command.index("--kit_args") + 1]
     assert "--/app/window/width=960" in kit_args
     assert "--/app/window/height=720" in kit_args
+
+
+def test_isaac_keyboard_launch_is_allowlisted() -> None:
+    adapter = IsaacSimAdapter()
+    config = {
+        "scene_id": "franka_empty",
+        "control_mode": "keyboard",
+        "gpu": 6,
+        "port": 8080,
+        "control_fps": 20,
+        "width": 640,
+        "height": 480,
+        "scene_params": {},
+        "camera_profile_id": "lab_d435i_dual_v1",
+    }
+
+    command = adapter.build_collect_command(config, Path("/tmp/isaac-keyboard-data"))
+
+    assert command[command.index("--control-source") + 1] == "keyboard"
+    assert command[command.index("--data-dir") + 1] == "/tmp/isaac-keyboard-data"
 
 
 def test_isaac_rigid_scene_passes_work_surface_height() -> None:

@@ -23,9 +23,11 @@ class FrankaEpisodeWriter:
         camera_roles = run_metadata.get("camera_roles", {})
         intrinsics = run_metadata.get("camera_intrinsic_matrices", {})
         extrinsics = run_metadata.get("camera_extrinsics", {})
+        scene_geometry = run_metadata.get("scene_geometry") or {}
+        resolved_scene_spec = run_metadata.get("resolved_scene_spec") or {}
         resolved_cameras = (
-            run_metadata.get("scene_geometry", {}).get("cameras", {})
-            or run_metadata.get("resolved_scene_spec", {}).get("cameras", {})
+            scene_geometry.get("cameras", {})
+            or resolved_scene_spec.get("cameras", {})
         )
         width, height = (run_metadata.get("camera_resolution") or [None, None])[:2]
         profile_roles = camera_profile.get("roles", {})

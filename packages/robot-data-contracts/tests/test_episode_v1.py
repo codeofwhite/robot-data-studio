@@ -7,6 +7,7 @@ from robot_data_contracts import (
     AugmentationLineageV1,
     EpisodeWriter,
     EvaluatorResultV1,
+    FrankaEpisodeWriter,
     SceneProvenanceV1,
     SoftwareProvenanceV1,
     WorkerDescriptorV1,
@@ -16,6 +17,30 @@ from robot_data_contracts import (
     open_canonical_episode,
 )
 from robot_data_contracts.profiles.franka import FRANKA_JOINT8_ACTION, franka_feature_specs
+
+
+def test_franka_writer_accepts_empty_optional_scene_metadata(tmp_path) -> None:
+    writer = FrankaEpisodeWriter(
+        tmp_path,
+        fps=10,
+        engine_id="isaac_sim",
+        engine_version="test",
+        scene_id="franka_empty",
+        control_source="browser_se3_keyboard",
+        operator_command_names=[
+            "dx_m",
+            "dy_m",
+            "dz_m",
+            "droll_rad",
+            "dpitch_rad",
+            "dyaw_rad",
+            "gripper_closed",
+        ],
+        camera_names=[],
+        run_metadata={"scene_geometry": None, "resolved_scene_spec": None},
+    )
+
+    assert writer.is_recording is False
 
 
 def test_episode_v1_contains_required_action_stages_and_timestamps(tmp_path) -> None:

@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from ..config import BACKEND_ROOT, settings
+from ..config import CONTRACTS_SRC, settings
 from ..camera_profiles import validate_session_camera_profile
 from .base import CollectionAdapter, WorkerLaunch
 
@@ -40,7 +40,7 @@ class IsaacSimAdapter(CollectionAdapter):
     adapter_id = "isaac_sim"
     label = "Isaac Sim / Isaac Lab"
     scenes = SCENES
-    control_modes = ("gello",)
+    control_modes = ("keyboard", "gello")
     camera_profile_ids = ("lab_d435i_dual_v1",)
     capabilities = {
         "webrtc": True,
@@ -52,7 +52,7 @@ class IsaacSimAdapter(CollectionAdapter):
 
     def validate_config(self, config: dict[str, Any]) -> None:
         if config.get("control_mode") not in self.control_modes:
-            raise ValueError("Isaac Sim P0 supports GELLO control only")
+            raise ValueError("Isaac Sim supports keyboard or GELLO control only")
         if config.get("scene_id") not in self.scenes:
             raise ValueError("unsupported Isaac Sim scene")
         allowed_params = {
@@ -75,6 +75,8 @@ class IsaacSimAdapter(CollectionAdapter):
             "-p",
             "-m",
             "gello_remote.isaaclab_gello",
+            "--control-source",
+            str(config["control_mode"]),
             "--gpu-id",
             str(config["gpu"]),
             "--enable_cameras",
@@ -122,7 +124,7 @@ class IsaacSimAdapter(CollectionAdapter):
     def build_worker_launch(self, config: dict[str, Any], output_dir: Path) -> WorkerLaunch:
         python_paths = [
             str(settings.gello_remote_root / "src"),
-            str(BACKEND_ROOT / "src"),
+            str(CONTRACTS_SRC),
         ]
         if os.environ.get("PYTHONPATH"):
             python_paths.append(os.environ["PYTHONPATH"])
