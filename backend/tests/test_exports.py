@@ -105,6 +105,35 @@ def test_export_environment_includes_local_contracts_source():
     assert any(path.endswith("packages/robot-data-contracts/src") for path in paths)
 
 
+def test_failed_preflight_creates_neither_job_nor_staging(isolated_settings):
+    session = create_session(
+        SessionCreate(dataset_name="pilot", scene_id="rigid_pick_place", control_mode="keyboard")
+    )
+    episode_root = Path(session["config"]["episode_root"]) / "invalid"
+    episode_root.mkdir(parents=True)
+    with transaction() as connection:
+        cursor = connection.execute(
+            """INSERT INTO episodes(session_id, episode_uuid, path, task, operator_success,
+               auto_success, qa_status, failure_reason, num_frames, manifest_json, created_at, indexed_at)
+               VALUES (?, 'invalid-canonical', ?, 'task', 1, 1, 'accepted', NULL, 1, '{}', NULL, 'now')""",
+            (session["id"], str(episode_root)),
+        )
+        episode_id = cursor.lastrowid
+
+    with pytest.raises(ValueError, match="episode preflight failed"):
+        create_export(
+            ExportCreate(
+                dataset_id=session["dataset_id"], episode_ids=[episode_id],
+                format="robomimic", output_name="must_not_exist",
+            )
+        )
+
+    export_root = isolated_settings.data_root / "datasets" / "pilot" / "exports"
+    assert not export_root.exists()
+    with transaction() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM exports").fetchone()[0] == 0
+
+
 def test_export_persists_selection_and_rejects_reserved_output(
     isolated_settings, monkeypatch
 ):
@@ -139,6 +168,10 @@ def test_export_persists_selection_and_rejects_reserved_output(
     monkeypatch.setattr(
         "robot_data_studio.services.export_service.threading.Thread", NoopThread
     )
+    monkeypatch.setattr(
+        "robot_data_studio.services.export_service.preflight_export",
+        lambda *args, **kwargs: {"compatible": True},
+    )
     payload = ExportCreate(
         dataset_id=session["dataset_id"],
         episode_ids=[episode_id],
@@ -160,6 +193,9 @@ def test_export_persists_selection_and_rejects_reserved_output(
         "session_id": session["id"],
         "episode_index": 12,
         "engine_id": None,
+        "engine_version": None,
+        "worker_id": None,
+        "scene_id": None,
         "position": 0,
     }]
     assert list_exports()[0]["episode_ids"] == [episode_id]
@@ -201,6 +237,10 @@ def test_fastwam_export_creates_separate_processor_smoke_job(
     )
     monkeypatch.setattr(
         "robot_data_studio.services.export_service.threading.Thread", NoopThread,
+    )
+    monkeypatch.setattr(
+        "robot_data_studio.services.export_service.preflight_export",
+        lambda *args, **kwargs: {"compatible": True},
     )
     job = create_export(
         ExportCreate(

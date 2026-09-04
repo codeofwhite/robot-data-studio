@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 from robot_data_contracts.validation import inspect_episode
 
+from ..adapters import canonical_engine_id
 from ..db import transaction
 from .session_service import get_session
 
@@ -64,6 +65,7 @@ def list_episodes(
     session_id: str | None = None,
     qa_status: str | None = None,
     dataset_id: int | None = None,
+    engine_id: str | None = None,
 ) -> list[dict]:
     clauses: list[str] = ["s.status != 'trashed'"]
     params: list[str | int] = []
@@ -76,6 +78,9 @@ def list_episodes(
     if dataset_id is not None:
         clauses.append("s.dataset_id = ?")
         params.append(dataset_id)
+    if engine_id:
+        clauses.append("CASE WHEN s.adapter_id = 'clothtwin' THEN 'genesis' ELSE s.adapter_id END = ?")
+        params.append(engine_id)
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     with transaction() as connection:
         rows = connection.execute(
@@ -106,17 +111,32 @@ def list_episodes(
         )
         scene = manifest.get("scene")
         episode["seed"] = scene.get("seed") if isinstance(scene, dict) else None
+        software = manifest.get("software")
+        episode["engine_version"] = software.get("engine_version") if isinstance(software, dict) else None
+        episode["worker_id"] = software.get("worker_id") if isinstance(software, dict) else None
+        episode["control_source"] = manifest.get("control_source")
         episodes.append(episode)
     return episodes
 
 
 def episode_detail(episode_id: int) -> dict | None:
     with transaction() as connection:
-        row = connection.execute("SELECT * FROM episodes WHERE id = ?", (episode_id,)).fetchone()
+        row = connection.execute(
+            """SELECT e.*, s.dataset_id, s.adapter_id, s.scene_id, s.control_mode
+               FROM episodes e JOIN sessions s ON s.id = e.session_id WHERE e.id = ?""",
+            (episode_id,),
+        ).fetchone()
     if not row:
         return None
     result = dict(row)
     result["manifest"] = json.loads(result.pop("manifest_json"))
+    result["engine_id"] = canonical_engine_id(result.pop("adapter_id"))
+    software = result["manifest"].get("software")
+    result["engine_version"] = software.get("engine_version") if isinstance(software, dict) else None
+    result["worker_id"] = software.get("worker_id") if isinstance(software, dict) else None
+    result["control_source"] = result["manifest"].get("control_source")
+    scene = result["manifest"].get("scene")
+    result["seed"] = scene.get("seed") if isinstance(scene, dict) else None
     trajectory = Path(result["path"]) / "trajectory.npz"
     result["trajectory"] = {}
     if trajectory.exists():

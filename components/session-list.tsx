@@ -11,13 +11,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { api } from '@/lib/api';
+import { engineLabel } from '@/lib/engines';
 import type { Session } from '@/lib/types';
 
 type Filter = 'active' | 'all' | 'trashed';
+type EngineFilter = 'all' | 'genesis' | 'isaac_sim';
 
 export function SessionList() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [filter, setFilter] = useState<Filter>('active');
+  const [engineFilter, setEngineFilter] = useState<EngineFilter>('all');
   const [busyId, setBusyId] = useState<string>();
   const [error, setError] = useState<string>();
 
@@ -33,10 +36,11 @@ export function SessionList() {
   useEffect(() => { void load(); }, [load]);
 
   const visible = useMemo(() => sessions.filter((session) => {
+    if (engineFilter !== 'all' && session.engine_id !== engineFilter) return false;
     if (filter === 'trashed') return session.status === 'trashed';
     if (filter === 'active') return session.status !== 'trashed';
     return true;
-  }), [filter, sessions]);
+  }), [engineFilter, filter, sessions]);
 
   async function mutate(session: Session, action: 'trash' | 'restore' | 'delete') {
     if (action === 'trash' && !window.confirm(
@@ -96,11 +100,16 @@ export function SessionList() {
           <CardHeader className="border-b border-border/70">
             <CardTitle>Session 列表</CardTitle>
             <CardDescription>{visible.length} / {sessions.length} 条</CardDescription>
-            <div className="w-44 pt-2">
+            <div className="grid max-w-md grid-cols-2 gap-2 pt-2">
               <NativeSelect value={filter} onChange={(event) => setFilter(event.target.value as Filter)}>
                 <NativeSelectOption value="active">当前会话</NativeSelectOption>
                 <NativeSelectOption value="all">全部</NativeSelectOption>
                 <NativeSelectOption value="trashed">回收站</NativeSelectOption>
+              </NativeSelect>
+              <NativeSelect value={engineFilter} onChange={(event) => setEngineFilter(event.target.value as EngineFilter)}>
+                <NativeSelectOption value="all">全部 Simulator</NativeSelectOption>
+                <NativeSelectOption value="genesis">Genesis</NativeSelectOption>
+                <NativeSelectOption value="isaac_sim">Isaac Sim</NativeSelectOption>
               </NativeSelect>
             </div>
           </CardHeader>
@@ -119,7 +128,7 @@ export function SessionList() {
                       </TableCell>
                       <TableCell className="text-xs">
                         <p>{session.dataset_name ?? `Dataset ${session.dataset_id}`}</p>
-                        <p className="text-muted-foreground">{session.engine_id} · {session.scene_id} · {session.control_mode}</p>
+                        <p className="text-muted-foreground">{engineLabel(session.engine_id)} · {session.scene_id} · {session.control_mode}</p>
                       </TableCell>
                       <TableCell className="font-mono text-xs">
                         <p>{session.episode_count ?? 0} total</p>

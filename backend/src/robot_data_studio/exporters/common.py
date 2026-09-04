@@ -32,17 +32,72 @@ def load_canonical_episodes(paths: Iterable[Path]) -> list[CanonicalEpisode]:
     for episode in episodes[1:]:
         manifest = episode.manifest
         if manifest.robot_id != first.robot_id:
-            raise ValueError("all episodes must use the same robot_id")
+            raise ValueError(
+                f"robot_id mismatch: {first.episode_uuid} uses {first.robot_id}, "
+                f"{manifest.episode_uuid} uses {manifest.robot_id}"
+            )
         if manifest.fps != first.fps:
-            raise ValueError("all episodes must use the same fps")
+            raise ValueError(
+                f"fps mismatch: {first.episode_uuid} uses {first.fps}, "
+                f"{manifest.episode_uuid} uses {manifest.fps}"
+            )
         if manifest.action_profile != first.action_profile:
-            raise ValueError("all episodes must use the same action profile")
+            raise ValueError(
+                f"action profile mismatch between {first.episode_uuid} and {manifest.episode_uuid}"
+            )
         if tuple(manifest.camera_names) != tuple(first.camera_names):
-            raise ValueError("all episodes must use the same ordered camera set")
+            raise ValueError(
+                f"camera mismatch: {first.episode_uuid} uses {list(first.camera_names)}, "
+                f"{manifest.episode_uuid} uses {list(manifest.camera_names)}"
+            )
         for key in ("ee_pose", "object_pose"):
             if (key in episode.arrays) != (key in episodes[0].arrays):
-                raise ValueError(f"all episodes must agree on optional array {key}")
+                raise ValueError(
+                    f"optional observation mismatch for {key}: "
+                    f"{first.episode_uuid} and {manifest.episode_uuid} differ"
+                )
     return episodes
+
+
+def preflight_canonical_episodes(
+    paths: Iterable[Path], *, format_name: str, profile: str,
+) -> dict:
+    episodes = load_canonical_episodes(paths)
+    first = episodes[0].manifest
+    if format_name in {"lerobot", "openpi_lerobot_v21", "rlds"} and not first.camera_names:
+        raise ValueError(f"{format_name} export requires at least one RGB camera")
+    engine_counts: dict[str, int] = {}
+    scenes: set[str] = set()
+    for episode in episodes:
+        engine = episode.manifest.software.engine_id
+        engine_counts[engine] = engine_counts.get(engine, 0) + 1
+        scenes.add(episode.manifest.scene.scene_id)
+    optional = [key for key in ("ee_pose", "object_pose") if key in episodes[0].arrays]
+    warnings = []
+    if len(engine_counts) > 1:
+        warnings.append("mixed simulator export; use per-episode provenance for domain-aware training")
+    if len(scenes) > 1:
+        warnings.append("multiple scenes selected")
+    return {
+        "compatible": True,
+        "episode_count": len(episodes),
+        "engine_counts": engine_counts,
+        "engine_ids": sorted(engine_counts),
+        "scene_ids": sorted(scenes),
+        "robot_id": first.robot_id,
+        "fps": first.fps,
+        "action_profile": first.action_profile.id,
+        "training_profile": profile,
+        "camera_names": list(first.camera_names),
+        "optional_observations": optional,
+        "provenance_complete": all(
+            bool(episode.manifest.software.engine_id)
+            and bool(episode.manifest.software.engine_version)
+            and bool(episode.manifest.software.worker_id)
+            for episode in episodes
+        ),
+        "warnings": warnings,
+    }
 
 
 def read_rgb(path: Path) -> np.ndarray:

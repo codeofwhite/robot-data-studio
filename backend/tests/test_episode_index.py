@@ -44,14 +44,19 @@ def test_scan_detail_and_qa_keep_outcomes_separate(isolated_settings):
     assert episode["fps"] == 10
     assert episode["duration_s"] == 0.3
     assert episode["scene_id"] == "cloth_corner_lift"
+    assert episode["engine_id"] == "genesis"
     assert episode["control_mode"] == "gello"
     assert episode["seed"] == 3
     assert list_episodes(dataset_id=session["dataset_id"])[0]["id"] == episode["id"]
+    assert list_episodes(engine_id="genesis")[0]["id"] == episode["id"]
+    assert list_episodes(engine_id="isaac_sim") == []
     assert list_episodes(dataset_id=session["dataset_id"] + 1) == []
     update_qa(episode["id"], "accepted", "human override after replay")
     detail = episode_detail(episode["id"])
     assert detail["qa_status"] == "accepted"
     assert detail["operator_success"] == 1 and detail["auto_success"] == 0
+    assert detail["engine_id"] == "genesis"
+    assert detail["dataset_id"] == session["dataset_id"]
     assert len(detail["trajectory"]["policy_action"]) == 3
 
     trash_session(session["id"])

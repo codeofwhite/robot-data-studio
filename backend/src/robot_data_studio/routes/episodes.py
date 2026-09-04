@@ -15,10 +15,16 @@ def index(
     session_id: str | None = None,
     dataset_id: int | None = None,
     qa_status: str | None = None,
+    engine_id: str | None = None,
 ):
     if qa_status and qa_status not in {"pending", "accepted", "rejected"}:
         raise HTTPException(422, "invalid qa_status")
-    return list_episodes(session_id=session_id, dataset_id=dataset_id, qa_status=qa_status)
+    if engine_id and engine_id not in {"genesis", "isaac_sim"}:
+        raise HTTPException(422, "invalid engine_id")
+    return list_episodes(
+        session_id=session_id, dataset_id=dataset_id, qa_status=qa_status,
+        engine_id=engine_id,
+    )
 
 
 @router.get("/episodes/{episode_id}")

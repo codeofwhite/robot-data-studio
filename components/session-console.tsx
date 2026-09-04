@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { api } from '@/lib/api';
+import { engineLabel } from '@/lib/engines';
 import type { Session } from '@/lib/types';
 
 export function SessionConsole({ sessionId }: { sessionId: string }) {
@@ -114,7 +115,7 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
             </div>
             <h1 className="mt-3 text-2xl font-semibold">{session?.scene_id}</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              {session?.dataset_name} · {session?.engine_id.toUpperCase()} · {session?.control_mode.toUpperCase()} · worker
+              {session?.dataset_name} · {engineLabel(session?.engine_id)} · {session?.control_mode.toUpperCase()} · worker
               PID {worker?.pid ?? '—'}
             </p>
           </div>
@@ -204,7 +205,7 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
                 <Button
                   variant="outline"
                   className="w-full"
-                  render={<a href={`/episodes?session=${sessionId}`} />}
+                  render={<a href={`/episodes?session=${sessionId}&engine=${session?.engine_id ?? ''}&qa=pending`} />}
                 >
                   进入 QA 队列
                 </Button>

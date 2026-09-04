@@ -11,6 +11,7 @@ from pathlib import Path
 from ..config import BACKEND_ROOT, CONTRACTS_SRC, PROJECT_ROOT, settings
 from ..db import transaction
 from ..models import ExportCreate
+from ..exporters.common import preflight_canonical_episodes
 
 
 def _now() -> str:
@@ -42,6 +43,7 @@ def create_export(payload: ExportCreate) -> dict:
     if not dataset:
         raise KeyError(payload.dataset_id)
     episodes = _resolve_selected_episodes(payload.dataset_id, payload.episode_ids)
+    preflight_export(payload, episodes=episodes)
     export_id = uuid.uuid4().hex[:12]
     output_root = Path(dataset["root_path"]) / "exports"
     suffix = ".hdf5" if payload.format == "robomimic" else ""
@@ -84,6 +86,29 @@ def create_export(payload: ExportCreate) -> dict:
         _update(export_id, "running", pid=process.pid)
         threading.Thread(target=_wait_for_export, args=(export_id, process), daemon=True).start()
     return get_export(export_id) | {"command": command, "log_path": str(log_path)}
+
+
+def preflight_export(payload: ExportCreate, *, episodes: list[dict] | None = None) -> dict:
+    with transaction() as connection:
+        dataset = connection.execute(
+            "SELECT id, name FROM datasets WHERE id = ?", (payload.dataset_id,)
+        ).fetchone()
+    if not dataset:
+        raise KeyError(payload.dataset_id)
+    selected = episodes or _resolve_selected_episodes(payload.dataset_id, payload.episode_ids)
+    try:
+        report = preflight_canonical_episodes(
+            [episode["source"] for episode in selected],
+            format_name=payload.format,
+            profile=payload.profile,
+        )
+    except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
+        raise ValueError(f"episode preflight failed: {error}") from error
+    return report | {
+        "dataset_id": dataset["id"],
+        "dataset_name": dataset["name"],
+        "episode_ids": [episode["id"] for episode in selected],
+    }
 
 
 def _build_export_launch(payload: ExportCreate, input_root: Path, output_path: Path) -> tuple[list[str], Path]:
@@ -249,5 +274,8 @@ def _episode_reference(row) -> dict:
         "session_id": row["session_id"],
         "episode_index": episode_index,
         "engine_id": manifest.get("software", {}).get("engine_id"),
+        "engine_version": manifest.get("software", {}).get("engine_version"),
+        "worker_id": manifest.get("software", {}).get("worker_id"),
+        "scene_id": manifest.get("scene", {}).get("scene_id"),
         "position": row["position"],
     }

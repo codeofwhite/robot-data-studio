@@ -12,7 +12,13 @@ def list_datasets() -> list[dict]:
                COUNT(DISTINCT CASE WHEN s.status != 'trashed' THEN e.id END) AS episode_count,
                COUNT(DISTINCT CASE
                    WHEN s.status != 'trashed' AND e.qa_status = 'accepted' THEN e.id
-               END) AS accepted_count
+               END) AS accepted_count,
+               COUNT(DISTINCT CASE WHEN s.status != 'trashed' AND s.adapter_id IN ('genesis', 'clothtwin') THEN e.id END) AS genesis_episode_count,
+               COUNT(DISTINCT CASE WHEN s.status != 'trashed' AND s.adapter_id = 'isaac_sim' THEN e.id END) AS isaac_episode_count,
+               COUNT(DISTINCT CASE WHEN s.status != 'trashed' AND s.adapter_id IN ('genesis', 'clothtwin') AND e.qa_status = 'accepted' THEN e.id END) AS genesis_accepted_count,
+               COUNT(DISTINCT CASE WHEN s.status != 'trashed' AND s.adapter_id = 'isaac_sim' AND e.qa_status = 'accepted' THEN e.id END) AS isaac_accepted_count,
+               COUNT(DISTINCT CASE WHEN s.status != 'trashed' AND s.adapter_id IN ('genesis', 'clothtwin') AND e.qa_status = 'pending' THEN e.id END) AS genesis_pending_count,
+               COUNT(DISTINCT CASE WHEN s.status != 'trashed' AND s.adapter_id = 'isaac_sim' AND e.qa_status = 'pending' THEN e.id END) AS isaac_pending_count
                FROM datasets d
                LEFT JOIN sessions s ON s.dataset_id = d.id
                LEFT JOIN episodes e ON e.session_id = s.id

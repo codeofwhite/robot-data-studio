@@ -21,6 +21,14 @@ def test_datasets_endpoint_lists_each_dataset_once_with_exportable_counts(
             control_mode="keyboard",
         )
     )
+    isaac = create_session(
+        SessionCreate(
+            engine_id="isaac_sim",
+            dataset_name="pilot",
+            scene_id="rigid_pick_place",
+            control_mode="keyboard",
+        )
+    )
     create_session(
         SessionCreate(
             dataset_name="other",
@@ -33,6 +41,7 @@ def test_datasets_endpoint_lists_each_dataset_once_with_exportable_counts(
             (first, "accepted", "accepted"),
             (first, "pending", "pending"),
             (second, "accepted", "trashed"),
+            (isaac, "accepted", "isaac-accepted"),
         ):
             root = isolated_settings.data_root / "datasets" / "pilot" / "raw" / session["id"]
             episode_root = root / suffix
@@ -48,6 +57,12 @@ def test_datasets_endpoint_lists_each_dataset_once_with_exportable_counts(
     datasets = index()
     assert [dataset["name"] for dataset in datasets].count("pilot") == 1
     pilot = next(dataset for dataset in datasets if dataset["name"] == "pilot")
-    assert pilot["session_count"] == 1
-    assert pilot["episode_count"] == 2
-    assert pilot["accepted_count"] == 1
+    assert pilot["session_count"] == 2
+    assert pilot["episode_count"] == 3
+    assert pilot["accepted_count"] == 2
+    assert pilot["genesis_episode_count"] == 2
+    assert pilot["isaac_episode_count"] == 1
+    assert pilot["genesis_accepted_count"] == 1
+    assert pilot["isaac_accepted_count"] == 1
+    assert pilot["genesis_pending_count"] == 1
+    assert pilot["isaac_pending_count"] == 0

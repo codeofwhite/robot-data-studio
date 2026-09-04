@@ -1,7 +1,6 @@
 export type Session = {
   id: string;
   dataset_id: number;
-  engine_id: 'genesis' | 'isaac_sim';
   dataset_name?: string;
   adapter_id: string;
   engine_id: 'genesis' | 'isaac_sim';
@@ -26,6 +25,12 @@ export type Dataset = {
   session_count: number;
   episode_count: number;
   accepted_count: number;
+  genesis_episode_count: number;
+  isaac_episode_count: number;
+  genesis_accepted_count: number;
+  isaac_accepted_count: number;
+  genesis_pending_count: number;
+  isaac_pending_count: number;
   created_at: string;
 };
 
@@ -33,12 +38,16 @@ export type Episode = {
   id: number;
   session_id: string;
   dataset_id: number;
+  engine_id: 'genesis' | 'isaac_sim';
+  engine_version: string | null;
+  worker_id: string | null;
   episode_index: number | null;
   episode_uuid: string;
   path: string;
   task: string;
   scene_id: string;
   control_mode: string;
+  control_source: string | null;
   seed: number | null;
   operator_success: number | null;
   auto_success: number | null;
@@ -48,7 +57,14 @@ export type Episode = {
   fps: number | null;
   duration_s: number | null;
   created_at: string | null;
-  manifest?: { camera_names?: string[]; fps?: number; episode_metrics?: Record<string, unknown> };
+  manifest?: {
+    camera_names?: string[];
+    fps?: number;
+    episode_metrics?: Record<string, unknown>;
+    software?: { engine_id?: string; engine_version?: string; worker_id?: string };
+    scene?: { scene_id?: string; seed?: number };
+    control_source?: string;
+  };
   trajectory?: Record<string, number[] | number[][]>;
 };
 
@@ -57,7 +73,29 @@ export type ExportEpisodeRef = {
   session_id: string;
   episode_index: number | null;
   engine_id: 'genesis' | 'isaac_sim' | null;
+  engine_version: string | null;
+  worker_id: string | null;
+  scene_id: string | null;
   position: number;
+};
+
+export type ExportPreflight = {
+  compatible: true;
+  dataset_id: number;
+  dataset_name: string;
+  episode_ids: number[];
+  episode_count: number;
+  engine_counts: Record<string, number>;
+  engine_ids: string[];
+  scene_ids: string[];
+  robot_id: string;
+  fps: number;
+  action_profile: string;
+  training_profile: string;
+  camera_names: string[];
+  optional_observations: string[];
+  provenance_complete: boolean;
+  warnings: string[];
 };
 
 export type ExportJob = {
