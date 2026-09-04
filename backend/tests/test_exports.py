@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -119,8 +120,8 @@ def test_export_persists_selection_and_rejects_reserved_output(
         cursor = connection.execute(
             """INSERT INTO episodes(session_id, episode_uuid, path, task, operator_success,
                auto_success, qa_status, failure_reason, num_frames, manifest_json, created_at, indexed_at)
-               VALUES (?, 'episode-selected', ?, 'task', 1, 1, 'accepted', NULL, 1, '{}', NULL, 'now')""",
-            (session["id"], str(episode_root)),
+               VALUES (?, 'episode-selected', ?, 'task', 1, 1, 'accepted', NULL, 1, ?, NULL, 'now')""",
+            (session["id"], str(episode_root), json.dumps({"episode_index": 12})),
         )
         episode_id = cursor.lastrowid
 
@@ -157,7 +158,14 @@ def test_export_persists_selection_and_rejects_reserved_output(
     assert job["episode_count"] == 1
     assert job["profile"] == "openpi_franka_joint8"
     assert job["images"] == 1
+    assert job["episode_refs"] == [{
+        "episode_id": episode_id,
+        "session_id": session["id"],
+        "episode_index": 12,
+        "position": 0,
+    }]
     assert list_exports()[0]["episode_ids"] == [episode_id]
+    assert list_exports()[0]["episode_refs"] == job["episode_refs"]
     with pytest.raises(ValueError, match="already reserved"):
         create_export(payload)
 

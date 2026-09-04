@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { api } from '@/lib/api';
-import type { ConsumerSmoke, Dataset, Episode, ExportJob } from '@/lib/types';
+import type { ConsumerSmoke, Dataset, Episode, ExportEpisodeRef, ExportJob } from '@/lib/types';
 
 type ExportFormat = 'lerobot' | 'openpi_lerobot_v21' | 'rlds' | 'robomimic';
 type TrainingProfile = 'physical_joint8' | 'openpi_franka_joint8' | 'fastwam_franka_joint8';
@@ -90,6 +90,19 @@ export default function ExportsPage() {
   }, [datasetId]);
 
   const selected = useMemo(() => new Set(selectedEpisodeIds), [selectedEpisodeIds]);
+  const orderedEpisodes = useMemo(
+    () => [...episodes].sort((left, right) => {
+      const bySession = right.session_id.localeCompare(left.session_id);
+      if (bySession !== 0) return bySession;
+      return (left.episode_index ?? Number.MAX_SAFE_INTEGER)
+        - (right.episode_index ?? Number.MAX_SAFE_INTEGER);
+    }),
+    [episodes],
+  );
+  const selectedSummary = useMemo(
+    () => describeEpisodeSelection(orderedEpisodes.filter((episode) => selected.has(episode.id))),
+    [orderedEpisodes, selected],
+  );
   const smokeByExport = useMemo(
     () => new Map(smokes.map((smoke) => [smoke.export_id, smoke])),
     [smokes],
@@ -180,22 +193,29 @@ export default function ExportsPage() {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="outline">已选择 {selectedEpisodeIds.length} / {episodes.length}</Badge>
-              <Button type="button" size="sm" variant="outline" disabled={!episodes.length} onClick={() => setSelectedEpisodeIds(episodes.map((episode) => episode.id))}>全选</Button>
+              <Button type="button" size="sm" variant="outline" disabled={!episodes.length} onClick={() => setSelectedEpisodeIds(orderedEpisodes.map((episode) => episode.id))}>全选</Button>
               <Button type="button" size="sm" variant="ghost" disabled={!selectedEpisodeIds.length} onClick={() => setSelectedEpisodeIds([])}>清空</Button>
             </div>
+            {selectedEpisodeIds.length > 0 && (
+              <div className="rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 font-mono text-xs leading-5">
+                {selectedSummary}
+              </div>
+            )}
             <Table>
               <TableHeader>
-                <TableRow><TableHead>选择</TableHead><TableHead>Episode</TableHead><TableHead>Task</TableHead><TableHead>Frames</TableHead><TableHead>结果</TableHead><TableHead>采集时间</TableHead></TableRow>
+                <TableRow><TableHead>选择</TableHead><TableHead>Session</TableHead><TableHead>Episode</TableHead><TableHead>Task</TableHead><TableHead>时长</TableHead><TableHead>结果</TableHead><TableHead>采集时间</TableHead><TableHead /></TableRow>
               </TableHeader>
               <TableBody>
-                {episodes.map((episode) => (
+                {orderedEpisodes.map((episode) => (
                   <TableRow key={episode.id}>
                     <TableCell><Checkbox checked={selected.has(episode.id)} onCheckedChange={(checked) => toggleEpisode(episode.id, checked)} aria-label={`选择 ${episode.episode_uuid}`} /></TableCell>
-                    <TableCell><p className="font-mono text-xs">{episode.episode_uuid.slice(0, 12)}</p><p className="max-w-72 break-all text-xs text-muted-foreground">{episode.session_id}</p></TableCell>
+                    <TableCell><p className="text-xs">{formatSessionTime(episode.session_id)}</p><p className="text-xs text-muted-foreground">{episode.scene_id} · {episode.control_mode} · seed {episode.seed ?? 'N/A'}</p></TableCell>
+                    <TableCell><p className="font-mono font-semibold">{formatEpisodeNumber(episode.episode_index)}</p><p className="font-mono text-[10px] text-muted-foreground">{episode.episode_uuid.slice(0, 12)}</p></TableCell>
                     <TableCell className="max-w-sm whitespace-normal">{episode.task}</TableCell>
-                    <TableCell className="font-mono">{episode.num_frames}</TableCell>
+                    <TableCell className="font-mono text-xs"><p>{formatDuration(episode.duration_s)}</p><p className="text-muted-foreground">{episode.num_frames} frames · {episode.fps ?? 'N/A'} Hz</p></TableCell>
                     <TableCell className="text-xs">operator: {resultLabel(episode.operator_success)}<br />auto: {resultLabel(episode.auto_success)}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{formatChinaTime(episode.created_at)}</TableCell>
+                    <TableCell><Button size="sm" variant="ghost" render={<a href={`/episodes/${episode.id}`} target="_blank" rel="noreferrer" />}>查看 QA</Button></TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -213,7 +233,7 @@ export default function ExportsPage() {
           <CardContent className="grid items-end gap-4 md:grid-cols-[1fr_1fr_1fr_auto]">
             {format === 'lerobot' && <div className="space-y-2"><Label>Training profile</Label><NativeSelect className="w-full" value={profile} onChange={(event) => setProfile(event.target.value as TrainingProfile)}>{profiles.map((item) => <NativeSelectOption key={item.id} value={item.id}>{item.label}</NativeSelectOption>)}</NativeSelect></div>}
             {format === 'openpi_lerobot_v21' && <div className="space-y-2"><Label>Training profile</Label><Input value="OpenPI Franka joint8（固定）" disabled /></div>}
-            <div className="space-y-2"><Label>输出名称</Label><Input value={name} onChange={(event) => setName(event.target.value)} /></div>
+            <div className="space-y-2"><Label>输出名称</Label><Input value={name} onChange={(event) => setName(event.target.value)} /><p className="text-xs text-muted-foreground">推荐：profile_scene_seed_split_count_date</p></div>
             {(format === 'lerobot' || format === 'openpi_lerobot_v21') && <label className="flex h-8 items-center gap-2 text-sm"><Checkbox checked={images} onCheckedChange={setImages} />保存图片而不是 MP4</label>}
             <Button disabled={busy || !datasetId || !name || selectedEpisodeIds.length === 0} onClick={start}>{busy ? '提交中…' : `导出 ${selectedEpisodeIds.length} 条 ${format}`}</Button>
           </CardContent>
@@ -224,13 +244,68 @@ export default function ExportsPage() {
           <CardContent>
             <Table>
               <TableHeader><TableRow><TableHead>Job</TableHead><TableHead>Format / Profile</TableHead><TableHead>Episodes</TableHead><TableHead>Export</TableHead><TableHead>Consumer smoke</TableHead><TableHead>Output</TableHead><TableHead><Button variant="ghost" size="sm" onClick={load}><RefreshCw /></Button></TableHead></TableRow></TableHeader>
-              <TableBody>{jobs.map((job) => { const smoke = smokeByExport.get(job.id); const weight = smoke?.report?.weight_forward; return <TableRow key={job.id}><TableCell className="font-mono text-xs">{job.id}</TableCell><TableCell>{job.format}<p className="text-xs text-muted-foreground">{job.profile ?? 'legacy job'}</p></TableCell><TableCell className="font-mono">{job.episode_count}</TableCell><TableCell><Badge variant={job.status === 'completed' ? 'default' : 'outline'}>{job.status}</Badge></TableCell><TableCell>{smoke ? <><Badge variant={smoke.status === 'passed' ? 'default' : 'outline'}>{smoke.consumer}: {smoke.status}</Badge>{weight && <div className="mt-1 text-xs"><p>weights: {weight.weights_loaded ? 'loaded' : 'failed'} · forward: {weight.model_forward_passed ? 'passed' : 'failed'}</p><p className={weight.deployment_compatible ? 'text-emerald-600' : 'text-amber-600'}>deployment: {weight.deployment_compatible ? 'compatible' : 'contract mismatch'}</p></div>}<p className="mt-1 max-w-56 truncate font-mono text-xs text-muted-foreground" title={smoke.report_path}>{smoke.report_path}</p><p className="text-xs text-destructive">{smoke.error ?? smoke.report_read_error}</p></> : <span className="text-xs text-muted-foreground">N/A</span>}</TableCell><TableCell className="max-w-sm truncate font-mono text-xs">{job.output_path}</TableCell><TableCell className="text-xs text-destructive">{job.error}</TableCell></TableRow>; })}</TableBody>
+              <TableBody>{jobs.map((job) => { const smoke = smokeByExport.get(job.id); const weight = smoke?.report?.weight_forward; return <TableRow key={job.id}><TableCell className="font-mono text-xs">{job.id}</TableCell><TableCell>{job.format}<p className="text-xs text-muted-foreground">{job.profile ?? 'legacy job'}</p></TableCell><TableCell><p className="font-mono text-xs">{describeExportSelection(job.episode_refs)}</p><p className="mt-1 text-xs text-muted-foreground">{job.episode_count} 条</p></TableCell><TableCell><Badge variant={job.status === 'completed' ? 'default' : 'outline'}>{job.status}</Badge></TableCell><TableCell>{smoke ? <><Badge variant={smoke.status === 'passed' ? 'default' : 'outline'}>{smoke.consumer}: {smoke.status}</Badge>{weight && <div className="mt-1 text-xs"><p>weights: {weight.weights_loaded ? 'loaded' : 'failed'} · forward: {weight.model_forward_passed ? 'passed' : 'failed'}</p><p className={weight.deployment_compatible ? 'text-emerald-600' : 'text-amber-600'}>deployment: {weight.deployment_compatible ? 'compatible' : 'contract mismatch'}</p></div>}<p className="mt-1 max-w-56 truncate font-mono text-xs text-muted-foreground" title={smoke.report_path}>{smoke.report_path}</p><p className="text-xs text-destructive">{smoke.error ?? smoke.report_read_error}</p></> : <span className="text-xs text-muted-foreground">N/A</span>}</TableCell><TableCell className="max-w-sm truncate font-mono text-xs">{job.output_path}</TableCell><TableCell className="text-xs text-destructive">{job.error}</TableCell></TableRow>; })}</TableBody>
             </Table>
           </CardContent>
         </Card>
       </div>
     </AppShell>
   );
+}
+
+function formatEpisodeNumber(index: number | null): string {
+  return index == null ? '#??????' : `#${String(index).padStart(6, '0')}`;
+}
+
+function formatDuration(value: number | null): string {
+  return value == null ? 'N/A' : `${value.toFixed(1)} s`;
+}
+
+function formatSessionTime(sessionId: string): string {
+  const match = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})\+0800_/.exec(sessionId);
+  if (!match) return sessionId;
+  return `${match[1]}-${match[2]}-${match[3]} ${match[4]}:${match[5]}:${match[6]} · ${sessionId.slice(-8)}`;
+}
+
+function compactEpisodeIndices(indices: Array<number | null>): string {
+  const values = [...new Set(indices.filter((value): value is number => value != null))].sort((a, b) => a - b);
+  const ranges: string[] = [];
+  let start = values[0];
+  let end = values[0];
+  for (const value of values.slice(1)) {
+    if (end != null && value === end + 1) {
+      end = value;
+      continue;
+    }
+    if (start != null && end != null) ranges.push(start === end ? formatEpisodeNumber(start) : `${formatEpisodeNumber(start)}–${formatEpisodeNumber(end)}`);
+    start = end = value;
+  }
+  if (start != null && end != null) ranges.push(start === end ? formatEpisodeNumber(start) : `${formatEpisodeNumber(start)}–${formatEpisodeNumber(end)}`);
+  const unknown = indices.length - values.length;
+  if (unknown > 0) ranges.push(`${unknown} 条未编号`);
+  return ranges.join(', ') || '无';
+}
+
+function describeIndexedSelection(items: Array<{ session_id: string; episode_index: number | null }>): string {
+  if (items.length === 0) return 'N/A';
+  const bySession = new Map<string, Array<number | null>>();
+  for (const item of items) {
+    const indices = bySession.get(item.session_id) ?? [];
+    indices.push(item.episode_index);
+    bySession.set(item.session_id, indices);
+  }
+  if (bySession.size === 1) return compactEpisodeIndices([...bySession.values()][0] ?? []);
+  return [...bySession.entries()]
+    .map(([sessionId, indices]) => `${formatSessionTime(sessionId)}: ${compactEpisodeIndices(indices)}`)
+    .join(' · ');
+}
+
+function describeEpisodeSelection(episodes: Episode[]): string {
+  return describeIndexedSelection(episodes);
+}
+
+function describeExportSelection(references: ExportEpisodeRef[]): string {
+  return describeIndexedSelection(references);
 }
 
 function resultLabel(value: number | null): string {

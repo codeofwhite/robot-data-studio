@@ -13,7 +13,7 @@ from consumers.openpi_franka_joint8.config import (
     FrankaJoint8Outputs,
     make_train_config,
 )
-from consumers.openpi_franka_joint8.run import _parse_training_metrics
+from consumers.openpi_franka_joint8.run import _dataset_evidence, _parse_training_metrics
 
 
 def test_joint_delta_round_trip_keeps_gripper_absolute():
@@ -71,3 +71,19 @@ def test_training_metrics_are_parsed_from_upstream_progress_output():
         {"step": 0, "grad_norm": 1.6124, "loss": 0.2718, "param_norm": 1833.3756},
         {"step": 1, "grad_norm": 0.4880, "loss": 0.0740, "param_norm": 1833.3757},
     ]
+
+
+def test_dataset_evidence_reports_multi_episode_metadata(tmp_path: Path):
+    metadata = tmp_path / "meta"
+    metadata.mkdir()
+    (metadata / "info.json").write_text(
+        '{"total_episodes": 16, "total_frames": 4789, "codebase_version": "v2.1"}',
+        encoding="utf-8",
+    )
+
+    assert _dataset_evidence(tmp_path) == {
+        "dataset_root": str(tmp_path),
+        "total_episodes": 16,
+        "total_frames": 4789,
+        "codebase_version": "v2.1",
+    }

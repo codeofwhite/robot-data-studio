@@ -32,17 +32,30 @@ export type Episode = {
   id: number;
   session_id: string;
   dataset_id: number;
+  episode_index: number | null;
   episode_uuid: string;
   path: string;
   task: string;
+  scene_id: string;
+  control_mode: string;
+  seed: number | null;
   operator_success: number | null;
   auto_success: number | null;
   qa_status: 'pending' | 'accepted' | 'rejected';
   failure_reason: string | null;
   num_frames: number;
+  fps: number | null;
+  duration_s: number | null;
   created_at: string | null;
   manifest?: { camera_names?: string[]; fps?: number; episode_metrics?: Record<string, unknown> };
   trajectory?: Record<string, number[] | number[][]>;
+};
+
+export type ExportEpisodeRef = {
+  episode_id: number;
+  session_id: string;
+  episode_index: number | null;
+  position: number;
 };
 
 export type ExportJob = {
@@ -58,6 +71,7 @@ export type ExportJob = {
   profile: 'physical_joint8' | 'openpi_franka_joint8' | 'fastwam_franka_joint8' | null;
   episode_count: number;
   episode_ids: number[];
+  episode_refs: ExportEpisodeRef[];
   created_at: string;
 };
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import threading
@@ -195,11 +196,14 @@ def get_export(export_id: str) -> dict | None:
         if not row:
             return None
         episode_rows = connection.execute(
-            "SELECT episode_id FROM export_episodes WHERE export_id = ? ORDER BY position",
+            """SELECT ee.episode_id, ee.position, e.session_id, e.path, e.manifest_json
+               FROM export_episodes ee JOIN episodes e ON e.id = ee.episode_id
+               WHERE ee.export_id = ? ORDER BY ee.position""",
             (export_id,),
         ).fetchall()
     result = dict(row)
     result["episode_ids"] = [episode["episode_id"] for episode in episode_rows]
+    result["episode_refs"] = [_episode_reference(episode) for episode in episode_rows]
     return result
 
 
@@ -212,9 +216,36 @@ def list_exports() -> list[dict]:
                ORDER BY x.created_at DESC"""
         ).fetchall()
         episode_rows = connection.execute(
-            "SELECT export_id, episode_id FROM export_episodes ORDER BY export_id, position"
+            """SELECT ee.export_id, ee.episode_id, ee.position, e.session_id, e.path,
+               e.manifest_json FROM export_episodes ee
+               JOIN episodes e ON e.id = ee.episode_id
+               ORDER BY ee.export_id, ee.position"""
         ).fetchall()
     episode_ids: dict[str, list[int]] = {}
+    episode_refs: dict[str, list[dict]] = {}
     for episode in episode_rows:
         episode_ids.setdefault(episode["export_id"], []).append(episode["episode_id"])
-    return [dict(row) | {"episode_ids": episode_ids.get(row["id"], [])} for row in rows]
+        episode_refs.setdefault(episode["export_id"], []).append(_episode_reference(episode))
+    return [
+        dict(row)
+        | {
+            "episode_ids": episode_ids.get(row["id"], []),
+            "episode_refs": episode_refs.get(row["id"], []),
+        }
+        for row in rows
+    ]
+
+
+def _episode_reference(row) -> dict:
+    manifest = json.loads(row["manifest_json"])
+    episode_index = manifest.get("episode_index")
+    if not isinstance(episode_index, int):
+        directory_name = Path(row["path"]).name
+        suffix = directory_name.removeprefix("episode_")
+        episode_index = int(suffix) if suffix.isdigit() else None
+    return {
+        "episode_id": row["episode_id"],
+        "session_id": row["session_id"],
+        "episode_index": episode_index,
+        "position": row["position"],
+    }

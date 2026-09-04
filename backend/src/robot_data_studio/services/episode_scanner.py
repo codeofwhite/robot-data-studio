@@ -81,11 +81,31 @@ def list_episodes(
         rows = connection.execute(
             f"""SELECT e.id, e.session_id, e.episode_uuid, e.path, e.task, e.operator_success,
                 e.auto_success, e.qa_status, e.failure_reason, e.num_frames, e.created_at,
-                s.dataset_id FROM episodes e JOIN sessions s ON s.id = e.session_id
+                e.manifest_json, s.dataset_id, s.scene_id, s.control_mode
+                FROM episodes e JOIN sessions s ON s.id = e.session_id
                 {where} ORDER BY COALESCE(e.created_at, e.indexed_at) DESC""",
             params,
         ).fetchall()
-    return [dict(row) for row in rows]
+    episodes: list[dict] = []
+    for row in rows:
+        episode = dict(row)
+        manifest = json.loads(episode.pop("manifest_json"))
+        episode_index = manifest.get("episode_index")
+        if not isinstance(episode_index, int):
+            directory_name = Path(episode["path"]).name
+            episode_index = int(directory_name.removeprefix("episode_")) if directory_name.removeprefix("episode_").isdigit() else None
+        fps = manifest.get("fps")
+        episode["episode_index"] = episode_index
+        episode["fps"] = fps if isinstance(fps, (int, float)) and fps > 0 else None
+        episode["duration_s"] = (
+            episode["num_frames"] / float(episode["fps"])
+            if episode["fps"] is not None
+            else None
+        )
+        scene = manifest.get("scene")
+        episode["seed"] = scene.get("seed") if isinstance(scene, dict) else None
+        episodes.append(episode)
+    return episodes
 
 
 def episode_detail(episode_id: int) -> dict | None:

@@ -12,9 +12,11 @@ def test_scan_detail_and_qa_keep_outcomes_separate(isolated_settings):
     root = isolated_settings.data_root / "datasets" / "pilot" / "raw" / session["id"] / "episode_000000"
     root.mkdir()
     manifest = {
-        "episode_uuid": "stable-uuid", "task": "lift corner", "num_frames": 3,
+        "episode_uuid": "stable-uuid", "episode_index": 0,
+        "task": "lift corner", "num_frames": 3,
         "operator_success": True, "auto_success": False, "failure_reason": "automatic_criterion_not_met",
-        "camera_names": ["front"], "fps": 10, "created_at": "2026-08-30T00:00:00+00:00",
+        "camera_names": ["front"], "fps": 10, "scene": {"seed": 3},
+        "created_at": "2026-08-30T00:00:00+00:00",
     }
     (root / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     (root / "front_rgb").mkdir()
@@ -38,6 +40,12 @@ def test_scan_detail_and_qa_keep_outcomes_separate(isolated_settings):
     assert episode["operator_success"] == 1
     assert episode["auto_success"] == 0
     assert episode["qa_status"] == "pending"
+    assert episode["episode_index"] == 0
+    assert episode["fps"] == 10
+    assert episode["duration_s"] == 0.3
+    assert episode["scene_id"] == "cloth_corner_lift"
+    assert episode["control_mode"] == "gello"
+    assert episode["seed"] == 3
     assert list_episodes(dataset_id=session["dataset_id"])[0]["id"] == episode["id"]
     assert list_episodes(dataset_id=session["dataset_id"] + 1) == []
     update_qa(episode["id"], "accepted", "human override after replay")

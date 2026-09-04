@@ -66,6 +66,16 @@ def _validate_paths(dataset_root: Path, base_checkpoint: Path) -> None:
         raise FileNotFoundError(f"base checkpoint params are unavailable: {base_checkpoint}")
 
 
+def _dataset_evidence(dataset_root: Path) -> dict[str, Any]:
+    info = json.loads((dataset_root / "meta" / "info.json").read_text(encoding="utf-8"))
+    return {
+        "dataset_root": str(dataset_root),
+        "total_episodes": int(info["total_episodes"]),
+        "total_frames": int(info["total_frames"]),
+        "codebase_version": str(info["codebase_version"]),
+    }
+
+
 def _install_local_dataset_loader(dataset_root: Path) -> None:
     """Route OpenPI's pinned LeRobot loader to an explicit local root and PyAV."""
     from lerobot.common.datasets.lerobot_dataset import LeRobotDataset, LeRobotDatasetMetadata
@@ -179,6 +189,7 @@ def preflight(args) -> dict[str, Any]:
 
 def train(args) -> dict[str, Any]:
     config = _config(args)
+    dataset = _dataset_evidence(args.dataset_root)
     train_path = args.openpi_root / "scripts" / "train.py"
     spec = importlib.util.spec_from_file_location("studio_openpi_train", train_path)
     if spec is None or spec.loader is None:
@@ -214,7 +225,12 @@ def train(args) -> dict[str, Any]:
         "seed": config.seed,
         "batch_size": config.batch_size,
         "metrics": metrics,
-        "evidence": "one_episode_pipeline_sanity",
+        "dataset": dataset,
+        "evidence": (
+            "multi_episode_lora_finetune"
+            if dataset["total_episodes"] > 1
+            else "one_episode_pipeline_sanity"
+        ),
         "review_status": "SELF_REVIEWED_PROVISIONAL",
     }
 
@@ -248,6 +264,7 @@ def infer(args) -> dict[str, Any]:
     actions = np.asarray(output["actions"])
     if actions.shape != (10, 8) or not np.isfinite(actions).all():
         raise ValueError(f"invalid Franka joint8 policy output: {actions.shape}")
+    dataset = _dataset_evidence(args.dataset_root)
     return {
         "stage": "checkpoint_inference",
         "status": "passed",
@@ -258,7 +275,12 @@ def infer(args) -> dict[str, Any]:
         "contract_compatible": True,
         "deployment_compatible": True,
         "closed_loop_validated": False,
-        "training_evidence": "one_episode_pipeline_sanity",
+        "dataset": dataset,
+        "training_evidence": (
+            "multi_episode_checkpoint_inference"
+            if dataset["total_episodes"] > 1
+            else "one_episode_pipeline_sanity"
+        ),
         "policy_infer_ms": float(output["policy_timing"]["infer_ms"]),
     }
 
