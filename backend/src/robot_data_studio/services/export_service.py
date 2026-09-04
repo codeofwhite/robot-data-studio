@@ -8,7 +8,6 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ..adapters.clothtwin import ClothTwinAdapter
 from ..config import BACKEND_ROOT, CONTRACTS_SRC, PROJECT_ROOT, settings
 from ..db import transaction
 from ..models import ExportCreate
@@ -88,30 +87,32 @@ def create_export(payload: ExportCreate) -> dict:
 
 
 def _build_export_launch(payload: ExportCreate, input_root: Path, output_path: Path) -> tuple[list[str], Path]:
-    if payload.format == "openpi_lerobot_v21":
+    interpreters = {
+        "lerobot": settings.lerobot_python,
+        "openpi_lerobot_v21": settings.openpi_python,
+        "rlds": settings.rlds_python,
+        "robomimic": settings.robomimic_python,
+    }
+    modules = {
+        "lerobot": "robot_data_studio.exporters.lerobot_v3",
+        "openpi_lerobot_v21": "robot_data_studio.exporters.openpi_lerobot_v21",
+        "rlds": "robot_data_studio.exporters.rlds",
+        "robomimic": "robot_data_studio.exporters.robomimic",
+    }
+    try:
         command = [
-            settings.openpi_python,
-            "-m",
-            "robot_data_studio.exporters.openpi_lerobot_v21",
-            "--input-root",
-            str(input_root),
-            "--output",
-            str(output_path),
-            "--repo-id",
-            str(payload.repo_id),
+            interpreters[payload.format], "-m", modules[payload.format],
+            "--input-root", str(input_root), "--output", str(output_path),
         ]
+    except KeyError as error:
+        raise ValueError(f"unsupported export format: {payload.format}") from error
+    if payload.format in {"lerobot", "openpi_lerobot_v21"}:
+        command += ["--repo-id", str(payload.repo_id)]
         if payload.images:
             command.append("--images")
-        return command, PROJECT_ROOT
-    command = ClothTwinAdapter().build_export_command(
-        payload.format,
-        input_root,
-        output_path,
-        repo_id=payload.repo_id,
-        images=payload.images,
-        profile=payload.profile,
-    )
-    return command, settings.clothtwin_root
+    if payload.format == "lerobot":
+        command += ["--profile", payload.profile]
+    return command, PROJECT_ROOT
 
 
 def _resolve_selected_episodes(dataset_id: int, episode_ids: list[int]) -> list[dict]:
@@ -247,5 +248,6 @@ def _episode_reference(row) -> dict:
         "episode_id": row["episode_id"],
         "session_id": row["session_id"],
         "episode_index": episode_index,
+        "engine_id": manifest.get("software", {}).get("engine_id"),
         "position": row["position"],
     }

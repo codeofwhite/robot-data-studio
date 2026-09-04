@@ -6,26 +6,13 @@ import shutil
 import uuid
 from pathlib import Path
 
-import numpy as np
-from PIL import Image
+from robot_data_contracts import iter_training_frames
 
-from robot_data_contracts import iter_training_frames, open_canonical_episode
+from .common import discover_episodes, load_canonical_episodes, read_rgb, write_directory_provenance
 
 
 FORMAT = "openpi_lerobot_v21"
 PROFILE = "openpi_franka_joint8"
-
-
-def _read_rgb(path: Path) -> np.ndarray:
-    with Image.open(path) as image:
-        return np.asarray(image.convert("RGB"))
-
-
-def discover_episodes(root: Path) -> list[Path]:
-    source = root.expanduser().resolve()
-    if (source / "manifest.json").is_file():
-        return [source]
-    return sorted(path.parent for path in source.rglob("manifest.json"))
 
 
 def export_openpi_lerobot_v21(
@@ -40,15 +27,10 @@ def export_openpi_lerobot_v21(
     except ImportError as error:
         raise RuntimeError("OpenPI's vendored LeRobot v2.1 is required") from error
 
-    if not episode_paths:
-        raise ValueError("No canonical episodes were selected")
     output = output.expanduser().resolve()
     if output.exists():
         raise FileExistsError(f"output already exists: {output}")
-    episodes = [
-        open_canonical_episode(path, array_keys={"policy_state", "applied_action"})
-        for path in episode_paths
-    ]
+    episodes = load_canonical_episodes(episode_paths)
     fps = episodes[0].manifest.fps
     cameras = tuple(episodes[0].manifest.camera_names)
     if any(episode.manifest.fps != fps for episode in episodes):
@@ -58,7 +40,7 @@ def export_openpi_lerobot_v21(
     if not cameras:
         raise ValueError("OpenPI export requires at least one RGB camera")
 
-    first_image = _read_rgb(episodes[0].image_path(cameras[0], 0))
+    first_image = read_rgb(episodes[0].image_path(cameras[0], 0))
     features = {
         "observation.state": {
             "dtype": "float32",
@@ -79,7 +61,7 @@ def export_openpi_lerobot_v21(
     }
     image_dtype = "video" if use_videos else "image"
     for camera in cameras:
-        image = _read_rgb(episodes[0].image_path(camera, 0))
+        image = read_rgb(episodes[0].image_path(camera, 0))
         if image.shape != first_image.shape:
             raise ValueError("OpenPI v2.1 export requires one shared source image shape")
         features[f"observation.images.{camera}"] = {
@@ -108,7 +90,7 @@ def export_openpi_lerobot_v21(
                 }
                 value.update(
                     {
-                        f"observation.images.{name}": _read_rgb(path)
+                        f"observation.images.{name}": read_rgb(path)
                         for name, path in frame["images"].items()
                     }
                 )
@@ -119,6 +101,7 @@ def export_openpi_lerobot_v21(
             raise RuntimeError(
                 f"wrong LeRobot writer: expected v2.1, got {info.get('codebase_version')}"
             )
+        write_directory_provenance(temporary, episodes)
         temporary.rename(output)
     except Exception:
         shutil.rmtree(temporary, ignore_errors=True)

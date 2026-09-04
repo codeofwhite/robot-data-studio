@@ -81,7 +81,9 @@ def list_episodes(
         rows = connection.execute(
             f"""SELECT e.id, e.session_id, e.episode_uuid, e.path, e.task, e.operator_success,
                 e.auto_success, e.qa_status, e.failure_reason, e.num_frames, e.created_at,
-                e.manifest_json, s.dataset_id, s.scene_id, s.control_mode
+                e.manifest_json, s.dataset_id,
+                CASE WHEN s.adapter_id = 'clothtwin' THEN 'genesis' ELSE s.adapter_id END AS engine_id,
+                s.scene_id, s.control_mode
                 FROM episodes e JOIN sessions s ON s.id = e.session_id
                 {where} ORDER BY COALESCE(e.created_at, e.indexed_at) DESC""",
             params,

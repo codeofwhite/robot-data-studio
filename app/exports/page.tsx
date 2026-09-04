@@ -209,7 +209,7 @@ export default function ExportsPage() {
                 {orderedEpisodes.map((episode) => (
                   <TableRow key={episode.id}>
                     <TableCell><Checkbox checked={selected.has(episode.id)} onCheckedChange={(checked) => toggleEpisode(episode.id, checked)} aria-label={`选择 ${episode.episode_uuid}`} /></TableCell>
-                    <TableCell><p className="text-xs">{formatSessionTime(episode.session_id)}</p><p className="text-xs text-muted-foreground">{episode.scene_id} · {episode.control_mode} · seed {episode.seed ?? 'N/A'}</p></TableCell>
+                    <TableCell><p className="text-xs">{formatSessionTime(episode.session_id)}</p><p className="text-xs text-muted-foreground">{episode.engine_id === 'isaac_sim' ? 'Isaac Sim' : 'Genesis'} · {episode.scene_id} · {episode.control_mode} · seed {episode.seed ?? 'N/A'}</p></TableCell>
                     <TableCell><p className="font-mono font-semibold">{formatEpisodeNumber(episode.episode_index)}</p><p className="font-mono text-[10px] text-muted-foreground">{episode.episode_uuid.slice(0, 12)}</p></TableCell>
                     <TableCell className="max-w-sm whitespace-normal">{episode.task}</TableCell>
                     <TableCell className="font-mono text-xs"><p>{formatDuration(episode.duration_s)}</p><p className="text-muted-foreground">{episode.num_frames} frames · {episode.fps ?? 'N/A'} Hz</p></TableCell>

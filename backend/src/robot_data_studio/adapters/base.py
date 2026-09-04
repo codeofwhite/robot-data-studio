@@ -57,6 +57,3 @@ class CollectionAdapter(ABC):
 
     @abstractmethod
     def build_worker_launch(self, config: dict[str, Any], output_dir: Path) -> WorkerLaunch: ...
-
-    @abstractmethod
-    def build_export_command(self, format_name: str, input_root: Path, output: Path, **kwargs: Any) -> list[str]: ...

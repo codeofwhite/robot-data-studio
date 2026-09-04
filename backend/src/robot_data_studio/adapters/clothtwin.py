@@ -138,20 +138,3 @@ class ClothTwinAdapter(CollectionAdapter):
                 "PYTHONPATH": os.pathsep.join(python_paths),
             },
         )
-
-    def build_export_command(self, format_name: str, input_root: Path, output: Path, **kwargs: Any) -> list[str]:
-        if format_name not in {"lerobot", "rlds", "robomimic"}:
-            raise ValueError("unsupported export format")
-        interpreter = {
-            "lerobot": settings.lerobot_python,
-            "rlds": settings.rlds_python,
-            "robomimic": settings.robomimic_python,
-        }[format_name]
-        command = [interpreter, "-m", "tools.export_dataset", "--format", format_name, "--input-root", str(input_root), "--output", str(output)]
-        if kwargs.get("repo_id"):
-            command += ["--repo-id", str(kwargs["repo_id"])]
-        if kwargs.get("images"):
-            command.append("--images")
-        if format_name == "lerobot" and kwargs.get("profile"):
-            command += ["--profile", str(kwargs["profile"])]
-        return command

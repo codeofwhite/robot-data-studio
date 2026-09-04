@@ -137,6 +137,3 @@ class IsaacSimAdapter(CollectionAdapter):
                 "PYTHONPATH": ":".join(python_paths),
             },
         )
-
-    def build_export_command(self, format_name: str, input_root: Path, output: Path, **kwargs: Any) -> list[str]:
-        raise ValueError("Isaac Sim export is not implemented in collection P0")

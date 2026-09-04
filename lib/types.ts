@@ -1,6 +1,7 @@
 export type Session = {
   id: string;
   dataset_id: number;
+  engine_id: 'genesis' | 'isaac_sim';
   dataset_name?: string;
   adapter_id: string;
   engine_id: 'genesis' | 'isaac_sim';
@@ -55,6 +56,7 @@ export type ExportEpisodeRef = {
   episode_id: number;
   session_id: string;
   episode_index: number | null;
+  engine_id: 'genesis' | 'isaac_sim' | null;
   position: number;
 };
 

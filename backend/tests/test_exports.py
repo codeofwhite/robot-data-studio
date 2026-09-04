@@ -4,7 +4,6 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from robot_data_studio.adapters.clothtwin import ClothTwinAdapter
 from robot_data_studio.db import transaction
 from robot_data_studio.models import ExportCreate, SessionCreate
 from robot_data_studio.services.export_service import (
@@ -20,17 +19,15 @@ from robot_data_studio.services.session_service import create_session, trash_ses
 
 
 @pytest.mark.parametrize("format_name", ["lerobot", "rlds", "robomimic"])
-def test_export_format_is_allowlisted(format_name):
-    command = ClothTwinAdapter().build_export_command(
-        format_name, Path("/tmp/raw"), Path("/tmp/out"), repo_id="local/test"
+def test_export_format_uses_studio_exporter(format_name, isolated_settings):
+    payload = ExportCreate(
+        dataset_id=1, episode_ids=[1], format=format_name, output_name="test",
+        repo_id="local/test" if format_name == "lerobot" else None,
     )
-    assert command[1:3] == ["-m", "tools.export_dataset"]
-    assert command[command.index("--format") + 1] == format_name
-
-
-def test_unknown_export_is_rejected():
-    with pytest.raises(ValueError, match="unsupported export format"):
-        ClothTwinAdapter().build_export_command("unknown", Path("/tmp/raw"), Path("/tmp/out"))
+    command, cwd = _build_export_launch(payload, Path("/tmp/raw"), Path("/tmp/out"))
+    expected_module = "lerobot_v3" if format_name == "lerobot" else format_name
+    assert command[1:3] == ["-m", f"robot_data_studio.exporters.{expected_module}"]
+    assert cwd.name == "robot-data-studio"
 
 
 def test_openpi_v21_requires_its_explicit_profile_and_repo_id():
@@ -162,6 +159,7 @@ def test_export_persists_selection_and_rejects_reserved_output(
         "episode_id": episode_id,
         "session_id": session["id"],
         "episode_index": 12,
+        "engine_id": None,
         "position": 0,
     }]
     assert list_exports()[0]["episode_ids"] == [episode_id]
