@@ -155,3 +155,25 @@ def test_isaac_rigid_scene_passes_work_surface_height() -> None:
         adapter.build_collect_command(
             {**config, "scene_params": {"unsupported": 1}}, Path("/tmp/isaac-data")
         )
+
+
+def test_isaac_cube_lift_scene_is_registered_and_passes_height() -> None:
+    adapter = IsaacSimAdapter()
+    config = {
+        "scene_id": "rigid_cube_lift",
+        "control_mode": "keyboard",
+        "gpu": 6,
+        "port": 8080,
+        "control_fps": 10,
+        "width": 640,
+        "height": 480,
+        "scene_params": {"work_surface_height_m": 0.25},
+        "camera_profile_id": "lab_d435i_dual_v1",
+    }
+
+    command = adapter.build_collect_command(config, Path("/tmp/isaac-cube-data"))
+
+    assert adapter.scenes["rigid_cube_lift"]["family"] == "rigid_pick"
+    assert adapter.scenes["rigid_cube_lift"]["automatic_outcome"] is True
+    assert command[command.index("--scene") + 1] == "rigid_cube_lift"
+    assert command[command.index("--work-surface-height-m") + 1] == "0.25"

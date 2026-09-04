@@ -14,7 +14,12 @@ from robot_data_contracts.profiles.franka import FRANKA_JOINT8_ACTION, franka_fe
 from robot_data_studio.exporters.common import preflight_canonical_episodes, write_directory_provenance
 
 
-def _episode(root, engine_id: str, *, fps: int = 10):
+def _episode(root, engine_id: str, *, fps: int = 10, cameras: tuple[str, ...] = ()):
+    calibration = {
+        name: {"intrinsics": [1.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0],
+               "extrinsics": {"eye_world_m": [1.0, 1.0, 1.0]}}
+        for name in cameras
+    }
     writer = EpisodeWriter(
         root,
         fps=fps,
@@ -22,8 +27,8 @@ def _episode(root, engine_id: str, *, fps: int = 10):
         control_source="keyboard",
         features=franka_feature_specs(),
         action_profile=FRANKA_JOINT8_ACTION,
-        camera_names=(),
-        camera_calibration={},
+        camera_names=cameras,
+        camera_calibration=calibration,
         scene=SceneProvenanceV1(scene_id="rigid_pick_place", seed=0),
         software=SoftwareProvenanceV1(
             python_version="test", platform="test", engine_id=engine_id,
@@ -33,7 +38,7 @@ def _episode(root, engine_id: str, *, fps: int = 10):
     )
     writer.start("pick and place")
     writer.add_frame(
-        images={},
+        images={name: np.zeros((4, 4, 3), np.uint8) for name in cameras},
         values={
             "native_state": np.zeros(18, np.float32),
             "policy_state": np.zeros(16, np.float32),
@@ -65,6 +70,9 @@ def test_directory_provenance_preserves_engine_per_episode(tmp_path):
     assert [row["output_episode_index"] for row in rows] == [0, 1]
     assert rows[0]["source_episode_uuid"] == genesis.manifest.episode_uuid
     assert rows[1]["worker_id"] == "isaac_sim-worker"
+    assert rows[1]["operator_success"] is True
+    assert rows[1]["automatic_success"] is True
+    assert rows[1]["evaluator_id"] == "test"
 
 
 def test_preflight_allows_contract_compatible_mixed_simulators(tmp_path):
@@ -97,3 +105,35 @@ def test_preflight_rejects_mismatched_fps_with_episode_ids(tmp_path):
     assert "fps mismatch" in message
     assert genesis.manifest.episode_uuid in message
     assert isaac.manifest.episode_uuid in message
+
+
+def test_openpi_preflight_requires_base_and_wrist_and_reports_consumed_views(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        EpisodeWriter,
+        "_write_rgb",
+        lambda _self, path, _image: path.write_bytes(b"test-jpeg"),
+    )
+    missing_wrist = _episode(tmp_path / "missing", "isaac_sim", cameras=("base", "top"))
+
+    try:
+        preflight_canonical_episodes(
+            [missing_wrist.path],
+            format_name="openpi_lerobot_v21",
+            profile="openpi_franka_joint8",
+        )
+    except ValueError as error:
+        assert "wrist" in str(error)
+    else:
+        raise AssertionError("OpenPI preflight must reject a missing wrist camera")
+
+    ready = _episode(
+        tmp_path / "ready", "isaac_sim", cameras=("base", "top", "side", "wrist")
+    )
+    report = preflight_canonical_episodes(
+        [ready.path],
+        format_name="openpi_lerobot_v21",
+        profile="openpi_franka_joint8",
+    )
+
+    assert report["consumer_camera_names"] == ["base", "wrist"]
+    assert any("QA-only" in warning for warning in report["warnings"])

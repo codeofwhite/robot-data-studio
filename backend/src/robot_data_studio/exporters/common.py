@@ -66,6 +66,14 @@ def preflight_canonical_episodes(
     first = episodes[0].manifest
     if format_name in {"lerobot", "openpi_lerobot_v21", "rlds"} and not first.camera_names:
         raise ValueError(f"{format_name} export requires at least one RGB camera")
+    consumer_cameras: list[str] = []
+    if format_name == "openpi_lerobot_v21":
+        consumer_cameras = ["base", "wrist"]
+        missing = sorted(set(consumer_cameras) - set(first.camera_names))
+        if missing:
+            raise ValueError(
+                "OpenPI Franka joint8 requires RGB cameras: " + ", ".join(missing)
+            )
     engine_counts: dict[str, int] = {}
     scenes: set[str] = set()
     for episode in episodes:
@@ -78,6 +86,13 @@ def preflight_canonical_episodes(
         warnings.append("mixed simulator export; use per-episode provenance for domain-aware training")
     if len(scenes) > 1:
         warnings.append("multiple scenes selected")
+    if format_name == "openpi_lerobot_v21":
+        unused = sorted(set(first.camera_names) - set(consumer_cameras))
+        if unused:
+            warnings.append(
+                "OpenPI Franka joint8 trains on base+wrist; recorded QA-only cameras: "
+                + ", ".join(unused)
+            )
     return {
         "compatible": True,
         "episode_count": len(episodes),
@@ -89,6 +104,7 @@ def preflight_canonical_episodes(
         "action_profile": first.action_profile.id,
         "training_profile": profile,
         "camera_names": list(first.camera_names),
+        "consumer_camera_names": consumer_cameras,
         "optional_observations": optional,
         "provenance_complete": all(
             bool(episode.manifest.software.engine_id)
@@ -123,6 +139,10 @@ def provenance_record(episode: CanonicalEpisode, output_episode_index: int) -> d
         "seed": manifest.scene.seed,
         "control_source": manifest.control_source,
         "generation_method": manifest.lineage.generation_method,
+        "operator_success": manifest.operator_success,
+        "automatic_success": manifest.evaluator.success,
+        "evaluator_id": manifest.evaluator.evaluator_id,
+        "evaluator_metrics": manifest.evaluator.metrics,
         "git_revisions": software.git_revisions,
     }
 

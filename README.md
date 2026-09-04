@@ -107,9 +107,9 @@ JAX policy forward on a single explicitly selected GPU. The
 trains on seven joint deltas plus an absolute gripper channel, and converts policy
 outputs back to 8-D absolute Franka joint targets. The report records model
 execution, action-contract compatibility, and closed-loop validation separately.
-The included seed-0 checkpoint is a one-episode pipeline sanity artifact: it is
-interface-compatible with the worker safety layer, but it is not evidence of task
-robustness or generalization.
+The default local smoke checkpoint is the existing seed-0, 16-episode,
+2,000-step Franka joint8 artifact. It is interface-compatible with the worker
+safety layer, but it is not evidence of Isaac task robustness or generalization.
 
 Closed-loop validation is a separate two-process evaluation. The OpenPI environment
 serves the custom checkpoint, while the Genesis environment runs the simulation-only
@@ -119,3 +119,6 @@ slew-rate safety layer, and records an EpisodeContract trajectory plus four vide
 An episode passes only after grasp closure, a later release, the native task
 evaluator, and ten stable target frames all pass; offline inference alone never sets
 `closed_loop_validated=true`.
+
+For the fixed Isaac Sim cube-lift collection, QA, OpenPI export, pilot-check, and
+short-overfit sequence, follow [`docs/ISAAC_CUBE_OPENPI_PILOT.md`](docs/ISAAC_CUBE_OPENPI_PILOT.md).

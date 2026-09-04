@@ -216,7 +216,7 @@ def _run_openpi_weight_forward(
         "deployment_compatible": deployment_compatible,
         "closed_loop_validated": False,
         "training_evidence": (
-            "one_episode_pipeline_sanity" if deployment_compatible else "pretrained_domain_mismatch"
+            "checkpoint_forward_only" if deployment_compatible else "pretrained_domain_mismatch"
         ),
         "compatibility_reason": compatibility_reason,
     }

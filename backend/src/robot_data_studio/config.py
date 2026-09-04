@@ -48,8 +48,9 @@ class Settings:
     openpi_checkpoint: Path = Path(
         os.getenv(
             "ROBOT_DATA_STUDIO_OPENPI_CHECKPOINT",
-            "/data/zhanghejun/robot-data-studio/data/training/openpi_franka_joint8/"
-            "checkpoints/pi05_franka_joint8_lora/seed0_sanity/9",
+            "/data/zhanghejun/robot-data-studio/data/training/"
+            "openpi_franka_joint8_seed0_train16_v1/checkpoints/"
+            "pi05_franka_joint8_lora/seed0_train16_step2000_v1/1999",
         )
     )
     openpi_config: str = os.getenv(

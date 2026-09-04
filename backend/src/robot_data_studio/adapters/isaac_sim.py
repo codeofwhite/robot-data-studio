@@ -33,6 +33,24 @@ SCENES = {
             }
         ],
     },
+    "rigid_cube_lift": {
+        "label": "刚体方块抓取抬升",
+        "description": "固定方块的抓取、抬升 8 cm、保持 1 秒并松开，用于 Isaac→OpenPI 最小闭环。",
+        "family": "rigid_pick",
+        "automatic_outcome": True,
+        "parameters": [
+            {
+                "key": "work_surface_height_m",
+                "label": "工作面相对底座高度",
+                "unit": "m",
+                "minimum": 0.18,
+                "maximum": 0.32,
+                "step": 0.01,
+                "default": 0.25,
+                "scale": "linear",
+            }
+        ],
+    },
 }
 
 
@@ -116,7 +134,7 @@ class IsaacSimAdapter(CollectionAdapter):
             "--/UJITSO/geometry=false --/persistent/UJITSO/geometry=false "
             "--/app/window/width=960 --/app/window/height=720",
         ]
-        if config["scene_id"] == "rigid_pick_place":
+        if config["scene_id"] in {"rigid_pick_place", "rigid_cube_lift"}:
             height = config.get("scene_params", {}).get("work_surface_height_m", 0.25)
             command += ["--work-surface-height-m", str(height)]
         return command

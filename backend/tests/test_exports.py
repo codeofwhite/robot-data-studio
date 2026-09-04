@@ -302,7 +302,7 @@ def test_openpi_smoke_uses_local_checkpoint_and_one_visible_gpu(
     smoke = start_automatic_smoke("openpi-job")
     command = smoke["command"]
     assert command[command.index("--checkpoint") + 1].endswith(
-        "checkpoints/pi05_franka_joint8_lora/seed0_sanity/9"
+        "checkpoints/pi05_franka_joint8_lora/seed0_train16_step2000_v1/1999"
     )
     assert command[command.index("--config-name") + 1] == "pi05_franka_joint8_lora"
     assert command[command.index("--inference-steps") + 1] == "2"
