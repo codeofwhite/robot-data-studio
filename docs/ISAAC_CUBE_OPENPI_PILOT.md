@@ -117,11 +117,18 @@ close recall, open specificity, and separate approach/close/transport/release
 windows. Then run at least 20 policy rollouts in Isaac and report grasp, lift,
 hold, and release rates separately.
 
-The current Isaac worker accepts keyboard or GELLO commands; it does not yet
-consume the OpenPI policy server. Therefore this approved pilot ends at the
-offline overfit/phase report. Connecting Isaac policy rollout is the next
-separate implementation gate and must be completed before claiming closed-loop
-success.
+For event-aware training, pass `--sampling-strategy phase_balanced`. The local
+consumer labels each episode into approach-open, close-transition,
+closed-transport, release-transition, and post-release frames, then samples
+them with target probabilities `25/20/25/20/10%`. Normalization statistics are
+still computed from the unweighted dataset. Treat this as phase-weighted
+sampling, not as a modification of OpenPI's model loss.
+
+The Isaac worker now supports `--control-source openpi` with the same websocket
+contract as the Genesis rollout worker. It resets and runs multiple
+`rigid_cube_lift` episodes in one Kit process, records requested/safe/applied
+actions, and saves base/top/side/wrist MP4 files plus parseable per-rollout and
+batch reports.
 
 Stop and debug the data/contract before scaling if any of these occurs:
 

@@ -169,8 +169,13 @@ class EpisodeWriter:
         image = np.asarray(image)
         if image.dtype != np.uint8 or image.ndim != 3 or image.shape[-1] not in {3, 4}:
             raise ValueError(f"expected uint8 HWC RGB/RGBA image, got {image.dtype} {image.shape}")
-        try: import cv2
-        except ImportError as error: raise RuntimeError("OpenCV is required to encode RGB frames") from error
         rgb = image[..., :3]
+        try:
+            import cv2
+        except ImportError:
+            from PIL import Image
+
+            Image.fromarray(rgb).save(path, format="JPEG", quality=self.jpeg_quality)
+            return
         ok = cv2.imwrite(str(path), cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, self.jpeg_quality])
         if not ok: raise OSError(f"failed to write image: {path}")

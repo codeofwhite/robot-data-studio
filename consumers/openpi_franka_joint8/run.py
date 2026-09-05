@@ -14,6 +14,12 @@ from typing import Any
 
 import numpy as np
 
+from consumers.openpi_franka_joint8.phase_sampling import (
+    DEFAULT_PHASE_PROBABILITIES,
+    CountingWeightedSampler,
+    assign_phases,
+)
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -76,7 +82,12 @@ def _dataset_evidence(dataset_root: Path) -> dict[str, Any]:
     }
 
 
-def _install_local_dataset_loader(dataset_root: Path) -> None:
+def _install_local_dataset_loader(
+    dataset_root: Path,
+    *,
+    sampling_strategy: str = "uniform",
+    transition_radius: int = 2,
+) -> dict[str, Any]:
     """Route OpenPI's pinned LeRobot loader to an explicit local root and PyAV."""
     from lerobot.common.datasets.lerobot_dataset import LeRobotDataset, LeRobotDatasetMetadata
     from openpi import transforms
@@ -106,6 +117,79 @@ def _install_local_dataset_loader(dataset_root: Path) -> None:
         return dataset
 
     data_loader.create_torch_dataset = create_local_dataset
+    runtime: dict[str, Any] = {"sampler": None}
+    if sampling_strategy == "uniform":
+        return runtime
+    if sampling_strategy != "phase_balanced":
+        raise ValueError(f"unknown sampling strategy: {sampling_strategy}")
+
+    original_create_torch_data_loader = data_loader.create_torch_data_loader
+
+    def create_phase_balanced_loader(
+        data_config,
+        model_config,
+        action_horizon,
+        batch_size,
+        *,
+        sharding=None,
+        skip_norm_stats=False,
+        shuffle=False,
+        num_batches=None,
+        num_workers=0,
+        seed=0,
+        framework="jax",
+    ):
+        del shuffle
+        if framework != "jax":
+            raise NotImplementedError("phase-balanced sampling currently supports the JAX trainer only")
+        raw_dataset = data_loader.create_torch_dataset(data_config, action_horizon, model_config)
+        base_dataset = raw_dataset
+        while not hasattr(base_dataset, "hf_dataset") and hasattr(base_dataset, "_dataset"):
+            base_dataset = base_dataset._dataset
+        if not hasattr(base_dataset, "hf_dataset"):
+            raise TypeError("phase-balanced sampling requires a LeRobot dataset")
+        table = base_dataset.hf_dataset
+        episodes = np.asarray(table["episode_index"], dtype=np.int64)
+        frames = np.asarray(table["frame_index"], dtype=np.int64)
+        actions = np.asarray(table["action"], dtype=np.float32)
+        phases = assign_phases(
+            episodes,
+            frames,
+            actions[:, 7],
+            transition_radius=transition_radius,
+        )
+        sampler = CountingWeightedSampler(phases, DEFAULT_PHASE_PROBABILITIES, seed=seed)
+        runtime["sampler"] = sampler
+        transformed = data_loader.transform_dataset(
+            raw_dataset,
+            data_config,
+            skip_norm_stats=skip_norm_stats,
+        )
+        local_batch_size = batch_size // data_loader.jax.process_count()
+        torch_loader = data_loader.TorchDataLoader(
+            transformed,
+            local_batch_size=local_batch_size,
+            sharding=sharding,
+            sampler=sampler,
+            num_batches=num_batches,
+            num_workers=num_workers,
+            seed=seed,
+            framework=framework,
+        )
+        return data_loader.DataLoaderImpl(data_config, torch_loader)
+
+    runtime["original_create_torch_data_loader"] = original_create_torch_data_loader
+    data_loader.create_torch_data_loader = create_phase_balanced_loader
+    return runtime
+
+
+def _sampling_report(args) -> dict[str, Any]:
+    sampler = args.sampling_runtime.get("sampler")
+    if sampler is None:
+        return {"strategy": "uniform"}
+    result = sampler.report()
+    result["transition_radius_frames"] = args.transition_radius
+    return result
 
 
 def _config(args):
@@ -184,6 +268,7 @@ def preflight(args) -> dict[str, Any]:
             key: _summary(value) for key, value in observation.image_masks.items()
         },
         "tokenized_prompt": _summary(observation.tokenized_prompt),
+        "sampling": _sampling_report(args),
     }
 
 
@@ -226,6 +311,7 @@ def train(args) -> dict[str, Any]:
         "batch_size": config.batch_size,
         "metrics": metrics,
         "dataset": dataset,
+        "sampling": _sampling_report(args),
         "evidence": (
             "multi_episode_lora_finetune"
             if dataset["total_episodes"] > 1
@@ -296,6 +382,12 @@ def main() -> None:
     parser.add_argument("--num-train-steps", type=int, default=10)
     parser.add_argument("--checkpoint", type=Path)
     parser.add_argument("--inference-steps", type=int, default=2)
+    parser.add_argument(
+        "--sampling-strategy",
+        choices=("uniform", "phase_balanced"),
+        default="uniform",
+    )
+    parser.add_argument("--transition-radius", type=int, default=2)
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--report", type=Path, required=True)
@@ -315,7 +407,13 @@ def main() -> None:
         str(args.training_root / "cache" / "jax"),
     )
     _validate_paths(args.dataset_root, args.base_checkpoint)
-    _install_local_dataset_loader(args.dataset_root)
+    if args.transition_radius < 0:
+        parser.error("--transition-radius must be non-negative")
+    args.sampling_runtime = _install_local_dataset_loader(
+        args.dataset_root,
+        sampling_strategy=args.sampling_strategy,
+        transition_radius=args.transition_radius,
+    )
     started_at = _now()
     try:
         runners = {"stats": compute_stats, "preflight": preflight, "train": train, "infer": infer}

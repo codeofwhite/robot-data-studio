@@ -1,6 +1,8 @@
 import json
+import sys
 
 import numpy as np
+from PIL import Image
 
 from robot_data_contracts import (
     TRAINING_PROFILES,
@@ -17,6 +19,21 @@ from robot_data_contracts import (
     open_canonical_episode,
 )
 from robot_data_contracts.profiles.franka import FRANKA_JOINT8_ACTION, franka_feature_specs
+
+
+def test_episode_writer_falls_back_to_pillow_without_opencv(tmp_path, monkeypatch) -> None:
+    writer = object.__new__(EpisodeWriter)
+    writer.jpeg_quality = 95
+    path = tmp_path / "frame.jpg"
+    image = np.zeros((3, 4, 3), dtype=np.uint8)
+    image[..., 0] = 255
+    monkeypatch.setitem(sys.modules, "cv2", None)
+
+    writer._write_rgb(path, image)
+
+    with Image.open(path) as encoded:
+        assert encoded.size == (4, 3)
+        assert encoded.mode == "RGB"
 
 
 def test_franka_writer_accepts_empty_optional_scene_metadata(tmp_path) -> None:

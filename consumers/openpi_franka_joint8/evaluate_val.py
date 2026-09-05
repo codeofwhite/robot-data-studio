@@ -12,51 +12,7 @@ from typing import Any
 import numpy as np
 
 from consumers.openpi_franka_joint8.config import ACTION_DIM, ACTION_HORIZON, make_train_config
-
-
-PHASES = (
-    "approach_open",
-    "close_transition",
-    "closed_transport",
-    "release_transition",
-    "post_release",
-)
-
-
-def assign_phases(
-    episode_indices: np.ndarray,
-    frame_indices: np.ndarray,
-    gripper_targets: np.ndarray,
-    *,
-    transition_radius: int = 2,
-) -> np.ndarray:
-    """Label frames from each demonstration's first close and subsequent release."""
-    phases = np.empty(len(gripper_targets), dtype=object)
-    for episode in np.unique(episode_indices):
-        rows = np.flatnonzero(episode_indices == episode)
-        order = rows[np.argsort(frame_indices[rows])]
-        closed = gripper_targets[order] >= 0.5
-        close_candidates = np.flatnonzero(closed)
-        if not len(close_candidates):
-            raise ValueError(f"episode {int(episode)} has no close event")
-        close_at = int(close_candidates[0])
-        release_candidates = np.flatnonzero((~closed) & (np.arange(len(order)) > close_at))
-        if not len(release_candidates):
-            raise ValueError(f"episode {int(episode)} has no release after close")
-        release_at = int(release_candidates[0])
-        for local_index, row in enumerate(order):
-            if abs(local_index - close_at) <= transition_radius:
-                phase = "close_transition"
-            elif abs(local_index - release_at) <= transition_radius:
-                phase = "release_transition"
-            elif local_index < close_at:
-                phase = "approach_open"
-            elif local_index < release_at:
-                phase = "closed_transport"
-            else:
-                phase = "post_release"
-            phases[row] = phase
-    return phases
+from consumers.openpi_franka_joint8.phase_sampling import PHASES, assign_phases
 
 
 def summarize_errors(records: list[dict[str, Any]]) -> dict[str, Any]:
