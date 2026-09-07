@@ -58,7 +58,7 @@ export function Dashboard() {
   return (
     <div className="space-y-6">
       <section className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-        <div><div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[.16em] text-primary"><Radio className="size-3.5" /> Operations overview</div><h1 className="text-2xl font-semibold tracking-tight md:text-3xl">仿真数据采集工作台</h1><p className="mt-2 max-w-2xl text-sm text-muted-foreground">统一管理两个 Engine Worker、Episode provenance、QA 与训练格式导出。</p></div>
+        <div><div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[.16em] text-primary"><Radio className="size-3.5" /> Operations overview</div><h1 className="text-2xl font-semibold tracking-tight md:text-3xl">仿真数据采集工作台</h1><p className="mt-2 max-w-2xl text-sm text-muted-foreground">统一管理隔离的 Engine Worker、Episode provenance、QA 与训练格式导出。</p></div>
         <Button size="lg" render={<a href="/sessions/new" />}><Play />新建采集会话</Button>
       </section>
 

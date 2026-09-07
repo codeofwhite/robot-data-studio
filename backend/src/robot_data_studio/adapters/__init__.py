@@ -3,11 +3,13 @@ from __future__ import annotations
 from .base import CollectionAdapter
 from .clothtwin import ClothTwinAdapter
 from .isaac_sim import IsaacSimAdapter
+from .roboverse import RoboVerseAdapter
 
 
 _ENGINES: dict[str, CollectionAdapter] = {
     "genesis": ClothTwinAdapter(),
     "isaac_sim": IsaacSimAdapter(),
+    "roboverse": RoboVerseAdapter(),
 }
 _ALIASES = {"clothtwin": "genesis"}
 
@@ -31,6 +33,7 @@ def engine_descriptors() -> list[dict]:
 __all__ = [
     "ClothTwinAdapter",
     "IsaacSimAdapter",
+    "RoboVerseAdapter",
     "canonical_engine_id",
     "engine_descriptors",
     "get_engine",

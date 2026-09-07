@@ -18,7 +18,7 @@ import type { ConsumerSmoke, Dataset, Episode, ExportEpisodeRef, ExportJob, Expo
 
 type ExportFormat = 'lerobot' | 'openpi_lerobot_v21' | 'rlds' | 'robomimic';
 type TrainingProfile = 'physical_joint8' | 'openpi_franka_joint8' | 'fastwam_franka_joint8';
-type EngineFilter = 'all' | 'genesis' | 'isaac_sim';
+type EngineFilter = 'all' | 'genesis' | 'isaac_sim' | 'roboverse';
 
 const formats = [
   { id: 'lerobot', title: 'LeRobot v3', note: '当前 LeRobot 与 FastWAM consumer', icon: Box },
@@ -214,7 +214,7 @@ export default function ExportsPage() {
               <NativeSelect className="w-full" value={datasetId} onChange={(event) => setDatasetId(event.target.value)}>
                 {datasets.map((dataset) => (
                   <NativeSelectOption key={dataset.id} value={dataset.id}>
-                    {dataset.name} · G {dataset.genesis_accepted_count} / I {dataset.isaac_accepted_count} accepted
+                    {dataset.name} · G {dataset.genesis_accepted_count} / I {dataset.isaac_accepted_count} / R {dataset.roboverse_accepted_count} accepted
                   </NativeSelectOption>
                 ))}
               </NativeSelect>
@@ -222,9 +222,10 @@ export default function ExportsPage() {
             <div className="max-w-xs space-y-2">
               <Label>Simulator</Label>
               <NativeSelect value={engineFilter} onChange={(event) => { setEngineFilter(event.target.value as EngineFilter); setSelectedEpisodeIds([]); setPreflight(undefined); }}>
-                <NativeSelectOption value="all">Genesis + Isaac Sim</NativeSelectOption>
+                <NativeSelectOption value="all">全部 Simulator</NativeSelectOption>
                 <NativeSelectOption value="genesis">Genesis only</NativeSelectOption>
                 <NativeSelectOption value="isaac_sim">Isaac Sim only</NativeSelectOption>
+                <NativeSelectOption value="roboverse">RoboVerse only</NativeSelectOption>
               </NativeSelect>
             </div>
             <div className="flex flex-wrap items-center gap-2">

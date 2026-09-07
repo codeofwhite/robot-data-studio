@@ -93,6 +93,7 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
   const count = session?.episode_count ?? 0;
   const target = session?.target_episodes ?? 1;
   const running = worker?.status === 'running' || worker?.status === 'starting';
+  const batchWorker = session?.engine_id === 'roboverse';
 
   return (
     <AppShell current="sessions">
@@ -142,9 +143,11 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
         <div className="grid gap-4 xl:grid-cols-[1.5fr_.7fr]">
           <Card className="instrument-card overflow-hidden">
             <CardHeader className="border-b border-border/70">
-              <CardTitle>Collector 控制台</CardTitle>
+              <CardTitle>{batchWorker ? 'Batch Worker 控制台' : 'Collector 控制台'}</CardTitle>
               <CardDescription>
-                统一入口内嵌当前引擎控制台；控制与视频仍直接连接对应 Worker。
+                {batchWorker
+                  ? 'Studio 管理独立 RoboVerse 进程；生成结果保存后再进入统一扫描与 QA。'
+                  : '统一入口内嵌当前引擎控制台；控制与视频仍直接连接对应 Worker。'}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
@@ -174,12 +177,18 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
                     }`}
                   />
                   <h2 className="font-semibold">
-                    {running ? 'Collector 已启动' : 'Collector 尚未启动'}
+                    {batchWorker
+                      ? running ? 'Batch Worker 正在运行' : 'Batch Worker 尚未启动'
+                      : running ? 'Collector 已启动' : 'Collector 尚未启动'}
                   </h2>
                   <p className="mt-2 text-sm leading-6 text-muted-foreground">
                     {running
-                      ? '在新标签页打开实时画面。GELLO 模式下，在该页面选择串口并连接。'
-                      : '启动前请确认 GPU 与端口空闲。启动不会自动打开串口或下发机器人动作。'}
+                      ? batchWorker
+                        ? 'RoboVerse 正在隔离环境中批量生成；完成后点击“扫描 Episodes”进入 QA。'
+                        : '在新标签页打开实时画面。GELLO 模式下，在该页面选择串口并连接。'
+                      : batchWorker
+                        ? '启动后运行 allowlist 中的 scripted probe；该 P0 不代表成功任务示教。'
+                        : '启动前请确认 GPU 与端口空闲。启动不会自动打开串口或下发机器人动作。'}
                   </p>
                   </div>
                 </div>
@@ -220,6 +229,7 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
                 <p>• 引擎、场景和控制来源均来自后端 allowlist。</p>
                 <p>• 同一时间只运行一个 Studio 管理的仿真 Worker。</p>
                 <p>• GELLO 限位、slew 和 watchdog 保留在引擎运行时。</p>
+                {batchWorker && <p>• RoboVerse P0 使用仿真 identity safety filter，不连接 GELLO 或真实硬件。</p>}
                 {session?.engine_id === 'isaac_sim' && <p>• Isaac 空场景没有自动成功判据，保存为 unavailable。</p>}
                 {worker?.log_path && <p className="break-all">• Log: {worker.log_path}</p>}
               </CardContent>

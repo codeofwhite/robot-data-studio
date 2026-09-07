@@ -12,6 +12,7 @@ from robot_data_contracts import (
 )
 from robot_data_contracts.profiles.franka import FRANKA_JOINT8_ACTION, franka_feature_specs
 from robot_data_studio.exporters.common import preflight_canonical_episodes, write_directory_provenance
+from robot_data_studio.exporters.robomimic import _hdf5_attribute_value
 
 
 def _episode(root, engine_id: str, *, fps: int = 10, cameras: tuple[str, ...] = ()):
@@ -73,6 +74,14 @@ def test_directory_provenance_preserves_engine_per_episode(tmp_path):
     assert rows[1]["operator_success"] is True
     assert rows[1]["automatic_success"] is True
     assert rows[1]["evaluator_id"] == "test"
+
+
+def test_robomimic_provenance_attributes_encode_nullable_values():
+    assert _hdf5_attribute_value(None) == "null"
+    assert _hdf5_attribute_value({"success": False}) == '{"success": false}'
+    assert _hdf5_attribute_value([1, 2]) == "[1, 2]"
+    assert _hdf5_attribute_value(False) is False
+    assert _hdf5_attribute_value("roboverse_sapien3") == "roboverse_sapien3"
 
 
 def test_preflight_allows_contract_compatible_mixed_simulators(tmp_path):

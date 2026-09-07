@@ -5,8 +5,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
-ControlMode = Literal["keyboard", "gello"]
-EngineId = Literal["genesis", "isaac_sim"]
+ControlMode = Literal["keyboard", "gello", "scripted"]
+EngineId = Literal["genesis", "isaac_sim", "roboverse"]
 QaStatus = Literal["pending", "accepted", "rejected"]
 ExportFormat = Literal["lerobot", "openpi_lerobot_v21", "rlds", "robomimic"]
 

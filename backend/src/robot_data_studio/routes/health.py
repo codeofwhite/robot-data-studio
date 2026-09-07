@@ -12,6 +12,16 @@ from ..config import settings
 router = APIRouter(tags=["health"])
 
 
+def _engine_available(engine_id: str) -> bool:
+    if engine_id == "genesis":
+        return settings.clothtwin_root.is_dir()
+    if engine_id == "isaac_sim":
+        return settings.gello_remote_root.is_dir() and settings.isaaclab_launcher.is_file()
+    if engine_id == "roboverse":
+        return settings.roboverse_root.is_dir() and settings.roboverse_python.is_file()
+    return False
+
+
 @router.get("/health")
 def health():
     settings.data_root.mkdir(parents=True, exist_ok=True)
@@ -31,11 +41,7 @@ def health():
         "engines": [
             {
                 **descriptor,
-                "available": (
-                    settings.clothtwin_root.is_dir()
-                    if descriptor["id"] == "genesis"
-                    else settings.gello_remote_root.is_dir() and settings.isaaclab_launcher.is_file()
-                ),
+                "available": _engine_available(descriptor["id"]),
             }
             for descriptor in engine_descriptors()
         ],

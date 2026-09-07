@@ -15,7 +15,7 @@ import { engineLabel } from '@/lib/engines';
 import type { Session } from '@/lib/types';
 
 type Filter = 'active' | 'all' | 'trashed';
-type EngineFilter = 'all' | 'genesis' | 'isaac_sim';
+type EngineFilter = 'all' | 'genesis' | 'isaac_sim' | 'roboverse';
 
 export function SessionList() {
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -110,6 +110,7 @@ export function SessionList() {
                 <NativeSelectOption value="all">全部 Simulator</NativeSelectOption>
                 <NativeSelectOption value="genesis">Genesis</NativeSelectOption>
                 <NativeSelectOption value="isaac_sim">Isaac Sim</NativeSelectOption>
+                <NativeSelectOption value="roboverse">RoboVerse</NativeSelectOption>
               </NativeSelect>
             </div>
           </CardHeader>

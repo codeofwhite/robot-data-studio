@@ -19,6 +19,15 @@ def test_profile_rejects_resolution_mismatch():
         validate_session_camera_profile("lab_d435i_dual_v1", width=1280, height=720)
 
 
+def test_synthetic_roboverse_profile_can_have_one_enabled_role():
+    profile = load_camera_profile("roboverse_sapien_base_v1")
+    assert list(profile["roles"]) == ["agentview"]
+    assert profile["roles"]["agentview"]["calibration_source_serial"] is None
+    assert validate_session_camera_profile(
+        "roboverse_sapien_base_v1", width=640, height=480
+    ).name == "roboverse_sapien_base_v1.json"
+
+
 def test_calibrated_match_level_requires_intrinsics(tmp_path):
     source = load_camera_profile("lab_d435i_dual_v1")
     source["id"] = "invalid_calibrated"

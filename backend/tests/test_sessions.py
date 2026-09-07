@@ -84,6 +84,23 @@ def test_isaac_session_persists_engine_and_accepts_keyboard_control(isolated_set
     assert keyboard_session["config"]["control_mode"] == "keyboard"
 
 
+def test_roboverse_session_is_noninteractive_batch_worker(isolated_settings):
+    session = create_session(
+        SessionCreate(
+            engine_id="roboverse",
+            dataset_name="roboverse_pilot",
+            scene_id="maniskill_pick_cube_native",
+            control_mode="scripted",
+            target_episodes=1,
+            control_fps=20,
+            camera_profile_id="roboverse_sapien_base_v1",
+            scene_params={"episode_steps": 10},
+        )
+    )
+    assert session["engine_id"] == "roboverse"
+    assert session["collector_url"] is None
+
+
 def test_session_can_move_to_trash_and_restore(isolated_settings) -> None:
     session = create_session(
         SessionCreate(dataset_name="pilot", scene_id="rigid_pick_place", control_mode="keyboard")

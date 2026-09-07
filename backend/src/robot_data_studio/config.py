@@ -24,6 +24,15 @@ class Settings:
     gello_remote_root: Path = Path(
         os.getenv("ROBOT_DATA_STUDIO_GELLO_REMOTE_ROOT", "/data/zhanghejun/gello-remote")
     )
+    roboverse_root: Path = Path(
+        os.getenv("ROBOT_DATA_STUDIO_ROBOVERSE_ROOT", "/data/zhanghejun/RoboVerse")
+    )
+    roboverse_python: Path = Path(
+        os.getenv(
+            "ROBOT_DATA_STUDIO_ROBOVERSE_PYTHON",
+            "/data/zhanghejun/envs/roboverse-maniskill/bin/python",
+        )
+    )
     isaaclab_launcher: Path = Path(
         os.getenv("ROBOT_DATA_STUDIO_ISAACLAB_LAUNCHER", "/data/zhanghejun/IsaacLab/isaaclab.sh")
     )

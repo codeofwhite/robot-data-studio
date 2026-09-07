@@ -12,6 +12,13 @@ from .common import (
 )
 
 
+def _hdf5_attribute_value(value):
+    """Encode nullable or structured provenance as HDF5-safe scalar values."""
+    if value is None or isinstance(value, (dict, list)):
+        return json.dumps(value)
+    return value
+
+
 def export_robomimic(episode_paths: list[Path], output: Path) -> Path:
     try:
         import h5py
@@ -40,7 +47,7 @@ def export_robomimic(episode_paths: list[Path], output: Path) -> Path:
             demo.attrs["operator_success_json"] = json.dumps(episode.manifest.operator_success)
             demo.attrs["evaluator_json"] = episode.manifest.evaluator.model_dump_json()
             for key, value in provenance_record(episode, output_index).items():
-                demo.attrs[key] = json.dumps(value) if isinstance(value, (dict, list)) else value
+                demo.attrs[key] = _hdf5_attribute_value(value)
             demo.create_dataset("states", data=episode.arrays["policy_state"], compression="gzip")
             demo.create_dataset("actions", data=actions, compression="gzip")
             demo.create_dataset("actions_absolute", data=actions_absolute, compression="gzip")

@@ -28,7 +28,7 @@ type SceneParameter = {
 type Engine = {
   id: string;
   label: string;
-  control_modes: Array<'keyboard' | 'gello'>;
+  control_modes: Array<'keyboard' | 'gello' | 'scripted'>;
   capabilities: Record<string, boolean>;
   scenes: Record<string, {
     label: string;
@@ -44,7 +44,7 @@ export default function NewSessionPage() {
   const [engine, setEngine] = useState('');
   const [dataset, setDataset] = useState('robot_data_pilot');
   const [scene, setScene] = useState('');
-  const [mode, setMode] = useState<'keyboard' | 'gello'>('gello');
+  const [mode, setMode] = useState<'keyboard' | 'gello' | 'scripted'>('gello');
   const [target, setTarget] = useState(50);
   const [port, setPort] = useState(8080);
   const [gpu, setGpu] = useState(0);
@@ -70,6 +70,8 @@ export default function NewSessionPage() {
     setScene(Object.keys(descriptor.scenes)[0] ?? '');
     setMode(descriptor.control_modes.includes('gello') ? 'gello' : descriptor.control_modes[0]);
     setCameraProfile(descriptor.camera_profiles[0]?.id ?? '');
+    setTarget(descriptor.capabilities.batch_generation ? 1 : 50);
+    setFps(descriptor.capabilities.batch_generation ? 20 : 10);
     setAdvanced(false);
   }
 
@@ -174,6 +176,7 @@ export default function NewSessionPage() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   {selectedEngine?.control_modes.includes('gello') && <ModeCard active={mode === 'gello'} icon={Bot} title="GELLO" note="在 Collector 中连接与标定" onClick={() => setMode('gello')} />}
                   {selectedEngine?.control_modes.includes('keyboard') && <ModeCard active={mode === 'keyboard'} icon={Keyboard} title="Keyboard" note="Collector 键盘遥操作" onClick={() => setMode('keyboard')} />}
+                  {selectedEngine?.control_modes.includes('scripted') && <ModeCard active={mode === 'scripted'} icon={Bot} title="Scripted" note="隔离 Worker 确定性批量生成" onClick={() => setMode('scripted')} />}
                 </div>
                 <div>
                   <Label className="mb-2">Sensor Profile</Label>

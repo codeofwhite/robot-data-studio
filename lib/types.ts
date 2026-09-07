@@ -3,12 +3,12 @@ export type Session = {
   dataset_id: number;
   dataset_name?: string;
   adapter_id: string;
-  engine_id: 'genesis' | 'isaac_sim';
+  engine_id: 'genesis' | 'isaac_sim' | 'roboverse';
   scene_id: string;
-  control_mode: 'keyboard' | 'gello';
+  control_mode: 'keyboard' | 'gello' | 'scripted';
   status: string;
   target_episodes: number;
-  collector_url: string;
+  collector_url: string | null;
   worker_pid: number | null;
   episode_count?: number;
   accepted_count?: number;
@@ -27,10 +27,13 @@ export type Dataset = {
   accepted_count: number;
   genesis_episode_count: number;
   isaac_episode_count: number;
+  roboverse_episode_count: number;
   genesis_accepted_count: number;
   isaac_accepted_count: number;
+  roboverse_accepted_count: number;
   genesis_pending_count: number;
   isaac_pending_count: number;
+  roboverse_pending_count: number;
   created_at: string;
 };
 
@@ -38,7 +41,7 @@ export type Episode = {
   id: number;
   session_id: string;
   dataset_id: number;
-  engine_id: 'genesis' | 'isaac_sim';
+  engine_id: 'genesis' | 'isaac_sim' | 'roboverse';
   engine_version: string | null;
   worker_id: string | null;
   episode_index: number | null;
@@ -72,7 +75,7 @@ export type ExportEpisodeRef = {
   episode_id: number;
   session_id: string;
   episode_index: number | null;
-  engine_id: 'genesis' | 'isaac_sim' | null;
+  engine_id: 'genesis' | 'isaac_sim' | 'roboverse' | null;
   engine_version: string | null;
   worker_id: string | null;
   scene_id: string | null;

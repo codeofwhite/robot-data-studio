@@ -102,8 +102,22 @@ def create_session(payload: SessionCreate) -> dict:
             """INSERT INTO sessions(id, dataset_id, adapter_id, scene_id, control_mode, status,
                target_episodes, collector_url, worker_pid, config_json, created_at, updated_at)
                VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, NULL, ?, ?, ?)""",
-            (session_id, dataset_id, adapter.adapter_id, payload.scene_id, payload.control_mode, payload.target_episodes,
-             f"http://127.0.0.1:{payload.port}", json.dumps(config), timestamp, timestamp),
+            (
+                session_id,
+                dataset_id,
+                adapter.adapter_id,
+                payload.scene_id,
+                payload.control_mode,
+                payload.target_episodes,
+                (
+                    f"http://127.0.0.1:{payload.port}"
+                    if adapter.capabilities.get("interactive_ui", True)
+                    else None
+                ),
+                json.dumps(config),
+                timestamp,
+                timestamp,
+            ),
         )
         row = connection.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)).fetchone()
     return row_dict(row)
