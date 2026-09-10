@@ -19,7 +19,7 @@ def index(
 ):
     if qa_status and qa_status not in {"pending", "accepted", "rejected"}:
         raise HTTPException(422, "invalid qa_status")
-    if engine_id and engine_id not in {"genesis", "isaac_sim"}:
+    if engine_id and engine_id not in {"genesis", "isaac_sim", "roboverse"}:
         raise HTTPException(422, "invalid engine_id")
     return list_episodes(
         session_id=session_id, dataset_id=dataset_id, qa_status=qa_status,

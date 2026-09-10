@@ -15,7 +15,7 @@ def config(**updates):
         "control_fps": 20,
         "width": 640,
         "height": 480,
-        "scene_params": {"episode_steps": 12},
+        "scene_params": {},
         "camera_profile_id": "roboverse_sapien_base_v1",
     }
     value.update(updates)
@@ -33,7 +33,10 @@ def test_roboverse_launch_is_isolated_and_allowlisted() -> None:
     ]
     assert launch.command[launch.command.index("--scene") + 1] == "maniskill_pick_cube_native"
     assert launch.command[launch.command.index("--episodes") + 1] == "1"
-    assert launch.command[launch.command.index("--steps") + 1] == "12"
+    assert launch.command[launch.command.index("--steps") + 1] == "50"
+    assert launch.command[launch.command.index("--demo-file") + 1] == str(
+        settings.roboverse_pickcube_demo
+    )
     assert launch.cwd == settings.roboverse_root
     assert launch.env_updates["CUDA_VISIBLE_DEVICES"] == "3"
     python_path = launch.env_updates["PYTHONPATH"].split(":")
@@ -50,7 +53,7 @@ def test_roboverse_launch_is_isolated_and_allowlisted() -> None:
         ({"target_episodes": 11}, "1 to 10"),
         ({"control_fps": 10}, "control_fps=20"),
         ({"scene_params": {"shell": 1}}, "not allowlisted"),
-        ({"scene_params": {"episode_steps": 51}}, "between 2 and 50"),
+        ({"scene_params": {"episode_steps": 50}}, "not allowlisted"),
     ],
 )
 def test_roboverse_rejects_out_of_scope_configuration(updates, message) -> None:

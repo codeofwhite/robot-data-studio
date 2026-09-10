@@ -14,22 +14,11 @@ SCENES = {
         "label": "ManiSkill PickCube Native",
         "description": (
             "RoboVerse MetaSim 的 ManiSkill Panda PickCube 原生任务；"
-            "P0 使用确定性 scripted probe 验证采集、QA 与导出链路。"
+            "使用官方 ManiSkill pd_joint_delta_pos demonstration 验证采集、QA 与导出链路。"
         ),
         "family": "rigid_pick",
         "automatic_outcome": True,
-        "parameters": [
-            {
-                "key": "episode_steps",
-                "label": "每条 Episode 步数",
-                "unit": "steps",
-                "minimum": 2,
-                "maximum": 50,
-                "step": 1,
-                "default": 20,
-                "scale": "linear",
-            }
-        ],
+        "parameters": [],
     }
 }
 
@@ -70,9 +59,6 @@ class RoboVerseAdapter(CollectionAdapter):
             raise ValueError(
                 "RoboVerse scene parameter is not allowlisted: " + ", ".join(unknown)
             )
-        steps = int(config.get("scene_params", {}).get("episode_steps", 20))
-        if steps not in range(2, 51):
-            raise ValueError("RoboVerse episode_steps must be between 2 and 50")
         if int(config.get("control_fps", 20)) != 20:
             raise ValueError("RoboVerse ManiSkill native task requires control_fps=20")
         profile_id = str(config.get("camera_profile_id", "roboverse_sapien_base_v1"))
@@ -84,7 +70,6 @@ class RoboVerseAdapter(CollectionAdapter):
 
     def build_collect_command(self, config: dict[str, Any], output_dir: Path) -> list[str]:
         self.validate_config(config)
-        steps = int(config.get("scene_params", {}).get("episode_steps", 20))
         return [
             str(settings.roboverse_python),
             "-m",
@@ -96,7 +81,7 @@ class RoboVerseAdapter(CollectionAdapter):
             "--episodes",
             str(config["target_episodes"]),
             "--steps",
-            str(steps),
+            "50",
             "--fps",
             str(config["control_fps"]),
             "--width",
@@ -105,6 +90,8 @@ class RoboVerseAdapter(CollectionAdapter):
             str(config["height"]),
             "--seed",
             "0",
+            "--demo-file",
+            str(settings.roboverse_pickcube_demo),
             "--camera-profile-file",
             str(
                 validate_session_camera_profile(

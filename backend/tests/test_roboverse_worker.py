@@ -8,7 +8,7 @@ from robot_data_studio.workers.roboverse import (
     _write_native_payload,
     absolute_native_target,
     extract_native_state,
-    scripted_action,
+    successful_demo_keys,
 )
 
 
@@ -68,11 +68,18 @@ def test_roboverse_joint_values_are_name_aligned() -> None:
     np.testing.assert_array_equal(targets, np.asarray(expected_targets))
 
 
-def test_scripted_probe_and_camera_intrinsics_are_bounded() -> None:
-    actions = np.stack([scripted_action(index, 20) for index in range(20)])
-    assert actions.shape == (20, 8)
-    assert np.max(np.abs(actions[:, :7])) <= 0.04
-    assert np.all(actions[:, 7] == np.float32(0.4))
+def test_successful_demo_selection_is_numeric_and_success_only() -> None:
+    action = np.zeros((50, 8), dtype=np.float32)
+    demos = {
+        "traj_10": {"actions": action, "success": np.asarray([True])},
+        "traj_2": {"actions": action, "success": np.asarray([True])},
+        "traj_1": {"actions": action, "success": np.asarray([False])},
+    }
+
+    assert successful_demo_keys(demos, 2) == ["traj_2", "traj_10"]
+
+
+def test_camera_intrinsics_match_the_configured_resolution() -> None:
     aperture, intrinsics = _camera_geometry(640, 480)
     assert aperture > 0
     assert intrinsics[0][0] == intrinsics[1][1]

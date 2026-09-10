@@ -3,6 +3,7 @@ import json
 import numpy as np
 
 from robot_data_studio.models import SessionCreate
+from robot_data_studio.routes.episodes import index as route_index
 from robot_data_studio.services.episode_scanner import episode_detail, list_episodes, scan_session, update_qa
 from robot_data_studio.services.session_service import create_session, restore_session, trash_session
 
@@ -63,3 +64,7 @@ def test_scan_detail_and_qa_keep_outcomes_separate(isolated_settings):
     assert list_episodes() == []
     restore_session(session["id"])
     assert list_episodes()[0]["episode_uuid"] == "stable-uuid"
+
+
+def test_roboverse_is_an_allowlisted_episode_filter(isolated_settings) -> None:
+    assert route_index(engine_id="roboverse") == []

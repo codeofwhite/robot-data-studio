@@ -75,16 +75,6 @@ def absolute_native_target(task: Any, normalized_action: Any) -> np.ndarray:
     return _named_values(sorted_names, target, NATIVE_JOINTS)
 
 
-def scripted_action(step: int, total_steps: int) -> np.ndarray:
-    phase = 2.0 * math.pi * step / max(total_steps, 1)
-    action = np.zeros(8, dtype=np.float32)
-    action[0] = 0.04 * math.sin(phase)
-    action[1] = 0.025 * math.sin(phase * 0.5)
-    action[6] = 0.03 * math.cos(phase)
-    action[7] = 0.4
-    return action
-
-
 def _camera_geometry(width: int, height: int) -> tuple[float, list[list[float]]]:
     horizontal_aperture = (
         2.0
@@ -128,6 +118,56 @@ def _asset_sha256(path: Path) -> str:
         for chunk in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def successful_demo_keys(demos: Any, count: int) -> list[str]:
+    keys = sorted(
+        (key for key in demos if key.startswith("traj_")),
+        key=lambda key: int(key.split("_")[1]),
+    )
+    selected: list[str] = []
+    for key in keys:
+        group = demos[key]
+        actions = np.asarray(group["actions"])
+        success = np.asarray(group["success"])
+        if actions.ndim != 2 or actions.shape[1] != 8:
+            raise ValueError(f"{key} has invalid pd_joint_delta_pos actions: {actions.shape}")
+        if success.size and bool(success.reshape(-1)[-1]):
+            selected.append(key)
+        if len(selected) == count:
+            break
+    if len(selected) != count:
+        raise ValueError(
+            f"PickCube demo has only {len(selected)} successful trajectories; {count} required"
+        )
+    return selected
+
+
+def restore_demo_initial_state(task: Any, demo: Any) -> None:
+    import sapien
+
+    states = demo["env_states"]
+    articulation = np.asarray(states["articulations"]["panda"])[0]
+    root_state_dimension = 13
+    joint_count = (len(articulation) - root_state_dimension) // 2
+    if joint_count != len(NATIVE_JOINTS):
+        raise ValueError(
+            f"PickCube demo Panda has {joint_count} joints; expected {len(NATIVE_JOINTS)}"
+        )
+    robot = task.handler.object_ids["panda"]
+    robot.set_qpos(
+        articulation[
+            root_state_dimension : root_state_dimension + joint_count
+        ].astype(np.float32)
+    )
+    robot.set_qvel(
+        articulation[
+            root_state_dimension + joint_count : root_state_dimension + 2 * joint_count
+        ].astype(np.float32)
+    )
+    cube = np.asarray(states["actors"]["cube"])[0]
+    task.handler.object_ids["cube"].set_pose(sapien.Pose(cube[:3], cube[3:7]))
+    task.goal_pos = np.asarray(states["actors"]["goal_site"])[0][:3].astype(np.float64)
 
 
 def _write_native_payload(path: Path, arrays: dict[str, list[np.ndarray]]) -> None:
@@ -179,6 +219,8 @@ def _software_provenance() -> Any:
 
 
 def collect(args: argparse.Namespace) -> list[Path]:
+    import h5py
+
     if args.scene not in ROBOVERSE_TASKS:
         raise ValueError(f"unsupported RoboVerse scene: {args.scene}")
     if not 1 <= args.episodes <= 10:
@@ -187,6 +229,10 @@ def collect(args: argparse.Namespace) -> list[Path]:
         raise ValueError("steps must be between 2 and 50")
     if args.fps != 20:
         raise ValueError("ManiSkill native collection requires fps=20")
+    demo_file = args.demo_file.expanduser().resolve()
+    if not demo_file.is_file():
+        raise FileNotFoundError(f"ManiSkill PickCube demo is unavailable: {demo_file}")
+    demo_sha256 = _asset_sha256(demo_file)
     profile = json.loads(args.camera_profile_file.read_text(encoding="utf-8"))
     role = profile["roles"]["agentview"]
     _, intrinsics = _camera_geometry(args.width, args.height)
@@ -214,109 +260,126 @@ def collect(args: argparse.Namespace) -> list[Path]:
 
     previous_sigterm = signal.signal(signal.SIGTERM, request_stop)
     try:
-        for episode_offset in range(args.episodes):
-            if stop_requested:
-                break
-            episode_seed = args.seed + episode_offset
-            observation, _ = task.reset(seed=episode_seed)
-            writer = EpisodeWriter(
-                args.data_dir,
-                fps=args.fps,
-                robot_id="franka_panda",
-                control_source="scripted_roboverse_probe",
-                features=franka_feature_specs(
-                    tuple(f"normalized_pd_joint_delta/{index}" for index in range(8))
-                ),
-                action_profile=FRANKA_JOINT8_ACTION,
-                camera_names=("base",),
-                camera_calibration=camera_calibration,
-                scene=SceneProvenanceV1(
-                    scene_id=args.scene,
-                    seed=episode_seed,
-                    parameters={
-                        "upstream_task": ROBOVERSE_TASKS[args.scene],
-                        "simulator": "sapien3",
-                        "control_policy": "deterministic_scripted_probe_v1",
-                        "episode_steps": args.steps,
-                        "safety_filter": "identity_simulation_only",
-                        "camera_profile_id": profile["id"],
-                    },
-                    assets=[
-                        {
-                            "role": "native_payload",
-                            "path": "native_trajectory.npz",
-                            "checksum": "native_payload.sha256",
-                        }
-                    ],
-                ),
-                software=software,
-                lineage=AugmentationLineageV1(generation_method="scripted"),
-            )
-            native_arrays: dict[str, list[np.ndarray]] = {
-                "normalized_action": [],
-                "absolute_joint_target": [],
-                "joint_state": [],
-                "cube_pose": [],
-                "cube_velocity": [],
-            }
-            writer.start(ROBOVERSE_TASKS[args.scene])
-            succeeded = False
-            last_reward = 0.0
-            try:
-                for step in range(args.steps):
-                    if stop_requested:
-                        raise InterruptedError("worker stop requested")
-                    normalized = scripted_action(step, args.steps)
-                    absolute_target = absolute_native_target(task, normalized)
-                    observation, reward, terminated, timeout, _ = task.step(normalized[None, :])
-                    state = extract_native_state(task)
-                    object_pose, object_velocity = _object_observation(task)
-                    succeeded = succeeded or bool(_as_numpy(terminated).reshape(-1)[0])
-                    last_reward = float(_as_numpy(reward).reshape(-1)[0])
-                    writer.add_frame(
-                        images={"base": _camera_image(observation)},
-                        values={
-                            "native_state": state,
-                            "policy_state": policy_state_from_native(state),
-                            "operator_action": normalized,
-                            "requested_action": policy_action_from_native(absolute_target),
-                            "safe_action": policy_action_from_native(absolute_target),
-                            "applied_action": policy_action_from_native(absolute_target),
-                            "object_pose": object_pose,
-                            "object_velocity": object_velocity,
+        with h5py.File(demo_file, "r") as demos:
+            demo_keys = successful_demo_keys(demos, args.episodes)
+            for episode_offset, demo_key in enumerate(demo_keys):
+                if stop_requested:
+                    break
+                demo = demos[demo_key]
+                actions = np.asarray(demo["actions"], dtype=np.float32)[: args.steps]
+                episode_seed = args.seed + episode_offset
+                task.reset(seed=episode_seed)
+                restore_demo_initial_state(task, demo)
+                writer = EpisodeWriter(
+                    args.data_dir,
+                    fps=args.fps,
+                    robot_id="franka_panda",
+                    control_source="scripted_maniskill_demo_replay",
+                    features=franka_feature_specs(
+                        tuple(f"upstream_pd_joint_delta_pos/{index}" for index in range(8))
+                    ),
+                    action_profile=FRANKA_JOINT8_ACTION,
+                    camera_names=("base",),
+                    camera_calibration=camera_calibration,
+                    scene=SceneProvenanceV1(
+                        scene_id=args.scene,
+                        seed=episode_seed,
+                        parameters={
+                            "upstream_task": ROBOVERSE_TASKS[args.scene],
+                            "simulator": "sapien3",
+                            "control_policy": "maniskill_official_demo_replay_v1",
+                            "control_mode": "pd_joint_delta_pos",
+                            "source_demo_trajectory": demo_key,
+                            "source_demo_success": True,
+                            "source_demo_sha256": demo_sha256,
+                            "episode_steps": len(actions),
+                            "safety_filter": "identity_simulation_only",
+                            "camera_profile_id": profile["id"],
                         },
-                        simulation_time_s=(step + 1) / args.fps,
-                        control_sequence=step,
+                        assets=[
+                            {
+                                "role": "native_payload",
+                                "path": "native_trajectory.npz",
+                                "checksum": "native_payload.sha256",
+                            }
+                        ],
+                    ),
+                    software=software,
+                    lineage=AugmentationLineageV1(generation_method="scripted"),
+                )
+                native_arrays: dict[str, list[np.ndarray]] = {
+                    "normalized_action": [],
+                    "absolute_joint_target": [],
+                    "joint_state": [],
+                    "cube_pose": [],
+                    "cube_velocity": [],
+                }
+                writer.start(ROBOVERSE_TASKS[args.scene])
+                succeeded = False
+                last_reward = 0.0
+                try:
+                    for step, normalized in enumerate(actions):
+                        if stop_requested:
+                            raise InterruptedError("worker stop requested")
+                        absolute_target = absolute_native_target(task, normalized)
+                        observation, reward, terminated, timeout, _ = task.step(
+                            normalized[None, :]
+                        )
+                        state = extract_native_state(task)
+                        object_pose, object_velocity = _object_observation(task)
+                        succeeded = succeeded or bool(_as_numpy(terminated).reshape(-1)[0])
+                        last_reward = float(_as_numpy(reward).reshape(-1)[0])
+                        writer.add_frame(
+                            images={"base": _camera_image(observation)},
+                            values={
+                                "native_state": state,
+                                "policy_state": policy_state_from_native(state),
+                                "operator_action": normalized,
+                                "requested_action": policy_action_from_native(absolute_target),
+                                "safe_action": policy_action_from_native(absolute_target),
+                                "applied_action": policy_action_from_native(absolute_target),
+                                "object_pose": object_pose,
+                                "object_velocity": object_velocity,
+                            },
+                            simulation_time_s=(step + 1) / args.fps,
+                            control_sequence=step,
+                        )
+                        for name, value in (
+                            ("normalized_action", normalized),
+                            ("absolute_joint_target", absolute_target),
+                            ("joint_state", state),
+                            ("cube_pose", object_pose),
+                            ("cube_velocity", object_velocity),
+                        ):
+                            native_arrays[name].append(np.asarray(value))
+                        if bool(_as_numpy(timeout).reshape(-1)[0]):
+                            break
+                    evaluator = EvaluatorResultV1(
+                        evaluator_id="roboverse_maniskill_success",
+                        evaluator_version="native_v1",
+                        available=True,
+                        success=succeeded,
+                        metrics={
+                            "last_dense_reward": last_reward,
+                            "source_demo_success": True,
+                            "source_demo_trajectory": demo_key,
+                            "replay_steps": len(native_arrays["normalized_action"]),
+                        },
                     )
-                    for name, value in (
-                        ("normalized_action", normalized),
-                        ("absolute_joint_target", absolute_target),
-                        ("joint_state", state),
-                        ("cube_pose", object_pose),
-                        ("cube_velocity", object_velocity),
-                    ):
-                        native_arrays[name].append(np.asarray(value))
-                    if bool(_as_numpy(timeout).reshape(-1)[0]):
-                        break
-                evaluator = EvaluatorResultV1(
-                    evaluator_id="roboverse_maniskill_success",
-                    evaluator_version="native_v1",
-                    available=True,
-                    success=succeeded,
-                    metrics={"last_dense_reward": last_reward, "scripted_probe": True},
-                )
-                final = writer.finish(
-                    operator_success=None,
-                    evaluator=evaluator,
-                    failure_reason=None if succeeded else "automatic_criterion_not_met",
-                )
-                _write_native_payload(final, native_arrays)
-                saved.append(final)
-                print(f"saved {final}", flush=True)
-            except BaseException:
-                if writer.is_recording:
-                    writer.discard()
-                raise
+                    final = writer.finish(
+                        operator_success=None,
+                        evaluator=evaluator,
+                        failure_reason=None
+                        if succeeded
+                        else "automatic_criterion_not_met",
+                    )
+                    _write_native_payload(final, native_arrays)
+                    saved.append(final)
+                    print(f"saved {final}", flush=True)
+                except BaseException:
+                    if writer.is_recording:
+                        writer.discard()
+                    raise
     finally:
         signal.signal(signal.SIGTERM, previous_sigterm)
         task.close()
@@ -333,6 +396,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--width", type=int, default=640)
     parser.add_argument("--height", type=int, default=480)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--demo-file", type=Path, required=True)
     parser.add_argument("--camera-profile-file", type=Path, required=True)
     return parser
 

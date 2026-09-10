@@ -16,7 +16,7 @@ import { engineLabel } from '@/lib/engines';
 import type { Dataset, Episode } from '@/lib/types';
 
 type QaFilter = 'all' | 'pending' | 'accepted' | 'rejected';
-type EngineFilter = 'all' | 'genesis' | 'isaac_sim';
+type EngineFilter = 'all' | 'genesis' | 'isaac_sim' | 'roboverse';
 
 export default function EpisodesPage() {
   const [episodes, setEpisodes] = useState<Episode[]>([]);
@@ -33,7 +33,7 @@ export default function EpisodesPage() {
     const params = new URLSearchParams(window.location.search);
     setSessionId(params.get('session') ?? undefined);
     const requestedEngine = params.get('engine');
-    if (requestedEngine === 'genesis' || requestedEngine === 'isaac_sim') setEngineFilter(requestedEngine);
+    if (requestedEngine === 'genesis' || requestedEngine === 'isaac_sim' || requestedEngine === 'roboverse') setEngineFilter(requestedEngine);
     const requestedQa = params.get('qa');
     if (requestedQa === 'pending' || requestedQa === 'accepted' || requestedQa === 'rejected') setQaFilter(requestedQa);
     const requestedDataset = params.get('dataset');
@@ -110,6 +110,7 @@ export default function EpisodesPage() {
                 <NativeSelectOption value="all">全部 Simulator</NativeSelectOption>
                 <NativeSelectOption value="genesis">Genesis</NativeSelectOption>
                 <NativeSelectOption value="isaac_sim">Isaac Sim</NativeSelectOption>
+                <NativeSelectOption value="roboverse">RoboVerse</NativeSelectOption>
               </NativeSelect>
               <NativeSelect value={qaFilter} onChange={(event) => setQaFilter(event.target.value as QaFilter)}>
                 <NativeSelectOption value="all">全部 QA 状态</NativeSelectOption>

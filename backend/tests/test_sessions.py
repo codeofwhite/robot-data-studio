@@ -94,7 +94,7 @@ def test_roboverse_session_is_noninteractive_batch_worker(isolated_settings):
             target_episodes=1,
             control_fps=20,
             camera_profile_id="roboverse_sapien_base_v1",
-            scene_params={"episode_steps": 10},
+                scene_params={},
         )
     )
     assert session["engine_id"] == "roboverse"
