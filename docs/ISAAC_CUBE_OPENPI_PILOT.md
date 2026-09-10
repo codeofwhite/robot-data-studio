@@ -138,3 +138,33 @@ Stop and debug the data/contract before scaling if any of these occurs:
 - training loss does not decrease on the fixed 20-episode set;
 - the gripper predicts only open or only closed;
 - offline phase metrics pass but the cube never lifts in closed loop.
+
+## 5. M5c gripper-event-aware diagnostic
+
+M5c keeps the seven arm-action dimensions unchanged and compares four gripper
+timing variants on the same 42 successful M2 demonstrations and the same 252
+teacher-forced event frames. The variants are the existing horizon-10 baseline,
+a horizon-4 policy, a horizon-10 policy with asymmetric close-boundary sampling,
+and a frozen baseline arm policy with an independent binary gripper head.
+
+The promotion gate requires both approach-open specificities to be at least
+0.8, close recall at least 0.8, grasp and lift close recall at least 0.95,
+joint first-step MAE at most 0.1 rad, median chunk close offset within one frame,
+and exact preservation of the seven arm outputs for the independent head.
+No variant passed every gate, so M5c intentionally performed no new Isaac
+physics rollouts.
+
+| Variant | Joint MAE (rad) | Open spec. -5 / -2 | Close / grasp / lift recall | Median close offset | Gate |
+|---|---:|---:|---:|---:|---|
+| Baseline H10 | 0.00424 | 0.238 / 0.167 | 0.929 / 1.000 / 1.000 | -2 frames | FAIL |
+| Short H4 | 0.00416 | 0.310 / 0.143 | 0.929 / 0.976 / 1.000 | 0 frames | FAIL |
+| Event H10 | 0.00459 | 0.643 / 0.452 | 0.667 / 0.929 / 1.000 | 0 frames | FAIL |
+| Binary head H10 | 0.00424 | 0.500 / 0.476 | 0.810 / 1.000 / 0.738 | -1 frame | FAIL |
+
+The result separates chunk alignment from event classification. Short horizon
+fixes the median chunk offset but not the first-step premature-close error.
+Asymmetric sampling improves approach-open specificity but suppresses the true
+close event. The 200-step CPU binary-head sanity run improves the baseline's
+approach-open specificity and exactly preserves the arm output, but it still
+closes early and fails to keep the gripper closed through lift. These are
+teacher-forced diagnostics, not task-success evidence.

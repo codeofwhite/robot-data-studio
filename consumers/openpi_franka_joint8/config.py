@@ -120,14 +120,17 @@ def make_train_config(
     base_checkpoint: Path,
     experiment_name: str = "seed0_sanity",
     num_train_steps: int = 10,
+    action_horizon: int = ACTION_HORIZON,
     overwrite: bool = False,
     resume: bool = False,
 ) -> training_config.TrainConfig:
     if num_train_steps < 1:
         raise ValueError("num_train_steps must be positive")
+    if action_horizon < 1:
+        raise ValueError("action_horizon must be positive")
     model = pi0_config.Pi0Config(
         pi05=True,
-        action_horizon=ACTION_HORIZON,
+        action_horizon=action_horizon,
         discrete_state_input=False,
         paligemma_variant="gemma_2b_lora",
         action_expert_variant="gemma_300m_lora",

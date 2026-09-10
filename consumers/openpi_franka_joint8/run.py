@@ -16,7 +16,9 @@ import numpy as np
 
 from consumers.openpi_franka_joint8.phase_sampling import (
     DEFAULT_PHASE_PROBABILITIES,
+    GRIPPER_EVENT_PROBABILITIES,
     CountingWeightedSampler,
+    assign_gripper_event_phases,
     assign_phases,
 )
 
@@ -120,7 +122,7 @@ def _install_local_dataset_loader(
     runtime: dict[str, Any] = {"sampler": None}
     if sampling_strategy == "uniform":
         return runtime
-    if sampling_strategy != "phase_balanced":
+    if sampling_strategy not in {"phase_balanced", "gripper_event"}:
         raise ValueError(f"unknown sampling strategy: {sampling_strategy}")
 
     original_create_torch_data_loader = data_loader.create_torch_data_loader
@@ -152,13 +154,18 @@ def _install_local_dataset_loader(
         episodes = np.asarray(table["episode_index"], dtype=np.int64)
         frames = np.asarray(table["frame_index"], dtype=np.int64)
         actions = np.asarray(table["action"], dtype=np.float32)
-        phases = assign_phases(
-            episodes,
-            frames,
-            actions[:, 7],
-            transition_radius=transition_radius,
-        )
-        sampler = CountingWeightedSampler(phases, DEFAULT_PHASE_PROBABILITIES, seed=seed)
+        if sampling_strategy == "phase_balanced":
+            phases = assign_phases(
+                episodes,
+                frames,
+                actions[:, 7],
+                transition_radius=transition_radius,
+            )
+            probabilities = DEFAULT_PHASE_PROBABILITIES
+        else:
+            phases = assign_gripper_event_phases(episodes, frames, actions[:, 7])
+            probabilities = GRIPPER_EVENT_PROBABILITIES
+        sampler = CountingWeightedSampler(phases, probabilities, seed=seed)
         runtime["sampler"] = sampler
         transformed = data_loader.transform_dataset(
             raw_dataset,
@@ -188,6 +195,7 @@ def _sampling_report(args) -> dict[str, Any]:
     if sampler is None:
         return {"strategy": "uniform"}
     result = sampler.report()
+    result["strategy"] = args.sampling_strategy
     result["transition_radius_frames"] = args.transition_radius
     return result
 
@@ -201,6 +209,7 @@ def _config(args):
         base_checkpoint=args.base_checkpoint,
         experiment_name=args.experiment_name,
         num_train_steps=args.num_train_steps,
+        action_horizon=args.action_horizon,
         overwrite=getattr(args, "overwrite", False),
         resume=getattr(args, "resume", False),
     )
@@ -256,7 +265,9 @@ def preflight(args) -> dict[str, Any]:
         skip_norm_stats=False,
     )
     observation, actions = next(iter(loader))
-    if observation.state.shape != (1, 32) or actions.shape != (1, 10, 32):
+    if observation.state.shape != (1, 32) or actions.shape != (
+        1, config.model.action_horizon, config.model.action_dim
+    ):
         raise ValueError("OpenPI training batch does not match the pi0.5 model contract")
     return {
         "stage": "preflight",
@@ -348,7 +359,7 @@ def infer(args) -> dict[str, Any]:
         }
     )
     actions = np.asarray(output["actions"])
-    if actions.shape != (10, 8) or not np.isfinite(actions).all():
+    if actions.shape != (config.model.action_horizon, 8) or not np.isfinite(actions).all():
         raise ValueError(f"invalid Franka joint8 policy output: {actions.shape}")
     dataset = _dataset_evidence(args.dataset_root)
     return {
@@ -380,11 +391,12 @@ def main() -> None:
     parser.add_argument("--openpi-root", type=Path, default=Path("/data/zhanghejun/openpi"))
     parser.add_argument("--experiment-name", default="seed0_sanity")
     parser.add_argument("--num-train-steps", type=int, default=10)
+    parser.add_argument("--action-horizon", type=int, default=10)
     parser.add_argument("--checkpoint", type=Path)
     parser.add_argument("--inference-steps", type=int, default=2)
     parser.add_argument(
         "--sampling-strategy",
-        choices=("uniform", "phase_balanced"),
+        choices=("uniform", "phase_balanced", "gripper_event"),
         default="uniform",
     )
     parser.add_argument("--transition-radius", type=int, default=2)
@@ -407,8 +419,8 @@ def main() -> None:
         str(args.training_root / "cache" / "jax"),
     )
     _validate_paths(args.dataset_root, args.base_checkpoint)
-    if args.transition_radius < 0:
-        parser.error("--transition-radius must be non-negative")
+    if args.transition_radius < 0 or args.action_horizon < 1:
+        parser.error("transition radius must be non-negative and action horizon positive")
     args.sampling_runtime = _install_local_dataset_loader(
         args.dataset_root,
         sampling_strategy=args.sampling_strategy,

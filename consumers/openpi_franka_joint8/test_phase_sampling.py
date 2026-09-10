@@ -2,8 +2,10 @@ import numpy as np
 
 from consumers.openpi_franka_joint8.phase_sampling import (
     DEFAULT_PHASE_PROBABILITIES,
+    GRIPPER_EVENT_PROBABILITIES,
     PHASES,
     CountingWeightedSampler,
+    assign_gripper_event_phases,
     assign_phases,
     phase_weights,
 )
@@ -46,3 +48,15 @@ def test_assign_phases_rejects_missing_release():
         assert "no release" in str(exc)
     else:
         raise AssertionError("expected missing release to fail")
+
+
+def test_gripper_event_phases_keep_preclose_open_separate() -> None:
+    gripper = np.asarray([0.0] * 8 + [1.0] * 6 + [0.0] * 4)
+    phases = assign_gripper_event_phases(
+        np.zeros(len(gripper), dtype=np.int64), np.arange(len(gripper)), gripper
+    )
+    assert phases[3:8].tolist() == ["preclose_open"] * 5
+    assert phases[8:11].tolist() == ["close_command"] * 3
+    weights = phase_weights(phases, GRIPPER_EVENT_PROBABILITIES)
+    for phase, probability in GRIPPER_EVENT_PROBABILITIES.items():
+        assert np.isclose(weights[phases == phase].sum(), probability)

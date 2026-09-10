@@ -61,6 +61,16 @@ def test_training_config_is_single_gpu_lora_and_offline(tmp_path: Path):
     assert data_config.action_sequence_keys == ("action",)
 
 
+def test_training_config_accepts_short_action_horizon(tmp_path: Path):
+    config = make_train_config(
+        dataset_root=tmp_path / "dataset",
+        training_root=tmp_path / "training",
+        base_checkpoint=tmp_path / "pi05_libero",
+        action_horizon=4,
+    )
+    assert config.model.action_horizon == 4
+
+
 def test_training_metrics_are_parsed_from_upstream_progress_output():
     metrics = _parse_training_metrics(
         "Step 0: grad_norm=1.6124, loss=0.2718, param_norm=1833.3756\n"
