@@ -18,7 +18,10 @@ class FrankaEpisodeWriter:
                  control_source: str, operator_command_names: list[str], camera_names: list[str],
                  run_metadata: dict[str, Any], seed: int = 0, worker_id: str = "unknown",
                  state_names=None, action_names=None,
-                 generation_method: str | None = None) -> None:
+                 generation_method: str | None = None,
+                 lineage: AugmentationLineageV1 | None = None) -> None:
+        if lineage is not None and generation_method is not None:
+            raise ValueError("provide either lineage or generation_method, not both")
         camera_profile = run_metadata.get("camera_profile", {})
         camera_roles = run_metadata.get("camera_roles", {})
         intrinsics = run_metadata.get("camera_intrinsic_matrices", {})
@@ -73,11 +76,15 @@ class FrankaEpisodeWriter:
                                     parameters=scene_parameters,
                                     assets=assets),
             software=software,
-            lineage=AugmentationLineageV1(
-                generation_method=(
-                    generation_method
-                    if generation_method is not None
-                    else ("scripted" if control_source.startswith("scripted") else "teleoperation")
+            lineage=(
+                lineage
+                if lineage is not None
+                else AugmentationLineageV1(
+                    generation_method=(
+                        generation_method
+                        if generation_method is not None
+                        else ("scripted" if control_source.startswith("scripted") else "teleoperation")
+                    )
                 )
             ),
         )

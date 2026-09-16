@@ -128,6 +128,51 @@ def test_policy_rollout_lineage_is_explicit() -> None:
     assert lineage.generation_method == "policy_rollout"
 
 
+def test_franka_writer_accepts_complete_augmentation_lineage(tmp_path) -> None:
+    lineage = AugmentationLineageV1(
+        parent_episode_uuid="source-uuid",
+        generation_method="retargeted",
+        randomization_spec_id="isaac_rigid_cube_lift_xy_v1",
+        randomization_seed=17,
+        resolved_parameters={"object_xy_offset_m": [0.01, -0.02]},
+        trajectory_modified=True,
+    )
+    writer = FrankaEpisodeWriter(
+        tmp_path,
+        fps=10,
+        engine_id="isaac_sim",
+        engine_version="test",
+        scene_id="rigid_cube_lift",
+        control_source="retargeted_trajectory",
+        operator_command_names=[
+            "target_x_m", "target_y_m", "target_z_m", "target_qw",
+            "target_qx", "target_qy", "target_qz", "gripper_closed",
+        ],
+        camera_names=[],
+        run_metadata={"scene_geometry": None, "resolved_scene_spec": None},
+        lineage=lineage,
+    )
+
+    assert writer._writer.lineage == lineage
+
+
+def test_franka_writer_rejects_ambiguous_lineage_inputs(tmp_path) -> None:
+    with np.testing.assert_raises_regex(ValueError, "either lineage or generation_method"):
+        FrankaEpisodeWriter(
+            tmp_path,
+            fps=10,
+            engine_id="isaac_sim",
+            engine_version="test",
+            scene_id="rigid_cube_lift",
+            control_source="retargeted_trajectory",
+            operator_command_names=["gripper_closed"],
+            camera_names=[],
+            run_metadata={"scene_geometry": None, "resolved_scene_spec": None},
+            generation_method="retargeted",
+            lineage=AugmentationLineageV1(generation_method="retargeted"),
+        )
+
+
 def test_canonical_reader_exposes_paths_and_training_view(tmp_path) -> None:
     writer = EpisodeWriter(
         tmp_path, fps=10, robot_id="franka_panda", control_source="keyboard_cartesian",
