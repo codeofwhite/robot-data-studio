@@ -94,6 +94,36 @@ official datasets into the same cache before starting PushCube or StackCube:
   -o /data/zhanghejun/robot-data-studio/data/cache/maniskill
 ```
 
+### PickCube state-BC consumer
+
+`consumers/roboverse_state_bc` provides the first small-policy path for
+RoboVerse data. It loads only Studio QA-accepted PickCube Episodes with complete
+P2 seed provenance, uses the checksummed native Panda state/task state/action
+payload, performs an Episode-level 15/5 split, and saves a checkpoint,
+training-only normalizer, configuration, split UUIDs/seeds, Git state, and a
+training report. It does not train from rejected Episodes or split frames from
+one Episode across train and validation. Native payload schema
+`roboverse_maniskill_native_v2_pre_action` records state immediately before
+each action and gives the loader exact `state[t] -> action[t]` pairs. The loader
+explicitly rejects legacy post-action-only payloads; historical raw Episodes
+and their P2-B 0/20 evaluation remain immutable evidence.
+
+The learned policy is evaluated directly in native `PickCube-v1` from fresh
+`reset(seed)` states. It receives Panda qpos/qvel, cube pose, and goal position,
+then emits bounded 8-D `pd_joint_delta_pos` action chunks. The policy path does
+not restore demonstration state or replay demonstration actions. Zero action is
+run on the same 20 held-out seeds. An official-demo replay ceiling is also
+reported, but it restores the recorded initial state and is explicitly not
+treated as a distribution-matched policy baseline. See
+[`consumers/roboverse_state_bc/README.md`](consumers/roboverse_state_bc/README.md)
+for commands and evidence gates.
+
+The single-Episode alignment diagnostic uses a separate gate: non-saturated
+teacher-forced action MSE at most `1e-6` plus 3/3 native closed-loop successes
+from the restored training initial state. Saturated, non-saturated, and overall
+MSE are all retained in its report. This is an alignment check and does not
+replace the 20-seed held-out capability gate.
+
 ## Worker runtime reliability
 
 Studio launches each engine through a durable supervisor. Every launch receives a
@@ -134,6 +164,9 @@ PYTHONPATH=backend/src:packages/robot-data-contracts/src \
 PYTHONPATH=packages/robot-data-contracts/src \
   /home/zhanghejun/miniconda3/envs/genesis/bin/python \
   -m pytest -q packages/robot-data-contracts/tests
+
+PYTHONPATH=. /data/zhanghejun/envs/roboverse-maniskill/bin/python \
+  -m unittest discover -s consumers/roboverse_state_bc -t . -p 'test_*.py' -v
 
 cd /data/zhanghejun/robot-data-studio
 npm run lint

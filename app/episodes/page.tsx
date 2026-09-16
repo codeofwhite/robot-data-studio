@@ -125,10 +125,12 @@ export default function EpisodesPage() {
               <Empty><EmptyHeader><EmptyMedia variant="icon"><Database /></EmptyMedia><EmptyTitle>当前队列没有 Episode</EmptyTitle><EmptyDescription>调整筛选条件，或在会话页扫描采集目录。</EmptyDescription></EmptyHeader><EmptyContent><Button render={<a href="/sessions/new" />}>新建采集会话</Button></EmptyContent></Empty>
             ) : (
               <Table>
-                <TableHeader><TableRow><TableHead>Episode</TableHead><TableHead>Simulator</TableHead><TableHead>Scene / Task</TableHead><TableHead>Frames</TableHead><TableHead>Operator</TableHead><TableHead>Auto</TableHead><TableHead>QA</TableHead><TableHead>快捷 QA</TableHead></TableRow></TableHeader>
+                <TableHeader><TableRow><TableHead>Record / Episode</TableHead><TableHead>Session</TableHead><TableHead>Source / Seed</TableHead><TableHead>Simulator</TableHead><TableHead>Scene / Task</TableHead><TableHead>Frames</TableHead><TableHead>Operator</TableHead><TableHead>Auto</TableHead><TableHead>QA</TableHead><TableHead>快捷 QA</TableHead></TableRow></TableHeader>
                 <TableBody>{episodes.map((episode) => (
                   <TableRow key={episode.id} className="cursor-pointer" onClick={() => { window.location.href = `/episodes/${episode.id}`; }}>
-                    <TableCell><p className="font-mono text-xs">#{String(episode.episode_index ?? '?').padStart(6, '0')}</p><p className="font-mono text-[10px] text-muted-foreground">{episode.episode_uuid.slice(0, 12)}</p></TableCell>
+                    <TableCell><p className="font-mono text-xs font-semibold">DB #{episode.id}</p><p className="font-mono text-[10px] text-muted-foreground">Episode #{String(episode.episode_index ?? '?').padStart(6, '0')}</p><p className="font-mono text-[10px] text-muted-foreground">{episode.episode_uuid.slice(0, 12)}</p></TableCell>
+                    <TableCell><p className="font-mono text-xs">…{episode.session_id.slice(-8)}</p></TableCell>
+                    <TableCell><p className="font-mono text-xs">{episode.source_trajectory ?? '—'}</p><p className="font-mono text-[10px] text-muted-foreground">seed {episode.seed ?? '—'}</p>{episode.is_duplicate && <Badge variant="destructive" className="mt-1">DUPLICATE ×{episode.duplicate_group_size}</Badge>}</TableCell>
                     <TableCell><Badge variant="outline">{engineLabel(episode.engine_id)}</Badge><p className="mt-1 font-mono text-[10px] text-muted-foreground">{episode.engine_version ?? 'version N/A'}</p></TableCell>
                     <TableCell><p className="text-xs text-muted-foreground">{episode.scene_id} · {episode.control_mode}</p><p>{episode.task}</p></TableCell>
                     <TableCell className="font-mono text-xs">{episode.num_frames}<br /><span className="text-muted-foreground">{episode.duration_s?.toFixed(1) ?? 'N/A'} s</span></TableCell>

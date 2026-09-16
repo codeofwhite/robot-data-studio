@@ -67,6 +67,9 @@ export type Episode = {
   control_mode: string;
   control_source: string | null;
   seed: number | null;
+  source_trajectory: string | null;
+  duplicate_group_size: number;
+  is_duplicate: boolean;
   operator_success: number | null;
   auto_success: number | null;
   qa_status: 'pending' | 'accepted' | 'rejected';

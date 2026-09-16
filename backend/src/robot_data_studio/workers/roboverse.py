@@ -536,6 +536,9 @@ def collect(args: argparse.Namespace) -> list[Path]:
                             "source_demo_sha256": demo_sha256,
                             "source_demo_metadata_sha256": demo_metadata_sha256,
                             "seed_semantics": "maniskill_source_episode_seed",
+                            "native_payload_schema": (
+                                "roboverse_maniskill_native_v2_pre_action"
+                            ),
                             "episode_steps": len(actions),
                             "safety_filter": "identity_simulation_only",
                             "camera_profile_id": profile["id"],
@@ -562,6 +565,9 @@ def collect(args: argparse.Namespace) -> list[Path]:
                 native_arrays: dict[str, list[np.ndarray]] = {
                     "normalized_action": [],
                     "absolute_joint_target": [],
+                    "pre_action_joint_state": [],
+                    "pre_action_task_state": [],
+                    "pre_action_object_pose": [],
                     "joint_state": [],
                     "task_state": [],
                     "object_pose": [],
@@ -575,6 +581,11 @@ def collect(args: argparse.Namespace) -> list[Path]:
                     for step, normalized in enumerate(actions):
                         if stop_requested:
                             raise InterruptedError("worker stop requested")
+                        pre_action_joint_state = extract_native_state(task)
+                        pre_action_object_pose, _ = _object_observation(
+                            task, descriptor
+                        )
+                        pre_action_task_state = _task_state(task, descriptor)
                         absolute_target = absolute_native_target(task, normalized)
                         observation, reward, terminated, timeout, _ = task.step(
                             normalized[None, :]
@@ -607,6 +618,9 @@ def collect(args: argparse.Namespace) -> list[Path]:
                         for name, value in (
                             ("normalized_action", normalized),
                             ("absolute_joint_target", absolute_target),
+                            ("pre_action_joint_state", pre_action_joint_state),
+                            ("pre_action_task_state", pre_action_task_state),
+                            ("pre_action_object_pose", pre_action_object_pose),
                             ("joint_state", state),
                             ("task_state", task_state),
                             ("object_pose", object_pose),

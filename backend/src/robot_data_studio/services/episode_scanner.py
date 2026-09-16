@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -14,6 +15,17 @@ from .session_service import get_session
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _source_trajectory(manifest: dict) -> str | None:
+    scene = manifest.get("scene")
+    if not isinstance(scene, dict):
+        return None
+    parameters = scene.get("parameters")
+    if not isinstance(parameters, dict):
+        return None
+    source = parameters.get("source_demo_trajectory")
+    return source if isinstance(source, str) and source else None
 
 
 def scan_session(session_id: str) -> dict:
@@ -93,6 +105,27 @@ def list_episodes(
                 {where} ORDER BY COALESCE(e.created_at, e.indexed_at) DESC""",
             params,
         ).fetchall()
+        dataset_ids = sorted({int(row["dataset_id"]) for row in rows})
+        duplicate_rows = []
+        if dataset_ids:
+            placeholders = ", ".join("?" for _ in dataset_ids)
+            duplicate_rows = connection.execute(
+                f"""SELECT s.dataset_id, e.task, e.manifest_json
+                    FROM episodes e JOIN sessions s ON s.id = e.session_id
+                    WHERE s.status != 'trashed' AND s.dataset_id IN ({placeholders})""",
+                dataset_ids,
+            ).fetchall()
+    duplicate_counts: Counter[tuple[int, str, str, int | None]] = Counter()
+    for row in duplicate_rows:
+        manifest = json.loads(row["manifest_json"])
+        source_trajectory = _source_trajectory(manifest)
+        if source_trajectory is None:
+            continue
+        scene = manifest.get("scene")
+        seed = scene.get("seed") if isinstance(scene, dict) else None
+        duplicate_counts[
+            (int(row["dataset_id"]), str(row["task"]), source_trajectory, seed)
+        ] += 1
     episodes: list[dict] = []
     for row in rows:
         episode = dict(row)
@@ -111,6 +144,19 @@ def list_episodes(
         )
         scene = manifest.get("scene")
         episode["seed"] = scene.get("seed") if isinstance(scene, dict) else None
+        episode["source_trajectory"] = _source_trajectory(manifest)
+        duplicate_group_size = 1
+        if episode["source_trajectory"] is not None:
+            duplicate_group_size = duplicate_counts[
+                (
+                    int(episode["dataset_id"]),
+                    str(episode["task"]),
+                    episode["source_trajectory"],
+                    episode["seed"],
+                )
+            ]
+        episode["duplicate_group_size"] = duplicate_group_size
+        episode["is_duplicate"] = duplicate_group_size > 1
         software = manifest.get("software")
         episode["engine_version"] = software.get("engine_version") if isinstance(software, dict) else None
         episode["worker_id"] = software.get("worker_id") if isinstance(software, dict) else None
