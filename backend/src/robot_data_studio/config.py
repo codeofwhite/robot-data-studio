@@ -33,12 +33,10 @@ class Settings:
             "/data/zhanghejun/envs/roboverse-maniskill/bin/python",
         )
     )
-    roboverse_pickcube_demo: Path = Path(
+    roboverse_demo_root: Path = Path(
         os.getenv(
-            "ROBOT_DATA_STUDIO_ROBOVERSE_PICKCUBE_DEMO",
-            PROJECT_ROOT
-            / "data/cache/maniskill/PickCube-v1/rl/"
-            "trajectory.none.pd_joint_delta_pos.physx_cuda.h5",
+            "ROBOT_DATA_STUDIO_ROBOVERSE_DEMO_ROOT",
+            PROJECT_ROOT / "data/cache/maniskill",
         )
     )
     isaaclab_launcher: Path = Path(

@@ -18,6 +18,8 @@ from robot_data_contracts import (
     AugmentationLineageV1,
     EpisodeWriter,
     EvaluatorResultV1,
+    FeatureRole,
+    FeatureSpecV1,
     SceneProvenanceV1,
 )
 from robot_data_contracts.profiles.franka import (
@@ -28,13 +30,16 @@ from robot_data_contracts.profiles.franka import (
 )
 from robot_data_contracts.provenance import collect_software_provenance
 
+from robot_data_studio.roboverse_tasks import (
+    ROBOVERSE_TASKS,
+    RoboVerseTaskDescriptor,
+    task_descriptor,
+)
+
 
 ARM_JOINTS = tuple(f"panda_joint{index}" for index in range(1, 8))
 FINGER_JOINTS = ("panda_finger_joint1", "panda_finger_joint2")
 NATIVE_JOINTS = ARM_JOINTS + FINGER_JOINTS
-ROBOVERSE_TASKS = {
-    "maniskill_pick_cube_native": "maniskill.pick_cube_native",
-}
 CAMERA_POSITION = (1.1, -1.1, 0.9)
 CAMERA_LOOK_AT = (-0.1, 0.0, 0.15)
 CAMERA_VERTICAL_FOV_DEG = 42.0
@@ -107,10 +112,35 @@ def _camera_image(observation: Any) -> np.ndarray:
     return image[..., :3]
 
 
-def _object_observation(task: Any) -> tuple[np.ndarray, np.ndarray]:
-    pose = np.concatenate([task.obj_pos("cube"), task.obj_quat("cube")]).astype(np.float32)
-    velocity = np.concatenate([task.obj_linvel("cube"), task.obj_angvel("cube")]).astype(np.float32)
-    return pose, velocity
+def _object_observation(
+    task: Any, descriptor: RoboVerseTaskDescriptor
+) -> tuple[np.ndarray, np.ndarray]:
+    poses = [
+        np.concatenate([task.obj_pos(name), task.obj_quat(name)])
+        for name in descriptor.object_names
+    ]
+    velocities = [
+        np.concatenate([task.obj_linvel(name), task.obj_angvel(name)])
+        for name in descriptor.object_names
+    ]
+    return (
+        np.concatenate(poses).astype(np.float32),
+        np.concatenate(velocities).astype(np.float32),
+    )
+
+
+def _task_state(task: Any, descriptor: RoboVerseTaskDescriptor) -> np.ndarray:
+    object_pose, _ = _object_observation(task, descriptor)
+    values = [object_pose]
+    if descriptor.goal_actor is not None:
+        values.append(np.asarray(task.goal_pos, dtype=np.float32).reshape(3))
+    state = np.concatenate(values).astype(np.float32)
+    if state.shape != (len(descriptor.task_state_names),):
+        raise ValueError(
+            f"{descriptor.scene_id} task state has shape {state.shape}; "
+            f"expected {(len(descriptor.task_state_names),)}"
+        )
+    return state
 
 
 def _asset_sha256(path: Path) -> str:
@@ -138,39 +168,92 @@ def _announce_ready() -> None:
     os.replace(temporary, path)
 
 
-def successful_demo_keys(demos: Any, count: int) -> list[str]:
+def load_demo_metadata(
+    path: Path, descriptor: RoboVerseTaskDescriptor
+) -> dict[str, dict[str, Any]]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    env_info = payload.get("env_info", {})
+    env_kwargs = env_info.get("env_kwargs", {})
+    if env_info.get("env_id") != descriptor.gym_id:
+        raise ValueError(
+            f"demo metadata env_id={env_info.get('env_id')!r}; "
+            f"expected {descriptor.gym_id!r}"
+        )
+    if env_kwargs.get("control_mode") != "pd_joint_delta_pos":
+        raise ValueError("demo metadata must use pd_joint_delta_pos")
+    if int(env_info.get("max_episode_steps", -1)) != descriptor.max_steps:
+        raise ValueError(
+            f"demo metadata max_episode_steps must be {descriptor.max_steps}"
+        )
+    episodes: dict[str, dict[str, Any]] = {}
+    for item in payload.get("episodes", []):
+        episode_id = int(item["episode_id"])
+        key = f"traj_{episode_id}"
+        if key in episodes:
+            raise ValueError(f"duplicate demo metadata entry: {key}")
+        if "episode_seed" not in item:
+            raise ValueError(f"demo metadata {key} has no episode_seed")
+        episodes[key] = item
+    if not episodes:
+        raise ValueError("demo metadata contains no episodes")
+    return episodes
+
+
+def successful_demo_keys(
+    demos: Any,
+    count: int,
+    *,
+    offset: int = 0,
+    metadata: dict[str, dict[str, Any]] | None = None,
+    task_label: str = "demo",
+) -> list[str]:
     keys = sorted(
         (key for key in demos if key.startswith("traj_")),
         key=lambda key: int(key.split("_")[1]),
     )
-    selected: list[str] = []
+    successful: list[str] = []
     for key in keys:
         group = demos[key]
         actions = np.asarray(group["actions"])
         success = np.asarray(group["success"])
         if actions.ndim != 2 or actions.shape[1] != 8:
             raise ValueError(f"{key} has invalid pd_joint_delta_pos actions: {actions.shape}")
-        if success.size and bool(success.reshape(-1)[-1]):
-            selected.append(key)
-        if len(selected) == count:
-            break
+        metadata_success = True
+        if metadata is not None:
+            if key not in metadata:
+                raise ValueError(f"demo metadata is missing {key}")
+            metadata_success = bool(metadata[key].get("success"))
+        if success.size and bool(success.reshape(-1)[-1]) and metadata_success:
+            successful.append(key)
+    selected = successful[offset : offset + count]
     if len(selected) != count:
         raise ValueError(
-            f"PickCube demo has only {len(selected)} successful trajectories; {count} required"
+            f"{task_label} has {len(successful)} successful trajectories; "
+            f"offset {offset} cannot provide {count} episodes"
         )
     return selected
 
 
-def restore_demo_initial_state(task: Any, demo: Any) -> None:
+def restore_demo_initial_state(
+    task: Any, demo: Any, descriptor: RoboVerseTaskDescriptor
+) -> None:
     import sapien
+    import sapien.physx as physx
 
     states = demo["env_states"]
-    articulation = np.asarray(states["articulations"]["panda"])[0]
+    articulations = states["articulations"]
+    if descriptor.demo_robot_name not in articulations:
+        raise ValueError(
+            f"{descriptor.gym_id} demo is missing articulation "
+            f"{descriptor.demo_robot_name}"
+        )
+    articulation = np.asarray(articulations[descriptor.demo_robot_name])[0]
     root_state_dimension = 13
     joint_count = (len(articulation) - root_state_dimension) // 2
     if joint_count != len(NATIVE_JOINTS):
         raise ValueError(
-            f"PickCube demo Panda has {joint_count} joints; expected {len(NATIVE_JOINTS)}"
+            f"{descriptor.gym_id} demo Panda has {joint_count} joints; "
+            f"expected {len(NATIVE_JOINTS)}"
         )
     robot = task.handler.object_ids["panda"]
     robot.set_qpos(
@@ -183,9 +266,25 @@ def restore_demo_initial_state(task: Any, demo: Any) -> None:
             root_state_dimension + joint_count : root_state_dimension + 2 * joint_count
         ].astype(np.float32)
     )
-    cube = np.asarray(states["actors"]["cube"])[0]
-    task.handler.object_ids["cube"].set_pose(sapien.Pose(cube[:3], cube[3:7]))
-    task.goal_pos = np.asarray(states["actors"]["goal_site"])[0][:3].astype(np.float64)
+    demo_actors = states["actors"]
+    for name in descriptor.object_names:
+        if name not in demo_actors:
+            raise ValueError(f"{descriptor.gym_id} demo is missing actor {name}")
+        actor_state = np.asarray(demo_actors[name])[0]
+        actor = task.handler.object_ids[name]
+        actor.set_pose(sapien.Pose(actor_state[:3], actor_state[3:7]))
+        component = actor.find_component_by_type(physx.PhysxRigidDynamicComponent)
+        if component is not None and len(actor_state) >= root_state_dimension:
+            component.set_linear_velocity(actor_state[7:10].astype(np.float32))
+            component.set_angular_velocity(actor_state[10:13].astype(np.float32))
+    if descriptor.goal_actor is not None:
+        if descriptor.goal_actor not in demo_actors:
+            raise ValueError(
+                f"{descriptor.gym_id} demo is missing goal actor {descriptor.goal_actor}"
+            )
+        task.goal_pos = np.asarray(demo_actors[descriptor.goal_actor])[0][:3].astype(
+            np.float64
+        )
 
 
 def _write_native_payload(path: Path, arrays: dict[str, list[np.ndarray]]) -> None:
@@ -200,12 +299,17 @@ def _write_native_payload(path: Path, arrays: dict[str, list[np.ndarray]]) -> No
     )
 
 
-def _build_task(width: int, height: int):
+def _build_task(descriptor: RoboVerseTaskDescriptor, width: int, height: int):
     import roboverse_pack.tasks.maniskill  # noqa: F401
     from metasim.scenario.cameras import PinholeCameraCfg
     from metasim.task.registry import get_task_class
 
-    task_class = get_task_class(ROBOVERSE_TASKS["maniskill_pick_cube_native"])
+    task_class = get_task_class(descriptor.task_id)
+    if int(task_class.max_episode_steps) != descriptor.max_steps:
+        raise RuntimeError(
+            f"{descriptor.task_id} max_episode_steps={task_class.max_episode_steps}; "
+            f"descriptor declares {descriptor.max_steps}"
+        )
     scenario = copy.deepcopy(task_class.scenario)
     scenario.simulator = "sapien3"
     scenario.num_envs = 1
@@ -226,6 +330,97 @@ def _build_task(width: int, height: int):
     return task_class(scenario)
 
 
+def task_step_metrics(
+    task: Any, descriptor: RoboVerseTaskDescriptor
+) -> dict[str, float | bool]:
+    if descriptor.evaluator_kind == "pick_cube":
+        distance = float(np.linalg.norm(task.obj_pos("cube") - task.goal_pos))
+        return {
+            "goal_distance_m": distance,
+            "is_grasped": bool(task.is_grasped("cube")),
+            "is_obj_placed": distance <= 0.025,
+            "is_robot_static": bool(task.is_robot_static()),
+        }
+    if descriptor.evaluator_kind == "push_cube":
+        cube = task.obj_pos("cube")
+        distance = float(np.linalg.norm(cube[:2] - task.goal_pos[:2]))
+        return {
+            "goal_distance_m": distance,
+            "is_obj_placed": distance < 0.1,
+            "is_on_surface": float(cube[2]) < 0.025,
+        }
+    cube_a = task.obj_pos("cubeA")
+    cube_b = task.obj_pos("cubeB")
+    offset = cube_a - cube_b
+    on_cube = bool(
+        np.linalg.norm(offset[:2]) <= np.linalg.norm(np.asarray([0.02, 0.02])) + 0.005
+        and abs(float(offset[2]) - 0.04) <= 0.005
+    )
+    return {
+        "cube_xy_offset_m": float(np.linalg.norm(offset[:2])),
+        "cube_z_offset_m": float(offset[2]),
+        "is_grasped": bool(task.is_grasped("cubeA")),
+        "is_on_cube": on_cube,
+        "is_static": bool(task.obj_is_static("cubeA")),
+    }
+
+
+def summarize_task_metrics(
+    descriptor: RoboVerseTaskDescriptor,
+    history: list[dict[str, float | bool]],
+) -> dict[str, float | bool]:
+    if not history:
+        raise ValueError("task metric history must not be empty")
+    final = history[-1]
+    summary: dict[str, float | bool] = {
+        f"final_{key}": value for key, value in final.items()
+    }
+    if descriptor.evaluator_kind in {"pick_cube", "push_cube"}:
+        summary["minimum_goal_distance_m"] = min(
+            float(item["goal_distance_m"]) for item in history
+        )
+        summary["ever_obj_placed"] = any(
+            bool(item["is_obj_placed"]) for item in history
+        )
+    if descriptor.evaluator_kind in {"pick_cube", "stack_cube"}:
+        summary["ever_grasped"] = any(bool(item["is_grasped"]) for item in history)
+    if descriptor.evaluator_kind == "stack_cube":
+        summary["ever_on_cube"] = any(bool(item["is_on_cube"]) for item in history)
+        summary["ever_released_on_cube"] = any(
+            bool(item["is_on_cube"]) and not bool(item["is_grasped"])
+            for item in history
+        )
+    return summary
+
+
+def classify_task_failure(
+    descriptor: RoboVerseTaskDescriptor,
+    metrics: dict[str, float | bool],
+) -> str:
+    if descriptor.evaluator_kind == "pick_cube":
+        if not bool(metrics["ever_grasped"]):
+            return "never_grasped"
+        if not bool(metrics["ever_obj_placed"]):
+            return "goal_not_reached"
+        if not bool(metrics["final_is_robot_static"]):
+            return "robot_not_static"
+    elif descriptor.evaluator_kind == "push_cube":
+        if not bool(metrics["final_is_on_surface"]):
+            return "object_left_surface"
+        if not bool(metrics["ever_obj_placed"]):
+            return "goal_not_reached"
+    else:
+        if not bool(metrics["ever_grasped"]):
+            return "never_grasped"
+        if not bool(metrics["ever_on_cube"]):
+            return "stack_alignment_not_reached"
+        if bool(metrics["final_is_grasped"]):
+            return "not_released"
+        if bool(metrics["final_is_on_cube"]) and not bool(metrics["final_is_static"]):
+            return "stack_unstable"
+    return "timeout_without_success"
+
+
 def _software_provenance() -> Any:
     return collect_software_provenance(
         engine_id="roboverse_sapien3",
@@ -239,18 +434,29 @@ def _software_provenance() -> Any:
 def collect(args: argparse.Namespace) -> list[Path]:
     import h5py
 
-    if args.scene not in ROBOVERSE_TASKS:
-        raise ValueError(f"unsupported RoboVerse scene: {args.scene}")
+    descriptor = task_descriptor(args.scene)
     if not 1 <= args.episodes <= 10:
         raise ValueError("episodes must be between 1 and 10")
-    if not 2 <= args.steps <= 50:
-        raise ValueError("steps must be between 2 and 50")
+    if not 2 <= args.steps <= descriptor.max_steps:
+        raise ValueError(f"steps must be between 2 and {descriptor.max_steps}")
+    if not 0 <= args.demo_offset <= 100_000:
+        raise ValueError("demo_offset must be between 0 and 100000")
     if args.fps != 20:
         raise ValueError("ManiSkill native collection requires fps=20")
     demo_file = args.demo_file.expanduser().resolve()
     if not demo_file.is_file():
-        raise FileNotFoundError(f"ManiSkill PickCube demo is unavailable: {demo_file}")
+        raise FileNotFoundError(
+            f"ManiSkill {descriptor.gym_id} demo is unavailable: {demo_file}"
+        )
+    demo_metadata_file = args.demo_metadata_file.expanduser().resolve()
+    if not demo_metadata_file.is_file():
+        raise FileNotFoundError(
+            f"ManiSkill {descriptor.gym_id} demo metadata is unavailable: "
+            f"{demo_metadata_file}"
+        )
+    demo_metadata = load_demo_metadata(demo_metadata_file, descriptor)
     demo_sha256 = _asset_sha256(demo_file)
+    demo_metadata_sha256 = _asset_sha256(demo_metadata_file)
     profile = json.loads(args.camera_profile_file.read_text(encoding="utf-8"))
     role = profile["roles"]["agentview"]
     _, intrinsics = _camera_geometry(args.width, args.height)
@@ -268,7 +474,7 @@ def collect(args: argparse.Namespace) -> list[Path]:
         }
     }
     software = _software_provenance()
-    task = _build_task(args.width, args.height)
+    task = _build_task(descriptor, args.width, args.height)
     _announce_ready()
     saved: list[Path] = []
     stop_requested = False
@@ -280,15 +486,30 @@ def collect(args: argparse.Namespace) -> list[Path]:
     previous_sigterm = signal.signal(signal.SIGTERM, request_stop)
     try:
         with h5py.File(demo_file, "r") as demos:
-            demo_keys = successful_demo_keys(demos, args.episodes)
-            for episode_offset, demo_key in enumerate(demo_keys):
+            demo_keys = successful_demo_keys(
+                demos,
+                args.episodes,
+                offset=args.demo_offset,
+                metadata=demo_metadata,
+                task_label=descriptor.gym_id,
+            )
+            for demo_key in demo_keys:
                 if stop_requested:
                     break
                 demo = demos[demo_key]
                 actions = np.asarray(demo["actions"], dtype=np.float32)[: args.steps]
-                episode_seed = args.seed + episode_offset
+                episode_seed = int(demo_metadata[demo_key]["episode_seed"])
                 task.reset(seed=episode_seed)
-                restore_demo_initial_state(task, demo)
+                restore_demo_initial_state(task, demo, descriptor)
+                task_features = (
+                    FeatureSpecV1(
+                        key="task_state",
+                        role=FeatureRole.AUXILIARY,
+                        dtype="float32",
+                        shape=(len(descriptor.task_state_names),),
+                        names=descriptor.task_state_names,
+                    ),
+                )
                 writer = EpisodeWriter(
                     args.data_dir,
                     fps=args.fps,
@@ -296,7 +517,8 @@ def collect(args: argparse.Namespace) -> list[Path]:
                     control_source="scripted_maniskill_demo_replay",
                     features=franka_feature_specs(
                         tuple(f"upstream_pd_joint_delta_pos/{index}" for index in range(8))
-                    ),
+                    )
+                    + task_features,
                     action_profile=FRANKA_JOINT8_ACTION,
                     camera_names=("base",),
                     camera_calibration=camera_calibration,
@@ -304,13 +526,16 @@ def collect(args: argparse.Namespace) -> list[Path]:
                         scene_id=args.scene,
                         seed=episode_seed,
                         parameters={
-                            "upstream_task": ROBOVERSE_TASKS[args.scene],
+                            "upstream_task": descriptor.task_id,
+                            "upstream_gym_id": descriptor.gym_id,
                             "simulator": "sapien3",
                             "control_policy": "maniskill_official_demo_replay_v1",
                             "control_mode": "pd_joint_delta_pos",
                             "source_demo_trajectory": demo_key,
                             "source_demo_success": True,
                             "source_demo_sha256": demo_sha256,
+                            "source_demo_metadata_sha256": demo_metadata_sha256,
+                            "seed_semantics": "maniskill_source_episode_seed",
                             "episode_steps": len(actions),
                             "safety_filter": "identity_simulation_only",
                             "camera_profile_id": profile["id"],
@@ -324,18 +549,28 @@ def collect(args: argparse.Namespace) -> list[Path]:
                         ],
                     ),
                     software=software,
-                    lineage=AugmentationLineageV1(generation_method="scripted"),
+                    lineage=AugmentationLineageV1(
+                        generation_method="scripted",
+                        randomization_seed=episode_seed,
+                        resolved_parameters={
+                            "source_demo_trajectory": demo_key,
+                            "source_episode_seed": episode_seed,
+                            "demo_offset": args.demo_offset,
+                        },
+                    ),
                 )
                 native_arrays: dict[str, list[np.ndarray]] = {
                     "normalized_action": [],
                     "absolute_joint_target": [],
                     "joint_state": [],
-                    "cube_pose": [],
-                    "cube_velocity": [],
+                    "task_state": [],
+                    "object_pose": [],
+                    "object_velocity": [],
                 }
-                writer.start(ROBOVERSE_TASKS[args.scene])
+                writer.start(descriptor.task_id)
                 succeeded = False
                 last_reward = 0.0
+                metric_history: list[dict[str, float | bool]] = []
                 try:
                     for step, normalized in enumerate(actions):
                         if stop_requested:
@@ -345,7 +580,12 @@ def collect(args: argparse.Namespace) -> list[Path]:
                             normalized[None, :]
                         )
                         state = extract_native_state(task)
-                        object_pose, object_velocity = _object_observation(task)
+                        object_pose, object_velocity = _object_observation(
+                            task, descriptor
+                        )
+                        task_state = _task_state(task, descriptor)
+                        step_metrics = task_step_metrics(task, descriptor)
+                        metric_history.append(step_metrics)
                         succeeded = succeeded or bool(_as_numpy(terminated).reshape(-1)[0])
                         last_reward = float(_as_numpy(reward).reshape(-1)[0])
                         writer.add_frame(
@@ -357,6 +597,7 @@ def collect(args: argparse.Namespace) -> list[Path]:
                                 "requested_action": policy_action_from_native(absolute_target),
                                 "safe_action": policy_action_from_native(absolute_target),
                                 "applied_action": policy_action_from_native(absolute_target),
+                                "task_state": task_state,
                                 "object_pose": object_pose,
                                 "object_velocity": object_velocity,
                             },
@@ -367,30 +608,36 @@ def collect(args: argparse.Namespace) -> list[Path]:
                             ("normalized_action", normalized),
                             ("absolute_joint_target", absolute_target),
                             ("joint_state", state),
-                            ("cube_pose", object_pose),
-                            ("cube_velocity", object_velocity),
+                            ("task_state", task_state),
+                            ("object_pose", object_pose),
+                            ("object_velocity", object_velocity),
                         ):
                             native_arrays[name].append(np.asarray(value))
                         if bool(_as_numpy(timeout).reshape(-1)[0]):
                             break
-                    evaluator = EvaluatorResultV1(
-                        evaluator_id="roboverse_maniskill_success",
-                        evaluator_version="native_v1",
-                        available=True,
-                        success=succeeded,
-                        metrics={
+                    metrics = summarize_task_metrics(descriptor, metric_history)
+                    metrics.update(
+                        {
                             "last_dense_reward": last_reward,
                             "source_demo_success": True,
                             "source_demo_trajectory": demo_key,
+                            "source_episode_seed": episode_seed,
                             "replay_steps": len(native_arrays["normalized_action"]),
-                        },
+                        }
+                    )
+                    evaluator = EvaluatorResultV1(
+                        evaluator_id=f"roboverse_maniskill_{descriptor.evaluator_kind}_success",
+                        evaluator_version="native_v2",
+                        available=True,
+                        success=succeeded,
+                        metrics=metrics,
                     )
                     final = writer.finish(
                         operator_success=None,
                         evaluator=evaluator,
                         failure_reason=None
                         if succeeded
-                        else "automatic_criterion_not_met",
+                        else classify_task_failure(descriptor, metrics),
                     )
                     _write_native_payload(final, native_arrays)
                     saved.append(final)
@@ -414,8 +661,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fps", type=int, default=20)
     parser.add_argument("--width", type=int, default=640)
     parser.add_argument("--height", type=int, default=480)
-    parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--demo-file", type=Path, required=True)
+    parser.add_argument("--demo-metadata-file", type=Path, required=True)
+    parser.add_argument("--demo-offset", type=int, default=0)
     parser.add_argument("--camera-profile-file", type=Path, required=True)
     return parser
 

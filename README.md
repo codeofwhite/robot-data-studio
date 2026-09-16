@@ -59,15 +59,40 @@ logical `cuda:0`, so the worker does not create contexts on unselected GPUs. Exi
 legacy ClothTwin manifests and the engine-neutral `robot_data_episode` v1 format
 are both validated before indexing. Raw manifests are not rewritten by QA.
 
-### RoboVerse PickCube batch
+### RoboVerse ManiSkill batch
 
-The RoboVerse P0 worker runs `maniskill_pick_cube_native` as a headless scripted
-batch in its own environment. A session generates 1 to 10 episodes at a fixed
-20 Hz and 50 steps per episode using ManiSkill's native Panda demonstration
-replay. GPU selection remains meaningful because the worker receives
+The RoboVerse worker runs PickCube, PushCube, or StackCube as an isolated
+headless scripted batch. A session generates 1 to 10 episodes at a fixed 20 Hz
+using official ManiSkill Panda `pd_joint_delta_pos` demonstrations. The task
+descriptor selects the demo H5/JSON files, native task, 50-step horizon, actor
+mapping, task-state schema, and evaluator. `episode_steps` may shorten a replay
+for failure-path testing, while `demo_offset` selects a different consecutive
+window of successful source trajectories.
+
+Each saved Episode records the official demonstration trajectory, its original
+`episode_seed` from ManiSkill metadata, hashes for both source files, and
+task-level evaluator metrics. Restoring the full demonstration state preserves
+the original randomized initial condition; Studio does not relabel a locally
+incremented counter as a new task seed. PickCube diagnoses grasp/goal/static
+failures, PushCube diagnoses goal/surface failures, and StackCube diagnoses
+grasp/alignment/release/stability failures.
+
+GPU selection remains meaningful because the worker receives
 `CUDA_VISIBLE_DEVICES`, but it has no Collector port and does not support GELLO
 or keyboard control. When the process completes, scan the session and use the
 same Studio QA, accepted-only export, and consumer-smoke flow as other engines.
+
+The PickCube demo is already cached in this checkout. Fetch the two additional
+official datasets into the same cache before starting PushCube or StackCube:
+
+```bash
+/data/zhanghejun/envs/roboverse-maniskill/bin/python \
+  -m mani_skill.utils.download_demo PushCube-v1 \
+  -o /data/zhanghejun/robot-data-studio/data/cache/maniskill
+/data/zhanghejun/envs/roboverse-maniskill/bin/python \
+  -m mani_skill.utils.download_demo StackCube-v1 \
+  -o /data/zhanghejun/robot-data-studio/data/cache/maniskill
+```
 
 ## Worker runtime reliability
 

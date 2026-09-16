@@ -188,7 +188,7 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
                         ? 'RoboVerse 正在隔离环境中批量生成；完成后点击“扫描 Episodes”进入 QA。'
                         : '在新标签页打开实时画面。GELLO 模式下，在该页面选择串口并连接。'
                       : batchWorker
-                        ? '启动后运行 ManiSkill PickCube 原生 scripted rollout；完成后扫描 Episodes 进入 QA。'
+                        ? `启动后运行 ${session?.scene_id ?? 'ManiSkill'} 原生 scripted rollout；每条 Episode 保留官方 demo 轨迹与真实 source seed，完成后扫描进入 QA。`
                         : '启动前请确认 GPU 与端口空闲。启动不会自动打开串口或下发机器人动作。'}
                   </p>
                   </div>
@@ -246,7 +246,7 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
                 <p>• 引擎、场景和控制来源均来自后端 allowlist。</p>
                 <p>• 同一时间只运行一个 Studio 管理的仿真 Worker。</p>
                 <p>• GELLO 限位、slew 和 watchdog 保留在引擎运行时。</p>
-                {batchWorker && <p>• RoboVerse P0 使用仿真 identity safety filter，不连接 GELLO 或真实硬件。</p>}
+                {batchWorker && <p>• RoboVerse scripted batch 使用仿真 identity safety filter，不连接 GELLO 或真实硬件。</p>}
                 {session?.engine_id === 'isaac_sim' && <p>• Isaac 空场景没有自动成功判据，保存为 unavailable。</p>}
                 {worker?.log_path && <p className="break-all">• Log: {worker.log_path}</p>}
               </CardContent>

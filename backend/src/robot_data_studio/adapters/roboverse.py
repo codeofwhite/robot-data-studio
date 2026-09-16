@@ -6,21 +6,11 @@ from typing import Any
 
 from ..camera_profiles import validate_session_camera_profile
 from ..config import CONTRACTS_SRC, PROJECT_ROOT, settings
+from ..roboverse_tasks import ROBOVERSE_TASKS, task_descriptor
 from .base import CollectionAdapter, WorkerLaunch, WorkerReadiness
 
 
-SCENES = {
-    "maniskill_pick_cube_native": {
-        "label": "ManiSkill PickCube Native",
-        "description": (
-            "RoboVerse MetaSim 的 ManiSkill Panda PickCube 原生任务；"
-            "使用官方 ManiSkill pd_joint_delta_pos demonstration 验证采集、QA 与导出链路。"
-        ),
-        "family": "rigid_pick",
-        "automatic_outcome": True,
-        "parameters": [],
-    }
-}
+SCENES = {scene_id: descriptor.studio_scene() for scene_id, descriptor in ROBOVERSE_TASKS.items()}
 
 
 class RoboVerseAdapter(CollectionAdapter):
@@ -60,12 +50,12 @@ class RoboVerseAdapter(CollectionAdapter):
 
     def validate_config(self, config: dict[str, Any]) -> None:
         if config.get("control_mode") != "scripted":
-            raise ValueError("RoboVerse P0 supports scripted control only")
+            raise ValueError("RoboVerse supports scripted control only")
         if config.get("scene_id") not in self.scenes:
             raise ValueError("unsupported RoboVerse scene")
         target_episodes = int(config.get("target_episodes", 0))
         if not self.min_episodes <= target_episodes <= self.max_episodes:
-            raise ValueError("RoboVerse P0 supports 1 to 10 episodes per session")
+            raise ValueError("RoboVerse supports 1 to 10 episodes per session")
         allowed_params = {
             item["key"] for item in self.scenes[config["scene_id"]]["parameters"]
         }
@@ -74,6 +64,17 @@ class RoboVerseAdapter(CollectionAdapter):
             raise ValueError(
                 "RoboVerse scene parameter is not allowlisted: " + ", ".join(unknown)
             )
+        descriptor = task_descriptor(str(config["scene_id"]))
+        episode_steps = self._integer_parameter(
+            config, "episode_steps", descriptor.max_steps
+        )
+        if not 2 <= episode_steps <= descriptor.max_steps:
+            raise ValueError(
+                f"episode_steps must be between 2 and {descriptor.max_steps}"
+            )
+        demo_offset = self._integer_parameter(config, "demo_offset", 0)
+        if not 0 <= demo_offset <= 100_000:
+            raise ValueError("demo_offset must be between 0 and 100000")
         if int(config.get("control_fps", 20)) != 20:
             raise ValueError("RoboVerse ManiSkill native task requires control_fps=20")
         profile_id = str(config.get("camera_profile_id", "roboverse_sapien_base_v1"))
@@ -83,8 +84,21 @@ class RoboVerseAdapter(CollectionAdapter):
             profile_id, width=int(config["width"]), height=int(config["height"])
         )
 
+    @staticmethod
+    def _integer_parameter(config: dict[str, Any], key: str, default: int) -> int:
+        raw = config.get("scene_params", {}).get(key, default)
+        value = int(raw)
+        if value != raw:
+            raise ValueError(f"{key} must be an integer")
+        return value
+
     def build_collect_command(self, config: dict[str, Any], output_dir: Path) -> list[str]:
         self.validate_config(config)
+        descriptor = task_descriptor(str(config["scene_id"]))
+        episode_steps = self._integer_parameter(
+            config, "episode_steps", descriptor.max_steps
+        )
+        demo_offset = self._integer_parameter(config, "demo_offset", 0)
         return [
             str(settings.roboverse_python),
             "-m",
@@ -96,17 +110,19 @@ class RoboVerseAdapter(CollectionAdapter):
             "--episodes",
             str(config["target_episodes"]),
             "--steps",
-            "50",
+            str(episode_steps),
             "--fps",
             str(config["control_fps"]),
             "--width",
             str(config["width"]),
             "--height",
             str(config["height"]),
-            "--seed",
-            "0",
             "--demo-file",
-            str(settings.roboverse_pickcube_demo),
+            str(settings.roboverse_demo_root / descriptor.demo_h5),
+            "--demo-metadata-file",
+            str(settings.roboverse_demo_root / descriptor.demo_metadata),
+            "--demo-offset",
+            str(demo_offset),
             "--camera-profile-file",
             str(
                 validate_session_camera_profile(
