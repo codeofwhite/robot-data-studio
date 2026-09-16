@@ -187,7 +187,7 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
                         ? 'RoboVerse 正在隔离环境中批量生成；完成后点击“扫描 Episodes”进入 QA。'
                         : '在新标签页打开实时画面。GELLO 模式下，在该页面选择串口并连接。'
                       : batchWorker
-                        ? '启动后运行 allowlist 中的 scripted probe；该 P0 不代表成功任务示教。'
+                        ? '启动后运行 ManiSkill PickCube 原生 scripted rollout；完成后扫描 Episodes 进入 QA。'
                         : '启动前请确认 GPU 与端口空闲。启动不会自动打开串口或下发机器人动作。'}
                   </p>
                   </div>

@@ -45,6 +45,19 @@ def test_roboverse_launch_is_isolated_and_allowlisted() -> None:
     assert str(settings.roboverse_root / "packages" / "metasim") in python_path
 
 
+def test_roboverse_descriptor_exposes_session_constraints() -> None:
+    descriptor = RoboVerseAdapter().descriptor()
+
+    assert descriptor["session_limits"]["target_episodes"] == {
+        "minimum": 1,
+        "maximum": 10,
+        "default": 1,
+    }
+    assert descriptor["runtime"]["headless"] is True
+    assert descriptor["runtime"]["uses_gpu"] is True
+    assert descriptor["runtime"]["uses_collector_port"] is False
+
+
 @pytest.mark.parametrize(
     ("updates", "message"),
     [

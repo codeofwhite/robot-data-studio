@@ -37,6 +37,18 @@ type Engine = {
     parameters: SceneParameter[];
   }>;
   camera_profiles: Array<{ id: string; label: string; match_level: string; roles: string[] }>;
+  session_limits?: {
+    target_episodes?: {
+      minimum: number;
+      maximum: number;
+      default: number;
+    };
+  };
+  runtime?: {
+    headless: boolean;
+    uses_gpu: boolean;
+    uses_collector_port: boolean;
+  };
 };
 
 export default function NewSessionPage() {
@@ -64,13 +76,23 @@ export default function NewSessionPage() {
     [selectedEngine],
   );
   const selected = useMemo(() => scenes.find((item) => item.id === scene), [scene, scenes]);
+  const episodeLimits = selectedEngine?.session_limits?.target_episodes ?? {
+    minimum: 1,
+    maximum: 10000,
+    default: selectedEngine?.capabilities.batch_generation ? 1 : 50,
+  };
+  const usesCollectorPort = selectedEngine?.runtime?.uses_collector_port ?? true;
+  const targetValid = target >= episodeLimits.minimum && target <= episodeLimits.maximum;
 
   function selectDescriptor(descriptor: Engine) {
     setEngine(descriptor.id);
     setScene(Object.keys(descriptor.scenes)[0] ?? '');
     setMode(descriptor.control_modes.includes('gello') ? 'gello' : descriptor.control_modes[0]);
     setCameraProfile(descriptor.camera_profiles[0]?.id ?? '');
-    setTarget(descriptor.capabilities.batch_generation ? 1 : 50);
+    setTarget(
+      descriptor.session_limits?.target_episodes?.default ??
+        (descriptor.capabilities.batch_generation ? 1 : 50),
+    );
     setFps(descriptor.capabilities.batch_generation ? 20 : 10);
     setAdvanced(false);
   }
@@ -94,6 +116,12 @@ export default function NewSessionPage() {
 
   async function submit() {
     if (!selectedEngine || !selected) return;
+    if (!targetValid) {
+      setError(
+        `目标 Episode 数必须在 ${episodeLimits.minimum}～${episodeLimits.maximum} 之间`,
+      );
+      return;
+    }
     setBusy(true);
     setError(undefined);
     try {
@@ -105,7 +133,7 @@ export default function NewSessionPage() {
           scene_id: scene,
           control_mode: mode,
           target_episodes: target,
-          port,
+          ...(usesCollectorPort ? { port } : {}),
           gpu,
           control_fps: fps,
           sim_dt: 0.01,
@@ -159,7 +187,18 @@ export default function NewSessionPage() {
               <CardHeader><CardTitle>2. 数据与任务</CardTitle><CardDescription>原始 Episode 写入 Studio 数据目录，引擎仓库不保存采集结果。</CardDescription></CardHeader>
               <CardContent className="grid gap-4 sm:grid-cols-2">
                 <Field label="Dataset 名称"><Input value={dataset} onChange={(event) => setDataset(event.target.value)} /></Field>
-                <Field label="目标 Episode 数"><Input type="number" min={1} max={10000} value={target} onChange={(event) => setTarget(Number(event.target.value))} /></Field>
+                <Field label="目标 Episode 数">
+                  <Input
+                    type="number"
+                    min={episodeLimits.minimum}
+                    max={episodeLimits.maximum}
+                    value={target}
+                    onChange={(event) => setTarget(Number(event.target.value))}
+                  />
+                  <p className={`text-xs ${targetValid ? 'text-muted-foreground' : 'text-destructive'}`}>
+                    当前引擎允许 {episodeLimits.minimum}～{episodeLimits.maximum} 个 Episode
+                  </p>
+                </Field>
                 <div className="sm:col-span-2">
                   <Label className="mb-2">场景插件</Label>
                   <NativeSelect className="w-full" value={scene} onChange={(event) => setScene(event.target.value)}>
@@ -190,9 +229,9 @@ export default function NewSessionPage() {
             <Card className="instrument-card">
               <CardHeader><CardTitle>4. 运行参数</CardTitle><CardDescription>参数控件完全由当前 ScenePlugin 描述生成。</CardDescription></CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <Field label="GPU"><Input type="number" min={0} value={gpu} onChange={(event) => setGpu(Number(event.target.value))} /></Field>
-                  <Field label="Collector 端口"><Input type="number" min={1024} value={port} onChange={(event) => setPort(Number(event.target.value))} /></Field>
+                <div className={`grid gap-4 ${usesCollectorPort ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
+                  <Field label={selectedEngine?.runtime?.headless ? 'Worker GPU' : 'GPU'}><Input type="number" min={0} value={gpu} onChange={(event) => setGpu(Number(event.target.value))} /></Field>
+                  {usesCollectorPort && <Field label="Collector 端口"><Input type="number" min={1024} value={port} onChange={(event) => setPort(Number(event.target.value))} /></Field>}
                   <Field label="控制频率 (Hz)"><Input type="number" min={1} max={120} value={fps} onChange={(event) => setFps(Number(event.target.value))} /></Field>
                 </div>
                 {Boolean(selected?.parameters.length) && (
@@ -231,9 +270,9 @@ export default function NewSessionPage() {
                 <Summary label="Control" value={mode.toUpperCase()} />
                 <Summary label="Camera" value={selectedEngine?.camera_profiles.find((item) => item.id === cameraProfile)?.label ?? '—'} />
                 <Summary label="Quota" value={`${target} episodes`} />
-                <Summary label="Worker" value={`GPU ${gpu} · :${port}`} />
+                <Summary label="Worker" value={usesCollectorPort ? `GPU ${gpu} · :${port}` : `GPU ${gpu} · headless batch`} />
                 <div className="rounded-lg border border-primary/25 bg-primary/5 p-3 text-xs leading-5 text-muted-foreground"><Check className="mr-1 inline size-3.5 text-primary" />状态、动作、图像、时间戳和引擎 provenance 会进入统一 Episode 索引。</div>
-                <Button className="w-full" size="lg" disabled={busy || !dataset.trim() || !selectedEngine || !selected} onClick={submit}>{busy ? '创建中…' : '创建会话'}<ArrowRight /></Button>
+                <Button className="w-full" size="lg" disabled={busy || !dataset.trim() || !selectedEngine || !selected || !targetValid} onClick={submit}>{busy ? '创建中…' : '创建会话'}<ArrowRight /></Button>
               </CardContent>
             </Card>
           </aside>

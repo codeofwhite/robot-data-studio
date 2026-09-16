@@ -26,6 +26,8 @@ SCENES = {
 class RoboVerseAdapter(CollectionAdapter):
     adapter_id = "roboverse"
     label = "RoboVerse / MetaSim"
+    min_episodes = 1
+    max_episodes = 10
     scenes = SCENES
     control_modes = ("scripted",)
     camera_profile_ids = ("roboverse_sapien_base_v1",)
@@ -42,6 +44,18 @@ class RoboVerseAdapter(CollectionAdapter):
     def descriptor(self) -> dict[str, Any]:
         descriptor = super().descriptor()
         descriptor["worker"]["worker_id"] = "roboverse_maniskill_worker"
+        descriptor["session_limits"] = {
+            "target_episodes": {
+                "minimum": self.min_episodes,
+                "maximum": self.max_episodes,
+                "default": 1,
+            }
+        }
+        descriptor["runtime"] = {
+            "headless": True,
+            "uses_gpu": True,
+            "uses_collector_port": False,
+        }
         return descriptor
 
     def validate_config(self, config: dict[str, Any]) -> None:
@@ -49,7 +63,8 @@ class RoboVerseAdapter(CollectionAdapter):
             raise ValueError("RoboVerse P0 supports scripted control only")
         if config.get("scene_id") not in self.scenes:
             raise ValueError("unsupported RoboVerse scene")
-        if int(config.get("target_episodes", 0)) not in range(1, 11):
+        target_episodes = int(config.get("target_episodes", 0))
+        if not self.min_episodes <= target_episodes <= self.max_episodes:
             raise ValueError("RoboVerse P0 supports 1 to 10 episodes per session")
         allowed_params = {
             item["key"] for item in self.scenes[config["scene_id"]]["parameters"]
