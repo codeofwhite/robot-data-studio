@@ -1,11 +1,11 @@
 # RoboData Studio
 
-Local-first, engine-neutral simulation data collection platform. Genesis/ClothTwin
-and Isaac Sim/Isaac Lab are the first engine plugins. The Studio owns sessions,
-worker lifecycle, a common Episode contract and indexing; each engine retains its
-native simulation, rendering and safety implementation. The versioned schemas and
-runtime-light writer/validator live in `packages/robot-data-contracts`; workers
-depend on that package and never import Studio.
+Local-first, engine-neutral simulation data collection platform. Genesis/ClothTwin,
+Isaac Sim/Isaac Lab, and RoboVerse run as isolated engine workers. The Studio owns
+sessions, worker lifecycle, a common Episode contract and indexing; each engine
+retains its native simulation, rendering and safety implementation. The versioned
+schemas and runtime-light writer/validator live in `packages/robot-data-contracts`;
+workers depend on that package and never import Studio.
 
 ## Start locally
 
@@ -42,14 +42,15 @@ Keep the same local port numbers so the browser URLs remain
 ## Collection flow
 
 1. Create a session and choose an engine, scene, control source, and Sensor Profile.
-2. Confirm GPU, port, control frequency, and optional cloth parameters.
+2. Confirm the applicable GPU, Collector port, control frequency, and optional scene parameters.
 3. Start the allowlisted engine worker from the session page. Studio permits one managed simulator worker at a time.
-4. Open the Collector. In GELLO mode, connect Web Serial there; Studio never proxies the control packets.
-5. Save episodes through the engine console, then scan the session directory.
-6. Mark QA accepted/rejected. Exports use only accepted episodes by default.
+4. For interactive Genesis/Isaac sessions, open the Collector. In GELLO mode, connect Web Serial there; Studio never proxies the control packets.
+5. For a headless RoboVerse session, wait for the scripted batch to finish. It does not expose a Collector port.
+6. Save interactive episodes or finish the headless batch, then scan the session directory.
+7. Mark QA accepted/rejected. Exports use only accepted episodes by default.
 
-The worker launcher builds argv arrays, never shell command strings. Both
-simulator workers are launched from `gello-remote`. Genesis uses its dedicated
+The worker launcher builds argv arrays, never shell command strings. Genesis and
+Isaac workers are launched from `gello-remote`. Genesis uses its dedicated
 interpreter, loads ClothTwin's scene implementation, and receives
 `CUDA_VISIBLE_DEVICES`; Isaac Sim uses the Isaac Lab
 launcher with `--gpu-id` and a one-device `CUDA_VISIBLE_DEVICES` mask. Isaac
@@ -57,6 +58,16 @@ routes RTX/Vulkan by the selected physical id and Isaac Lab/PhysX by the masked
 logical `cuda:0`, so the worker does not create contexts on unselected GPUs. Existing
 legacy ClothTwin manifests and the engine-neutral `robot_data_episode` v1 format
 are both validated before indexing. Raw manifests are not rewritten by QA.
+
+### RoboVerse PickCube batch
+
+The RoboVerse P0 worker runs `maniskill_pick_cube_native` as a headless scripted
+batch in its own environment. A session generates 1 to 10 episodes at a fixed
+20 Hz and 50 steps per episode using ManiSkill's native Panda demonstration
+replay. GPU selection remains meaningful because the worker receives
+`CUDA_VISIBLE_DEVICES`, but it has no Collector port and does not support GELLO
+or keyboard control. When the process completes, scan the session and use the
+same Studio QA, accepted-only export, and consumer-smoke flow as other engines.
 
 The checked-in `lab_d435i_dual_v1` Sensor Profile selects the active laboratory
 D435i pair: `261722075807` for `agentview` and `261622075579` for `wrist`.
@@ -76,9 +87,14 @@ Because `franka_empty` has no task evaluator, its automatic outcome is explicitl
 ```bash
 cd /data/zhanghejun/robot-data-studio
 PYTHONPATH=backend/src:packages/robot-data-contracts/src \
-  backend/.venv/bin/python -m pytest -q backend/tests packages/robot-data-contracts/tests
+  backend/.venv/bin/python -m pytest -q backend/tests
+
+PYTHONPATH=packages/robot-data-contracts/src \
+  /home/zhanghejun/miniconda3/envs/genesis/bin/python \
+  -m pytest -q packages/robot-data-contracts/tests
 
 cd /data/zhanghejun/robot-data-studio
+npm run lint
 npm run build
 ```
 
