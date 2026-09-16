@@ -39,6 +39,10 @@ def test_genesis_worker_is_launched_from_gello_remote():
     assert launch.cwd.name == "gello-remote"
     assert launch.env_updates["CUDA_VISIBLE_DEVICES"] == "2"
     assert "ClothTwin" in launch.env_updates["PYTHONPATH"]
+    assert launch.readiness.kind == "tcp"
+    assert launch.readiness.port == 8080
+    assert "gpu:2" in launch.resources
+    assert "tcp:8080" in launch.resources
 
 
 def test_rejects_unallowlisted_scene_parameter():
@@ -112,6 +116,10 @@ def test_isaac_launch_uses_gpu_id_and_single_cuda_visibility():
     kit_args = launch.command[launch.command.index("--kit_args") + 1]
     assert "--/app/window/width=960" in kit_args
     assert "--/app/window/height=720" in kit_args
+    assert launch.readiness.kind == "tcp"
+    assert launch.readiness.timeout_s == 600
+    assert "gpu:6" in launch.resources
+    assert "tcp:8080" in launch.resources
 
 
 def test_isaac_keyboard_launch_is_allowlisted() -> None:

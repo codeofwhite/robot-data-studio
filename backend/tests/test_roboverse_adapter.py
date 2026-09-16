@@ -39,6 +39,9 @@ def test_roboverse_launch_is_isolated_and_allowlisted() -> None:
     )
     assert launch.cwd == settings.roboverse_root
     assert launch.env_updates["CUDA_VISIBLE_DEVICES"] == "3"
+    assert launch.readiness.kind == "marker"
+    assert "gpu:3" in launch.resources
+    assert not any(resource.startswith("tcp:") for resource in launch.resources)
     python_path = launch.env_updates["PYTHONPATH"].split(":")
     assert str(PROJECT_ROOT / "backend" / "src") in python_path
     assert str(CONTRACTS_SRC) in python_path

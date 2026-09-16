@@ -11,11 +11,31 @@ from ..camera_profiles import camera_profile_descriptors
 
 
 @dataclass(frozen=True)
+class WorkerReadiness:
+    kind: str
+    timeout_s: float
+    host: str | None = None
+    port: int | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "timeout_s": self.timeout_s,
+            "host": self.host,
+            "port": self.port,
+        }
+
+
+@dataclass(frozen=True)
 class WorkerLaunch:
     command: list[str]
     cwd: Path
     env_updates: dict[str, str] = field(default_factory=dict)
     unset_env: tuple[str, ...] = ()
+    readiness: WorkerReadiness = field(
+        default_factory=lambda: WorkerReadiness(kind="process", timeout_s=10.0)
+    )
+    resources: tuple[str, ...] = ()
 
 
 class CollectionAdapter(ABC):

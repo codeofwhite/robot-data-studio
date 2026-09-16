@@ -5,12 +5,17 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .db import initialize
 from .routes import consumer_smokes, datasets, episodes, exports, health, sessions
+from .services.worker_manager import worker_manager
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     initialize()
-    yield
+    worker_manager.start_monitor()
+    try:
+        yield
+    finally:
+        worker_manager.shutdown_monitor()
 
 
 app = FastAPI(title="RoboData Studio API", version="0.1.0", lifespan=lifespan)

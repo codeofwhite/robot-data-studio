@@ -6,6 +6,7 @@ import hashlib
 import importlib.metadata
 import json
 import math
+import os
 import signal
 import sys
 from pathlib import Path
@@ -118,6 +119,23 @@ def _asset_sha256(path: Path) -> str:
         for chunk in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _announce_ready() -> None:
+    raw_path = os.environ.get("ROBOT_DATA_STUDIO_READY_FILE")
+    if not raw_path:
+        return
+    path = Path(raw_path)
+    payload = {
+        "run_id": os.environ.get("ROBOT_DATA_STUDIO_RUN_ID"),
+        "worker_id": "roboverse_maniskill_worker",
+        "ready": True,
+        "pid": os.getpid(),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    temporary.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    os.replace(temporary, path)
 
 
 def successful_demo_keys(demos: Any, count: int) -> list[str]:
@@ -251,6 +269,7 @@ def collect(args: argparse.Namespace) -> list[Path]:
     }
     software = _software_provenance()
     task = _build_task(args.width, args.height)
+    _announce_ready()
     saved: list[Path] = []
     stop_requested = False
 

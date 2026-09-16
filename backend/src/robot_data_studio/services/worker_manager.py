@@ -2,112 +2,369 @@ from __future__ import annotations
 
 import os
 import signal
+import socket
 import subprocess
+import sys
 import threading
-from dataclasses import dataclass
+import time
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from ..adapters import get_engine
-from .session_service import get_session, update_worker
+from .session_service import get_session
+from .worker_runtime import (
+    ACTIVE_STATUSES,
+    active_runs,
+    create_run,
+    get_run,
+    identity_matches,
+    latest_run,
+    mark_run,
+    process_identity,
+    read_state,
+    reconcile_legacy_sessions,
+    run_resources,
+    set_supervisor_identity,
+    update_run_from_state,
+    write_json_atomic,
+)
 
 
-@dataclass
-class Worker:
-    process: subprocess.Popen
-    log_path: Path
-    engine_id: str
+SUPERVISOR_PATH = Path(__file__).resolve().parents[1] / "worker_supervisor.py"
 
 
 class WorkerManager:
-    def __init__(self) -> None:
-        self._workers: dict[str, Worker] = {}
+    def __init__(
+        self,
+        *,
+        monitor_interval_s: float = 1.0,
+        heartbeat_stale_s: float = 6.0,
+        stop_timeout_s: float = 8.0,
+        kill_timeout_s: float = 3.0,
+    ) -> None:
+        self.monitor_interval_s = monitor_interval_s
+        self.heartbeat_stale_s = heartbeat_stale_s
+        self.stop_timeout_s = stop_timeout_s
+        self.kill_timeout_s = kill_timeout_s
         self._lock = threading.Lock()
+        self._monitor_stop = threading.Event()
+        self._monitor_thread: threading.Thread | None = None
 
-    def command_for(self, session: dict) -> list[str]:
+    def command_for(self, session: dict[str, Any]) -> list[str]:
         adapter = get_engine(session["engine_id"])
         launch = adapter.build_worker_launch(
             session["config"], Path(session["config"]["episode_root"])
         )
         return launch.command
 
-    def _active_worker(self, *, excluding: str | None = None) -> tuple[str, Worker] | None:
-        for managed_session_id, worker in self._workers.items():
-            if managed_session_id != excluding and worker.process.poll() is None:
-                return managed_session_id, worker
-        return None
+    def _format_run(self, run: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "status": run["status"],
+            "run_id": run["run_id"],
+            "pid": run.get("supervisor_pid"),
+            "supervisor_pid": run.get("supervisor_pid"),
+            "child_pid": run.get("child_pid"),
+            "return_code": run.get("return_code"),
+            "ready_at": run.get("ready_at"),
+            "heartbeat_at": run.get("heartbeat_at"),
+            "error": run.get("error"),
+            "log_path": run.get("log_path"),
+            "engine_id": run.get("engine_id"),
+            "resources": run_resources(run["run_id"]),
+            "command": run.get("command"),
+        }
+
+    def _heartbeat_stale(self, heartbeat_at: str | None) -> bool:
+        if not heartbeat_at:
+            return False
+        timestamp = datetime.fromisoformat(heartbeat_at)
+        return (datetime.now(timezone.utc) - timestamp).total_seconds() > self.heartbeat_stale_s
+
+    def _signal_verified(self, run: dict[str, Any], sig: signal.Signals) -> bool:
+        pid = run.get("supervisor_pid")
+        if not identity_matches(
+            pid, run.get("supervisor_boot_id"), run.get("supervisor_start_ticks")
+        ):
+            return False
+        try:
+            os.killpg(int(pid), sig)
+        except ProcessLookupError:
+            return False
+        return True
+
+    def _terminate_unresponsive(self, run: dict[str, Any]) -> None:
+        self._signal_verified(run, signal.SIGTERM)
+        deadline = time.monotonic() + min(1.0, self.stop_timeout_s)
+        while time.monotonic() < deadline:
+            if not identity_matches(
+                run.get("supervisor_pid"),
+                run.get("supervisor_boot_id"),
+                run.get("supervisor_start_ticks"),
+            ):
+                return
+            time.sleep(0.05)
+        self._signal_verified(run, signal.SIGKILL)
+        deadline = time.monotonic() + self.kill_timeout_s
+        while time.monotonic() < deadline:
+            if not identity_matches(
+                run.get("supervisor_pid"),
+                run.get("supervisor_boot_id"),
+                run.get("supervisor_start_ticks"),
+            ):
+                return
+            time.sleep(0.05)
+        raise RuntimeError(
+            f"unable to terminate unresponsive worker run {run['run_id']}; resources remain locked"
+        )
+
+    def _sync_run(self, run: dict[str, Any]) -> dict[str, Any]:
+        # Terminal database state is authoritative. A supervisor that was killed
+        # may leave an older active state file behind; it must not resurrect a run.
+        if run["status"] not in ACTIVE_STATUSES:
+            return run
+        state = read_state(run["state_path"])
+        if state is not None and state.get("run_id") == run["run_id"]:
+            run = update_run_from_state(run["run_id"], state)
+        if run["status"] not in ACTIVE_STATUSES:
+            return run
+        if not identity_matches(
+            run.get("supervisor_pid"),
+            run.get("supervisor_boot_id"),
+            run.get("supervisor_start_ticks"),
+        ):
+            return mark_run(
+                run["run_id"],
+                status="orphaned",
+                error="supervisor process identity is missing or changed",
+                return_code=run.get("return_code"),
+            )
+        if self._heartbeat_stale(run.get("heartbeat_at")):
+            self._terminate_unresponsive(run)
+            return mark_run(
+                run["run_id"],
+                status="failed",
+                error=f"supervisor heartbeat exceeded {self.heartbeat_stale_s} seconds",
+                return_code=run.get("return_code"),
+            )
+        return run
+
+    def reconcile(self) -> dict[str, Any]:
+        legacy_orphans = reconcile_legacy_sessions()
+        reconciled: list[str] = []
+        for run in active_runs():
+            self._sync_run(run)
+            reconciled.append(run["run_id"])
+        return {"legacy_orphans": legacy_orphans, "reconciled_runs": reconciled}
+
+    def _monitor_loop(self) -> None:
+        while not self._monitor_stop.wait(self.monitor_interval_s):
+            try:
+                self.reconcile()
+            except Exception:
+                # Status endpoints still perform synchronous reconciliation. A monitor
+                # iteration must not permanently kill the background thread.
+                continue
+
+    def start_monitor(self) -> dict[str, Any]:
+        result = self.reconcile()
+        if self._monitor_thread and self._monitor_thread.is_alive():
+            return result
+        self._monitor_stop.clear()
+        self._monitor_thread = threading.Thread(
+            target=self._monitor_loop,
+            name="studio-worker-monitor",
+            daemon=True,
+        )
+        self._monitor_thread.start()
+        return result
+
+    def shutdown_monitor(self) -> None:
+        self._monitor_stop.set()
+        if self._monitor_thread:
+            self._monitor_thread.join(timeout=max(2.0, self.monitor_interval_s * 2))
+        self._monitor_thread = None
+
+    def _preflight_ports(self, resources: tuple[str, ...]) -> None:
+        for resource in resources:
+            protocol, separator, raw_port = resource.partition(":")
+            if not separator or protocol not in {"tcp", "udp"}:
+                continue
+            port = int(raw_port)
+            sock_type = socket.SOCK_STREAM if protocol == "tcp" else socket.SOCK_DGRAM
+            with socket.socket(socket.AF_INET, sock_type) as probe:
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 0)
+                try:
+                    probe.bind(("0.0.0.0", port))
+                except OSError as error:
+                    raise RuntimeError(
+                        f"host {protocol.upper()} port {port} is unavailable: {error}"
+                    ) from error
 
     def is_running(self, session_id: str) -> bool:
-        worker = self._workers.get(session_id)
-        return bool(worker and worker.process.poll() is None)
+        run = latest_run(session_id)
+        if run is None:
+            return False
+        return self._sync_run(run)["status"] in ACTIVE_STATUSES
 
-    def start(self, session_id: str) -> dict:
+    def start(self, session_id: str) -> dict[str, Any]:
         session = get_session(session_id)
         if not session:
             raise KeyError(session_id)
         if session["status"] == "trashed":
             raise ValueError("restore the session before starting its worker")
         with self._lock:
-            existing = self._workers.get(session_id)
-            if existing and existing.process.poll() is None:
-                return {"status": "running", "pid": existing.process.pid, "command": self.command_for(session)}
-            active = self._active_worker(excluding=session_id)
-            if active is not None:
-                active_session_id, active_worker = active
-                raise RuntimeError(
-                    f"simulator worker {active_session_id} is already running "
-                    f"on engine {active_worker.engine_id}; stop it before switching engines"
-                )
+            existing = latest_run(session_id)
+            if existing is not None:
+                existing = self._sync_run(existing)
+                if existing["status"] in ACTIVE_STATUSES:
+                    return self._format_run(existing)
             adapter = get_engine(session["engine_id"])
-            launch = adapter.build_worker_launch(
-                session["config"], Path(session["config"]["episode_root"])
-            )
-            command = launch.command
-            log_path = Path(session["config"]["episode_root"]) / "collector.log"
-            log_file = log_path.open("ab", buffering=0)
-            env = dict(os.environ)
-            for name in launch.unset_env:
-                env.pop(name, None)
-            env.update(launch.env_updates)
-            process = subprocess.Popen(
-                command,
+            output_root = Path(session["config"]["episode_root"])
+            launch = adapter.build_worker_launch(session["config"], output_root)
+            run_id = uuid.uuid4().hex
+            runtime_root = output_root / ".studio" / "runs" / run_id
+            spec_path = runtime_root / "launch.json"
+            state_path = runtime_root / "state.json"
+            marker_path = runtime_root / "ready.json"
+            log_path = output_root / "collector.log"
+            readiness = launch.readiness.as_dict()
+            if readiness["kind"] == "marker":
+                readiness["path"] = str(marker_path)
+            resources = tuple(sorted(set(launch.resources)))
+            create_run(
+                run_id=run_id,
+                session_id=session_id,
+                engine_id=adapter.adapter_id,
+                command=launch.command,
                 cwd=launch.cwd,
-                env=env,
-                stdout=log_file,
-                stderr=subprocess.STDOUT,
-                start_new_session=True,
+                log_path=log_path,
+                state_path=state_path,
+                readiness=readiness,
+                resources=resources,
             )
-            self._workers[session_id] = Worker(process, log_path, adapter.adapter_id)
-            update_worker(session_id, status="starting", pid=process.pid)
-            return {"status": "starting", "pid": process.pid, "command": command, "log_path": str(log_path)}
+            try:
+                self._preflight_ports(resources)
+                spec = {
+                    "run_id": run_id,
+                    "command": launch.command,
+                    "cwd": str(launch.cwd),
+                    "log_path": str(log_path),
+                    "state_path": str(state_path),
+                    "readiness": readiness,
+                    "heartbeat_interval_s": 1.0,
+                    "child_stop_timeout_s": min(5.0, self.stop_timeout_s),
+                }
+                write_json_atomic(spec_path, spec)
+                env = dict(os.environ)
+                for name in launch.unset_env:
+                    env.pop(name, None)
+                env.update(launch.env_updates)
+                env["ROBOT_DATA_STUDIO_RUN_ID"] = run_id
+                if readiness["kind"] == "marker":
+                    env["ROBOT_DATA_STUDIO_READY_FILE"] = str(marker_path)
+                log_path.parent.mkdir(parents=True, exist_ok=True)
+                with log_path.open("ab", buffering=0) as supervisor_log:
+                    process = subprocess.Popen(
+                        [sys.executable, str(SUPERVISOR_PATH), "--spec", str(spec_path)],
+                        cwd=launch.cwd,
+                        env=env,
+                        stdout=supervisor_log,
+                        stderr=subprocess.STDOUT,
+                        start_new_session=True,
+                    )
+                process_boot_id, start_ticks = process_identity(process.pid)
+                set_supervisor_identity(
+                    run_id,
+                    pid=process.pid,
+                    process_boot_id=process_boot_id,
+                    start_ticks=start_ticks,
+                )
+            except BaseException as error:
+                mark_run(
+                    run_id,
+                    status="failed",
+                    error=f"worker supervisor launch failed: {type(error).__name__}: {error}",
+                )
+                raise
+            run = get_run(run_id)
+            assert run is not None
+            return self._format_run(run)
 
-    def status(self, session_id: str) -> dict:
-        worker = self._workers.get(session_id)
-        if not worker:
-            return {"status": "not_managed", "pid": None}
-        return_code = worker.process.poll()
-        status = "running" if return_code is None else ("stopped" if return_code == 0 else "failed")
-        update_worker(session_id, status=status, pid=worker.process.pid if return_code is None else None)
-        return {
-            "status": status,
-            "pid": worker.process.pid,
-            "return_code": return_code,
-            "log_path": str(worker.log_path),
-            "engine_id": worker.engine_id,
-        }
+    def status(self, session_id: str) -> dict[str, Any]:
+        session = get_session(session_id)
+        if not session:
+            raise KeyError(session_id)
+        run = latest_run(session_id)
+        if run is None:
+            if session["status"] in ACTIVE_STATUSES:
+                reconcile_legacy_sessions()
+                session = get_session(session_id) or session
+            return {
+                "status": session["status"] if session["status"] == "orphaned" else "not_managed",
+                "run_id": None,
+                "pid": None,
+                "supervisor_pid": None,
+                "child_pid": None,
+                "engine_id": session["engine_id"],
+                "error": (
+                    "legacy worker state has no durable run record"
+                    if session["status"] == "orphaned"
+                    else None
+                ),
+                "resources": [],
+            }
+        return self._format_run(self._sync_run(run))
 
-    def stop(self, session_id: str) -> dict:
-        worker = self._workers.get(session_id)
-        if not worker or worker.process.poll() is not None:
-            update_worker(session_id, status="stopped", pid=None)
-            return {"status": "stopped", "pid": None}
-        os.killpg(worker.process.pid, signal.SIGTERM)
-        try:
-            worker.process.wait(timeout=8)
-        except subprocess.TimeoutExpired:
-            os.killpg(worker.process.pid, signal.SIGKILL)
-            worker.process.wait(timeout=3)
-        update_worker(session_id, status="stopped", pid=None)
-        return {"status": "stopped", "pid": worker.process.pid}
+    def stop(self, session_id: str) -> dict[str, Any]:
+        session = get_session(session_id)
+        if not session:
+            raise KeyError(session_id)
+        with self._lock:
+            run = latest_run(session_id)
+            if run is None:
+                if session["status"] in ACTIVE_STATUSES:
+                    reconcile_legacy_sessions()
+                return self.status(session_id)
+            run = self._sync_run(run)
+            if run["status"] not in ACTIVE_STATUSES:
+                return self._format_run(run)
+            if not self._signal_verified(run, signal.SIGTERM):
+                run = mark_run(
+                    run["run_id"],
+                    status="orphaned",
+                    error="refused to stop worker because process identity changed",
+                )
+                return self._format_run(run)
+            mark_run(run["run_id"], status="stopping")
+            deadline = time.monotonic() + self.stop_timeout_s
+            while time.monotonic() < deadline:
+                time.sleep(0.1)
+                current = get_run(run["run_id"])
+                assert current is not None
+                current = self._sync_run(current)
+                if current["status"] not in ACTIVE_STATUSES:
+                    return self._format_run(current)
+            current = get_run(run["run_id"])
+            assert current is not None
+            self._signal_verified(current, signal.SIGKILL)
+            kill_deadline = time.monotonic() + self.kill_timeout_s
+            while time.monotonic() < kill_deadline:
+                if not identity_matches(
+                    current.get("supervisor_pid"),
+                    current.get("supervisor_boot_id"),
+                    current.get("supervisor_start_ticks"),
+                ):
+                    break
+                time.sleep(0.05)
+            current = mark_run(
+                run["run_id"],
+                status="stopped",
+                error="worker required SIGKILL after stop timeout",
+                return_code=-int(signal.SIGKILL),
+            )
+            return self._format_run(current)
 
 
 worker_manager = WorkerManager()

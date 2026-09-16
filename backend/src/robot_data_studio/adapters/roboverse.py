@@ -6,7 +6,7 @@ from typing import Any
 
 from ..camera_profiles import validate_session_camera_profile
 from ..config import CONTRACTS_SRC, PROJECT_ROOT, settings
-from .base import CollectionAdapter, WorkerLaunch
+from .base import CollectionAdapter, WorkerLaunch, WorkerReadiness
 
 
 SCENES = {
@@ -135,4 +135,10 @@ class RoboVerseAdapter(CollectionAdapter):
                 "PYTHONDONTWRITEBYTECODE": "1",
                 "SAPIEN_HEADLESS": "1",
             },
+            readiness=WorkerReadiness(kind="marker", timeout_s=180.0),
+            resources=(
+                "simulator:global",
+                f"gpu:{int(config['gpu'])}",
+                f"output:{output_dir.resolve()}",
+            ),
         )

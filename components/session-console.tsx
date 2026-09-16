@@ -28,17 +28,11 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { api } from '@/lib/api';
 import { engineLabel } from '@/lib/engines';
-import type { Session } from '@/lib/types';
+import type { Session, WorkerRuntime } from '@/lib/types';
 
 export function SessionConsole({ sessionId }: { sessionId: string }) {
   const [session, setSession] = useState<Session>();
-  const [worker, setWorker] = useState<{
-    status: string;
-    pid?: number | null;
-    return_code?: number | null;
-    log_path?: string;
-    engine_id?: string;
-  }>();
+  const [worker, setWorker] = useState<WorkerRuntime>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
 
@@ -46,9 +40,7 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
     try {
       const [nextSession, nextWorker] = await Promise.all([
         api<Session>(`/sessions/${sessionId}`),
-        api<{ status: string; pid?: number | null }>(
-          `/sessions/${sessionId}/workers/status`,
-        ),
+        api<WorkerRuntime>(`/sessions/${sessionId}/workers/status`),
       ]);
       setSession(nextSession);
       setWorker(nextWorker);
@@ -93,6 +85,8 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
   const count = session?.episode_count ?? 0;
   const target = session?.target_episodes ?? 1;
   const running = worker?.status === 'running' || worker?.status === 'starting';
+  const active = running || worker?.status === 'stopping';
+  const unhealthy = worker?.status === 'failed' || worker?.status === 'orphaned';
   const batchWorker = session?.engine_id === 'roboverse';
 
   return (
@@ -105,26 +99,33 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
+        {unhealthy && (
+          <Alert variant="destructive">
+            <TriangleAlert />
+            <AlertTitle>Worker {worker.status.toUpperCase()}</AlertTitle>
+            <AlertDescription>{worker.error ?? '运行时状态异常，请查看 worker 日志。'}</AlertDescription>
+          </Alert>
+        )}
 
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <Badge>{running ? 'RUNNING' : session?.status?.toUpperCase()}</Badge>
+              <Badge>{(worker?.status ?? session?.status ?? 'unknown').toUpperCase()}</Badge>
               <span className="font-mono text-xs text-muted-foreground">
                 {sessionId}
               </span>
             </div>
             <h1 className="mt-3 text-2xl font-semibold">{session?.scene_id}</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              {session?.dataset_name} · {engineLabel(session?.engine_id)} · {session?.control_mode.toUpperCase()} · worker
-              PID {worker?.pid ?? '—'}
+              {session?.dataset_name} · {engineLabel(session?.engine_id)} · {session?.control_mode.toUpperCase()} · child
+              PID {worker?.child_pid ?? '—'}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {running ? (
+            {active ? (
               <Button
                 variant="destructive"
-                disabled={busy}
+                disabled={busy || worker?.status === 'stopping'}
                 onClick={() => action('stop')}
               >
                 <Square />停止 Worker
@@ -223,6 +224,22 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
 
             <Card className="instrument-card">
               <CardHeader>
+                <CardTitle>Worker Runtime</CardTitle>
+                <CardDescription>持久化运行身份与健康状态</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2 text-xs leading-5">
+                <RuntimeValue label="Run UUID" value={worker?.run_id ?? '—'} mono />
+                <RuntimeValue label="Supervisor PID" value={worker?.supervisor_pid ?? '—'} mono />
+                <RuntimeValue label="Child PID" value={worker?.child_pid ?? '—'} mono />
+                <RuntimeValue label="Ready" value={formatRuntimeTime(worker?.ready_at)} />
+                <RuntimeValue label="Heartbeat" value={formatRuntimeTime(worker?.heartbeat_at)} />
+                <RuntimeValue label="Resources" value={worker?.resources?.join(' · ') || '—'} mono />
+                {worker?.return_code != null && <RuntimeValue label="Return code" value={worker.return_code} mono />}
+              </CardContent>
+            </Card>
+
+            <Card className="instrument-card">
+              <CardHeader>
                 <CardTitle>安全边界</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 text-xs leading-5 text-muted-foreground">
@@ -239,6 +256,15 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
       </div>
     </AppShell>
   );
+}
+
+function formatRuntimeTime(value?: string | null): string {
+  if (!value) return '—';
+  return new Date(value).toLocaleString();
+}
+
+function RuntimeValue({ label, value, mono = false }: { label: string; value: string | number; mono?: boolean }) {
+  return <div className="flex items-start justify-between gap-3 border-b border-border/60 pb-1"><span className="text-muted-foreground">{label}</span><span className={`max-w-52 break-all text-right ${mono ? 'font-mono' : ''}`}>{value}</span></div>;
 }
 
 function Metric({ label, value }: { label: string; value: string | number }) {

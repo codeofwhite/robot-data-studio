@@ -10,7 +10,7 @@ from typing import Any
 
 from ..config import CONTRACTS_SRC, settings
 from ..camera_profiles import validate_session_camera_profile
-from .base import CollectionAdapter, WorkerLaunch
+from .base import CollectionAdapter, WorkerLaunch, WorkerReadiness
 
 
 class ClothTwinAdapter(CollectionAdapter):
@@ -137,4 +137,13 @@ class ClothTwinAdapter(CollectionAdapter):
                 "CUDA_VISIBLE_DEVICES": str(config["gpu"]),
                 "PYTHONPATH": os.pathsep.join(python_paths),
             },
+            readiness=WorkerReadiness(
+                kind="tcp", timeout_s=120.0, host="127.0.0.1", port=int(config["port"])
+            ),
+            resources=(
+                "simulator:global",
+                f"gpu:{int(config['gpu'])}",
+                f"tcp:{int(config['port'])}",
+                f"output:{output_dir.resolve()}",
+            ),
         )

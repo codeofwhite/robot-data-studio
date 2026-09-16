@@ -18,6 +18,21 @@ export type Session = {
   config: Record<string, unknown>;
 };
 
+export type WorkerRuntime = {
+  status: 'not_managed' | 'starting' | 'running' | 'stopping' | 'stopped' | 'failed' | 'orphaned';
+  run_id: string | null;
+  pid: number | null;
+  supervisor_pid: number | null;
+  child_pid: number | null;
+  return_code?: number | null;
+  ready_at?: string | null;
+  heartbeat_at?: string | null;
+  error?: string | null;
+  log_path?: string;
+  engine_id?: string;
+  resources: string[];
+};
+
 export type Dataset = {
   id: number;
   name: string;

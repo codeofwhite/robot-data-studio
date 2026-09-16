@@ -4,6 +4,7 @@ import numpy as np
 
 from robot_data_studio.workers.roboverse import (
     NATIVE_JOINTS,
+    _announce_ready,
     _camera_geometry,
     _write_native_payload,
     absolute_native_target,
@@ -94,3 +95,15 @@ def test_native_payload_has_matching_sha256(tmp_path: Path) -> None:
     checksum = (tmp_path / "native_payload.sha256").read_text(encoding="utf-8")
     assert payload.is_file()
     assert checksum.endswith("  native_trajectory.npz\n")
+
+
+def test_roboverse_ready_marker_is_run_specific(tmp_path: Path, monkeypatch) -> None:
+    marker = tmp_path / "runtime" / "ready.json"
+    monkeypatch.setenv("ROBOT_DATA_STUDIO_READY_FILE", str(marker))
+    monkeypatch.setenv("ROBOT_DATA_STUDIO_RUN_ID", "run-123")
+
+    _announce_ready()
+
+    payload = __import__("json").loads(marker.read_text(encoding="utf-8"))
+    assert payload["ready"] is True
+    assert payload["run_id"] == "run-123"

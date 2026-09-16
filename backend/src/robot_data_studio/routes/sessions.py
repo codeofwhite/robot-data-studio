@@ -70,12 +70,18 @@ def start(session_id: str):
 
 @router.get("/sessions/{session_id}/workers/status")
 def worker_status(session_id: str):
-    return worker_manager.status(session_id)
+    try:
+        return worker_manager.status(session_id)
+    except KeyError:
+        raise HTTPException(404, "session not found") from None
 
 
 @router.post("/sessions/{session_id}/workers/stop")
 def stop(session_id: str):
-    return worker_manager.stop(session_id)
+    try:
+        return worker_manager.stop(session_id)
+    except KeyError:
+        raise HTTPException(404, "session not found") from None
 
 
 @router.post("/sessions/{session_id}/trash")

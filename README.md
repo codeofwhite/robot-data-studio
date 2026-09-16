@@ -69,6 +69,23 @@ replay. GPU selection remains meaningful because the worker receives
 or keyboard control. When the process completes, scan the session and use the
 same Studio QA, accepted-only export, and consumer-smoke flow as other engines.
 
+## Worker runtime reliability
+
+Studio launches each engine through a durable supervisor. Every launch receives a
+run UUID and records the supervisor/child PIDs, Linux boot ID and process start
+identity, readiness, heartbeat, exit status, log path, and resource locks in
+SQLite. Genesis and Isaac become ready only after their control TCP endpoint is
+listening; RoboVerse writes a run-specific ready marker after native task
+initialization. Restarting the Studio API reconciles these durable records instead
+of relying on an in-memory `subprocess.Popen` object.
+
+Studio-managed workers atomically lock the global simulator slot, selected GPU,
+Collector/signaling/media ports where applicable, and the session output root.
+An exited worker releases its locks but keeps the immutable run record for audit.
+`failed` means the supervised process reported a launch/runtime failure;
+`orphaned` means the persisted PID identity is absent or no longer matches, so
+Studio refuses to signal that PID.
+
 The checked-in `lab_d435i_dual_v1` Sensor Profile selects the active laboratory
 D435i pair: `261722075807` for `agentview` and `261622075579` for `wrist`.
 The historical `261622078553` unit is retained as inactive inventory and is not
