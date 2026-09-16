@@ -19,6 +19,7 @@ from robot_data_studio.services.worker_manager import WorkerManager
 from robot_data_studio.services.worker_runtime import (
     ResourceConflict,
     create_run,
+    get_run,
     mark_run,
     process_identity,
     run_resources,
@@ -243,6 +244,70 @@ def test_manager_stop_handles_sigterm_and_sigkill(isolated_settings, monkeypatch
         status = stopped
     finally:
         force_cleanup(status)
+
+
+def test_manager_stop_records_graceful_sigterm_as_stopped(
+    isolated_settings, monkeypatch
+) -> None:
+    session = new_session("graceful_sigterm")
+    monkeypatch.setattr(worker_manager_module, "get_engine", lambda _engine: FakeAdapter())
+    manager = WorkerManager(stop_timeout_s=1.0, kill_timeout_s=0.5)
+    status = None
+    try:
+        manager.start(session["id"])
+        status = wait_status(manager, session["id"], "running")
+        stopped = manager.stop(session["id"])
+        assert stopped["status"] == "stopped"
+        assert stopped["return_code"] == 0
+        assert stopped["error"] is None
+        assert stopped["resources"] == []
+        status = stopped
+    finally:
+        force_cleanup(status)
+
+
+def test_manager_rereads_terminal_state_before_marking_orphaned(
+    isolated_settings, monkeypatch
+) -> None:
+    session = new_session("terminal_state_race")
+    state_path = isolated_settings.data_root / "terminal-state.json"
+    create_run(
+        run_id="terminal-state-race-run",
+        session_id=session["id"],
+        engine_id="roboverse",
+        command=["fake"],
+        cwd=isolated_settings.data_root,
+        log_path=isolated_settings.data_root / "terminal-state.log",
+        state_path=state_path,
+        readiness={"kind": "process", "timeout_s": 1.0},
+        resources=("gpu:4",),
+    )
+    terminal_state = {
+        "run_id": "terminal-state-race-run",
+        "status": "stopped",
+        "supervisor_pid": 999999,
+        "child_pid": 999998,
+        "ready_at": "2026-09-16T00:00:00+00:00",
+        "heartbeat_at": "2026-09-16T00:00:01+00:00",
+        "stopped_at": "2026-09-16T00:00:02+00:00",
+        "return_code": -int(signal.SIGTERM),
+        "error": None,
+    }
+    states = iter(
+        [
+            terminal_state | {"status": "stopping", "stopped_at": None},
+            terminal_state,
+        ]
+    )
+    monkeypatch.setattr(worker_manager_module, "read_state", lambda _path: next(states))
+    monkeypatch.setattr(worker_manager_module, "identity_matches", lambda *_args: False)
+
+    run = get_run("terminal-state-race-run")
+    assert run is not None
+    stopped = WorkerManager()._sync_run(run)
+    assert stopped["status"] == "stopped"
+    assert stopped["return_code"] == -int(signal.SIGTERM)
+    assert run_resources("terminal-state-race-run") == []
 
 
 def test_manager_refuses_pid_identity_mismatch(isolated_settings, monkeypatch) -> None:

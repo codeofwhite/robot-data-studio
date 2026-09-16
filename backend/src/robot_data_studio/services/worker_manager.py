@@ -16,6 +16,7 @@ from ..adapters import get_engine
 from .session_service import get_session
 from .worker_runtime import (
     ACTIVE_STATUSES,
+    TERMINAL_STATUSES,
     active_runs,
     create_run,
     get_run,
@@ -134,6 +135,17 @@ class WorkerManager:
             run.get("supervisor_boot_id"),
             run.get("supervisor_start_ticks"),
         ):
+            # The supervisor atomically writes its terminal state immediately
+            # before exiting. It may disappear between the first state read
+            # above and this identity check, so read once more before declaring
+            # the run orphaned. A missing/still-active state remains orphaned.
+            final_state = read_state(run["state_path"])
+            if (
+                final_state is not None
+                and final_state.get("run_id") == run["run_id"]
+                and final_state.get("status") in TERMINAL_STATUSES
+            ):
+                return update_run_from_state(run["run_id"], final_state)
             return mark_run(
                 run["run_id"],
                 status="orphaned",
