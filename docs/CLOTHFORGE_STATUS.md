@@ -1,6 +1,6 @@
 # ClothForge / Robot Data Studio 阶段总结
 
-当前已在基础布料动力学工作台上加入统一任务入口、只读数据入库和 Genesis IPC／Newton VBD 比较（新增阶段见文末）。实物材料尚未到位，公司设备尚待交付；实物标定、真机接触和 sim-to-real 验证暂缓，不作为本阶段阻塞项。
+当前已在基础布料动力学工作台上加入统一任务入口、只读数据入库和五求解器切换/比较（新增阶段见文末）。实物材料尚未到位，公司设备尚待交付；实物标定、真机接触和 sim-to-real 验证暂缓，不作为本阶段阻塞项。
 
 ## 已完成
 
@@ -16,7 +16,7 @@
 
 通过范围仅为两秒仿真、61 个保存帧的有限值、伸长、面积、穿地、速度及采样自交检查。尚不证明长时稳定、连续无穿插、真实面料参数或机器人操作成功。不同材料使用各自通过的数值配置，响应对比图不构成材料辨识实验。
 
-现阶段可继续丰富明显不同的版型和提高对比操作体验；Genesis IPC 并排对比见下方新增阶段；PPF、真实材料辨识、真机抓取和 sim-to-real 均未完成。待公司设备及实物材料到位后，再制定实测与真机验证计划。
+现阶段可继续丰富明显不同的版型和提高对比操作体验；Genesis IPC 并排对比见下方新增阶段；PPF 接入见最新阶段；真实材料辨识、真机抓取和 sim-to-real 尚未完成。待公司设备及实物材料到位后，再制定实测与真机验证计划。
 
 ## Git 保存范围
 
@@ -98,3 +98,74 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src:third_party/GarmentCode \
 57 项 Studio/契约测试、19 项 ClothForge 测试、TypeScript 和生产构建通过。长裤 IPC 落地初次 300 秒超时，保持相同物理参数延长单次监督等待后通过；失败证据保留。验收采用既有环境、共享 GPU 5，未停止其他 GPU 进程。
 
 结构化证据：[unification-acceptance.json](clothforge/unification-acceptance.json)、[unification-evidence-sha256.json](clothforge/unification-evidence-sha256.json)。ClothForge 对应源码提交为 `d9df7ba`。浏览器截图为 `data/cloth_unification_v1/solver-comparison.png`、`task-center.png`，录屏在同目录 `browser-video/`。
+
+
+## 五求解器接入（2026-09-18）
+
+入口：`/cloth` → “跨求解器比较”。选择衣物、悬挂/落地后自动读取参数一致的原生历史结果。回放下拉框切换不启动 GPU；可选择单窗口或任意两项并排，时间与相机同步。运行区支持选择 1–5 个求解器；默认复用历史结果，取消勾选才强制重新计算。旧的未指定 `engine_ids` 请求仍运行 VBD + IPC。
+
+新增 Newton XPBD、PhysX Surface Deformable、PPF；保留 Newton VBD 和 Genesis IPC。固定三种 `000` 版型、中等合成材料、两秒/61 帧，没有新增尺寸。
+
+### 原生模型与限制
+
+- XPBD：原生 Newton `SolverXPBD`，512 子步 × 2 迭代。细网格小质量与并行弹簧修正导致此前 64 子步发散，缩小时间步后消除爆炸。仅启用网格边弹簧，排除会跨接自由接缝的对顶点弹簧；`tri_ka`、`tri_kd` 不等价映射。粒子接触不保证三角面无自交，失败轨迹仍可查看，不能计为物理通过。
+- PhysX：现有 Isaac Sim 6.0.1 环境，原生 Surface Deformable 和顶点到世界的附件约束。原生验证会拒绝完全重合的平面参考顶点；使用装配厚度的 1e-4 作为参考分离，并逐面验证静止边长误差不超过 1e-6 m。仿真起始顶点保持不变。接触 rest/contact/filter 距离为 0.3/2/0.6 mm；保留物理门槛，接缝弯曲仍为均匀原生模型。质量来自已校验原生参考面积与材料面密度，运行时节点质量缓冲区未独立读回。
+- PPF：在官方编译镜像的原生 CUDA 后端执行。镜像清单摘要 `sha256:3be1692bf1cf29f6a4e0435e746ca43382c69ce049c304bf501e9c943062320b`；执行固定镜像 ID `sha256:2a1fdc6da8775c05d5f57e3441e59dde0b7a0f99dfe03676abaf024c80e2e8ae`。现有 clone 仅用于接口检查，未修改；镜像与本地源码版本不混称。每帧 8 子步、最多 2048 Newton 步；接触间隙 0.5 mm、原生应变屏障 10%，地面摩擦显式匹配材料。映射原生重排顶点，并以逐面参考/装配面积比修正密度，保证统一质量。速度由保存帧有限差分估计，不是原生瞬时速度；接缝弯曲与 VBD/IPC 不等价。
+- 五个后端的本构、阻尼、接触和弯曲模型不同，数值迭代预算不同。本轮是可追溯效果对比，不是相同算力排名，也不证明实物精度或 sim-to-real。
+
+官方 PhysX 网格验证会检查重复顶点，见 [PxValidateTriangleMesh](https://nvidia-omniverse.github.io/PhysX/physx/5.4.0/_api_build/function__px_cooking_8h_1ac4d006397ab50386ae2913e7d2f4464d.html)。本机原生失败日志和修复后的静止边长误差保存在本轮 QA 目录。
+
+### 文件与行为变化
+
+| 文件 | 变化及原因 |
+| --- | --- |
+| `ClothForge/src/clothforge/__main__.py` | 原两后端分派扩展为五后端；命令行校验求解器名称。 |
+| `ClothForge/src/clothforge/newton_worker.py` | 增加原生 XPBD 路径、面内弹簧静止长度和明确的参数映射；VBD 仍走原有求解器分支。 |
+| `ClothForge/src/clothforge/native_io.py` | 新增不可变请求、标准轨迹评测和预览输出；缺帧、固定点漂移及非有限状态均保留失败判定。 |
+| `ClothForge/src/clothforge/physx_worker.py` | 新增隔离 Isaac 进程、参考形状映射、原生附件、轨迹及错误导出。 |
+| `ClothForge/src/clothforge/ppf_worker.py` | 新增固定镜像 Docker worker、重排/质量映射、原生轨迹与镜像溯源；退出时清理本次容器。 |
+| `ClothForge/tests/test_native_io.py` | 验证完整运行不能掩盖缺帧、固定点漂移或 NaN。 |
+| `backend/src/robot_data_studio/services/cloth_run_service.py` | 删除固定双后端循环，改为已选择后端顺序调度；新增配置/资产哈希验证后的历史复用；历史回放也校验完整证据；超时终止本任务进程组和 PPF 容器。 |
+| `backend/src/robot_data_studio/routes/cloth.py` | 比较请求增加 `engine_ids`、`reuse`；新增只读 `/api/cloth/solver-results`，兼容旧请求。 |
+| `components/cloth-solver-comparison.tsx` | 固定两窗口改为选后端运行、缓存切换、单/双窗口与失败日志；同步回放保留，手动刷新也可重新读取其他任务刚完成的结果。 |
+| `lib/cloth-types.ts` | 补充后端选择、历史复用、原生运行来源和错误日志字段。 |
+| `backend/tests/test_clothforge_studio.py` | 覆盖 1/2/3/5 侧比较、非法选择、参数与门槛保持、缓存配置/轨迹/资产损坏拒绝，以及 PPF 原生进度解析。 |
+| `docs/CLOTHFORGE_STATUS.md` | 更新可用范围、验收证据、实际参数与未验证项。 |
+
+原始机器人 Episode、人工 QA 状态和训练导出未修改。布料求解轨迹入资产库的 config/validation 记录，不伪装为含机器人动作的 Episode。
+
+### 验收证据
+
+本轮目录：`data/cloth_multisolver_v2/`。`budget.json` 逐项保留原生尝试与耗时；失败诊断不删除。`report.json` 汇总当前配置的 30 个结果（VBD/IPC 复用上一轮已验证数据）。`browser-report.json` 与浏览器视频保存实际点击验收；`ppf-xpbd-comparison.png` 为页面截图。
+
+自动测试：Studio 布料与资产测试 61 通过、3 个不适用的单侧配对检查跳过；ClothForge 原有 19 项通过，新增原生结果判定测试通过。TypeScript 类型检查与生产构建通过。浏览器已验证无 GPU 的切换、单/双窗口、同步回放与视角、复用运行和刷新恢复。最终覆盖数字见下方本轮结果表。
+
+| 求解器 | 当前配置完整轨迹 | 物理通过 | 未通过原因 |
+| --- | ---: | ---: | --- |
+| Newton VBD | 6/6 | 6/6 | 无 |
+| Genesis IPC | 6/6 | 6/6 | 无 |
+| Newton XPBD | 6/6 | 1/6 | excessive_stretch, self_intersection |
+| PhysX Surface | 6/6 | 0/6 | self_intersection |
+| PPF | 6/6 | 6/6 | 无 |
+
+本轮实际 35/36 次原生尝试，累计 worker 壁钟 32.43/60 分钟；新增仿真记录 144.69 MB（上限 5 GB）。PPF 镜像压缩层约 494 MB，下载/导入中间文件另计约 944 MiB，未改变现有 Python 环境。无任务遗留 PPF 容器，其他进程保留。
+
+VBD/IPC 的 12 个结果复用上一轮验收；三个新后端提供 18 个最终配置结果。诊断、旧配置和失败尝试均保留，但不混入最终 30 格统计。最终的原生新任务浏览器验收为 PPF T 恤落地，`browser-native-report.json` 记录执行成功、物理通过及非缓存启动。六组页面切换、重复手动刷新、单/双窗口和历史恢复均通过；`browser-coverage.json` 每组均为五个求解器。
+
+尚未完成：XPBD/PhysX 在本批衣物上的全部物理通过。不能把“已接入、已跑完”解释为无穿插；当前推荐用于物理通过演示的是 VBD/IPC/PPF。实物材料辨识、真机接触和 sim-to-real 仍未验证。
+
+执行的验证命令（均使用已存在环境）：
+
+```sh
+# Studio 根目录，测试结果 61 passed / 3 skipped
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=backend/src:packages/robot-data-contracts/src backend/.venv/bin/python -B -m pytest -q -p no:cacheprovider backend/tests/test_clothforge_studio.py backend/tests/test_cloth_run_service.py backend/tests/test_cloth_import.py backend/tests/test_assets.py
+/home/zhanghejun/node-v24.18.0-linux-x64/bin/node node_modules/typescript/bin/tsc --noEmit --incremental false
+/home/zhanghejun/node-v24.18.0-linux-x64/bin/node node_modules/.bin/vinext build
+PYTHONPATH=backend/src:packages/robot-data-contracts/src backend/.venv/bin/python -B data/cloth_multisolver_v2/audit.py
+/home/zhanghejun/node-v24.18.0-linux-x64/bin/node data/cloth_multisolver_v2/browser.mjs --launch-cached
+backend/.venv/bin/python -B data/cloth_multisolver_v2/browser_native_qa.py
+# ClothForge 根目录；原有 19 项与新增 1 项（含 4 个子场景）通过
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src:third_party/GarmentCode .venv-generation/bin/python -B -m unittest discover -s tests -v
+```
+
+审查标签 `SELF_REVIEWED_PROVISIONAL`；原生执行、浏览器和哈希/配置匹配证据均已落盘。ClothForge 本轮本地提交：`26c875a`。

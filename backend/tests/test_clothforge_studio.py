@@ -157,25 +157,69 @@ def test_ipc_configuration_is_distinct_and_preserves_physics(garment):
     assert a['config']['gates']==b['config']['gates']
     assert b['config']['simulation']['solver']=='genesis_ipc'
 
+@pytest.mark.parametrize('count',[1,2,3,5])
 @pytest.mark.parametrize('damage', [None, 'mass', 'times', 'positions', 'hash'])
-def test_comparison_refuses_unmatched_or_changed_trajectories(tmp_path,monkeypatch,damage):
+def test_comparison_refuses_unmatched_or_changed_trajectories(tmp_path,monkeypatch,damage,count):
+    if count==1 and damage in {'mass','times','positions'}:pytest.skip('pair mismatch requires two sides')
     import numpy as np
     from robot_data_studio.services import cloth_run_service as service
-    manager=service.ClothComparisonManager(run_root=tmp_path)
+    manager=service.ClothComparisonManager(registry=SimpleNamespace(get=lambda *a:object(),integrity=lambda _: {'status':'current'}),run_root=tmp_path)
     pair='run-20260918t000000z-aaaaaaaa'
-    children=['run-20260918t000001z-bbbbbbbb','run-20260918t000002z-cccccccc']
+    children=[f'run-20260918t00000{i}z-abcdef0{i}' for i in range(count)]
     manager._write_state({'run_id':pair,'engine_id':'comparison','children':children})
-    monkeypatch.setattr(service.newton_cloth_run_manager,'get',lambda rid:{'engine_id':'newton_vbd' if rid==children[0] else 'genesis_ipc'})
+    monkeypatch.setattr(service.newton_cloth_run_manager,'get',lambda rid:{'engine_id':'newton_vbd' if rid==children[0] else 'genesis_ipc','status':'completed','created_at':'2026-09-18','validation_asset_id':'VAL-fixture','validation_version':1})
     for i,rid in enumerate(children):
         out=manager._run_dir(rid)/'output';out.mkdir(parents=True)
         positions=np.zeros((2,3,3));times=np.array([0.,1.])
         if i and damage=='positions':positions[1,0,0]=np.nan
         if i and damage=='times':times[1]=2
         np.savez(out/'trajectory.npz',positions=positions,times=times,faces=np.array([[0,1,2]]),rest_triangles=np.zeros((1,3,2)),pins=np.array([0]))
-        (out/'validation.json').write_text(json.dumps({'trajectory_sha256':'wrong' if i and damage=='hash' else file_digest(out/'trajectory.npz')}))
+        (out/'validation.json').write_text(json.dumps({'trajectory_sha256':'wrong' if damage=='hash' else file_digest(out/'trajectory.npz')}))
         (out/'initialization.json').write_text(json.dumps({'unconstrained_total_mass_kg':2 if i and damage=='mass' else 1}))
     if damage:
         with pytest.raises(ValueError):manager.trajectories(pair)
     else:
         result=manager.trajectories(pair)
-        assert result['initialization_matched'] and len(result['sides'])==2
+        assert result['initialization_matched'] and len(result['sides'])==count
+
+@pytest.mark.parametrize('engines',[[],['ppf','ppf'],['unknown'],['newton_vbd']*6])
+def test_comparison_invalid_solver_selection_never_creates_job(tmp_path,engines):
+    from robot_data_studio.services.cloth_run_service import ClothComparisonManager
+    manager=ClothComparisonManager(run_root=tmp_path)
+    with pytest.raises(ClothRunError):manager.start_pair('MDL-garment',1,engine_ids=engines)
+    assert not list(tmp_path.iterdir())
+
+@pytest.mark.parametrize('engine',['newton_xpbd','physx_surface','ppf'])
+def test_new_solver_preserves_frozen_geometry_material_and_acceptance(garment,engine):
+    from robot_data_studio.services.cloth_run_service import SOLVER_MANAGERS
+    original,model,_=garment
+    manager=type(SOLVER_MANAGERS[engine])(registry=original.registry,run_root=original.run_root,runner_root=original.runner_root,python=original.python)
+    baseline=original.prepare(model.asset_id,1)['config'];actual=manager.prepare(model.asset_id,1)['config']
+    for key in ['mesh_sha256','material','gates']:assert actual[key]==baseline[key]
+    assert actual['simulation']['solver']==engine
+
+@pytest.mark.parametrize('damage',[None,'configuration','trajectory','registry'])
+def test_saved_result_reuse_requires_parameters_and_intact_evidence(tmp_path,damage):
+    from robot_data_studio.services.cloth_run_service import ClothComparisonManager
+    rid='run-20260918t000001z-aaaaaaaa';folder=tmp_path/rid;output=folder/'output';output.mkdir(parents=True)
+    wanted={'simulation':{'solver':'ppf'},'material':{'density':.22}}
+    state={'run_id':rid,'engine_id':'ppf','status':'completed','selected_asset_id':'MDL-garment','selected_version':1,'scenario':'drop','material_id':'medium','validation_asset_id':'VAL-test','validation_version':1}
+    (folder/'state.json').write_text(json.dumps(state))
+    (output/'trajectory.npz').write_bytes(b'native trajectory')
+    (output/'request.json').write_text(json.dumps({'config':{} if damage=='configuration' else wanted}))
+    (output/'validation.json').write_text(json.dumps({'configuration_sha256':_json_hash(wanted),'trajectory_sha256':'bad' if damage=='trajectory' else file_digest(output/'trajectory.npz')}))
+    registry=SimpleNamespace(get=lambda *a:object(),integrity=lambda _: {'status':'stale' if damage=='registry' else 'current'})
+    solver=SimpleNamespace(engine_id='ppf',prepare=lambda *a,**k:{'config':wanted},registry=registry)
+    result=ClothComparisonManager(run_root=tmp_path).find_saved(solver,'MDL-garment',1,'drop','medium')
+    assert (result is not None)==(damage is None)
+
+
+@pytest.mark.parametrize('frame,expected',[(24,.4),(60,.99)])
+def test_ppf_native_progress_is_visible_before_process_completion(tmp_path,monkeypatch,frame,expected):
+    from datetime import datetime,timezone
+    from robot_data_studio.services import cloth_run_service as service
+    state={'status':'running','engine_id':'ppf','created_at':datetime.now(timezone.utc).isoformat(),
+           'log_tail':f'progress:  40%|████      | {frame}/60 [00:05<00:06, 4.00it/s]','progress':0.}
+    monkeypatch.setattr(service.ClothRunManager,'get',lambda *a:dict(state))
+    manager=service.PPFGarmentRunManager(run_root=tmp_path)
+    assert manager.get('run-20260918t000000z-abcdef00')['progress']==expected

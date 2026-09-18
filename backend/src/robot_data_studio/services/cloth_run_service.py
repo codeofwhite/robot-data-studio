@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import signal
 from threading import Lock, Thread
 from uuid import uuid4
 
@@ -252,7 +253,7 @@ class NewtonClothRunManager(ClothRunManager):
 
     def _selection(self, asset_id, version):
         record = self.registry.get(asset_id, version)
-        if record.kind not in {"model", "config"} or "clothforge" not in record.tags or not {"newton_vbd", "genesis_ipc"}.intersection(record.engines):
+        if record.kind not in {"model", "config"} or "clothforge" not in record.tags or not {"newton_vbd", "genesis_ipc", "newton_xpbd", "physx_surface", "ppf"}.intersection(record.engines):
             raise ClothRunError("select a ClothForge garment or configuration")
         if self.registry.integrity(record)["status"] != "current":
             raise AssetIntegrityError("selected asset evidence is stale")
@@ -340,7 +341,7 @@ class NewtonClothRunManager(ClothRunManager):
 
     def start(self, asset_id, version, **options):
         prepared = self.prepare(asset_id, version, **options)
-        worker_file = "genesis_worker.py" if self.engine_id == "genesis_ipc" else "newton_worker.py"
+        worker_file = {"genesis_ipc":"genesis_worker.py","physx_surface":"physx_worker.py","ppf":"ppf_worker.py"}.get(self.engine_id,"newton_worker.py")
         if not Path(self.python).is_file() or not (self.runner_root / "src/clothforge" / worker_file).is_file():
             raise ClothRunError("cloth solver environment is unavailable")
         self.run_root.mkdir(parents=True, exist_ok=True)
@@ -412,7 +413,7 @@ class NewtonClothRunManager(ClothRunManager):
 
     def get(self, run_id):
         state = super().get(run_id)
-        if state.get("engine_id") not in {"newton_vbd", "genesis_ipc"}:
+        if state.get("engine_id") not in {"newton_vbd", "genesis_ipc", "newton_xpbd", "physx_surface", "ppf"}:
             return state
         if state["status"] in {"queued", "running"}:
             pid = state.get("worker_pid")
@@ -422,6 +423,8 @@ class NewtonClothRunManager(ClothRunManager):
                 state.update(status="failed", outcome="unavailable", error="布料求解器进程已退出，请查看日志", finished_at=_now())
                 self._write_state({k: v for k, v in state.items() if k != "log_tail"})
             frames = re.findall(r"FRAME\s+(\d+)\s*/\s*(\d+)", state.get("log_tail", ""))
+            if not frames and state.get("engine_id") == "ppf":
+                frames = re.findall(r"progress:\s*\d+%\|[^\n\r]*?\|\s*(\d+)/(\d+)", state.get("log_tail", ""))
             if frames and state["status"] == "running":
                 state["progress"] = min(.99, int(frames[-1][0]) / int(frames[-1][1]))
         return state
@@ -452,11 +455,12 @@ class NewtonClothRunManager(ClothRunManager):
             with log_path.open("x") as log:
                 log.write("COMMAND " + json.dumps(command) + "\n"); log.flush()
                 try:
-                    process = subprocess.run(command, env=env, cwd=self.runner_root, stdout=log, stderr=subprocess.STDOUT,
-                                             timeout=state.get("timeout_s", self.timeout_s))
-                    returncode = process.returncode
+                    process = subprocess.Popen(command, env=env, cwd=self.runner_root, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+                    returncode = process.wait(timeout=state.get("timeout_s", self.timeout_s))
                 except subprocess.TimeoutExpired:
-                    error = "布料求解器运行超时，进程已停止"
+                    os.killpg(process.pid, signal.SIGKILL)
+                    process.wait()
+                    error = "布料求解器运行超时，进程组已停止"
             validation = self._publish_newton_validation(state, output, log_path, returncode, error)
             state.update(status="completed" if returncode == 0 else "failed", progress=1.,
                          validation_asset_id=validation.asset_id, validation_version=validation.version,
@@ -464,6 +468,11 @@ class NewtonClothRunManager(ClothRunManager):
         except Exception as caught:
             state.update(status="failed", outcome="unavailable", error=str(caught))
         finally:
+            if state["engine_id"] == "ppf":
+                try:
+                    subprocess.run(["docker", "rm", "-f", "clothforge-"+run_id], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20)
+                except (OSError, subprocess.TimeoutExpired) as cleanup_error:
+                    state.update(status="failed",outcome="unavailable",error="PPF container cleanup failed: "+str(cleanup_error))
             state.update(finished_at=_now(), worker_wall_seconds=time.monotonic() - stamp, returncode=returncode)
             self._write_state(state)
             os.close(lock_fd)
@@ -498,8 +507,36 @@ class NewtonClothRunManager(ClothRunManager):
             data={**result, "run_id": state["run_id"], "source_trial": state["run_id"], "returncode": returncode,
                   "material_modified": actual.data["material_modified"]},
             references=[AssetReference(asset_id=actual.asset_id, version=actual.version, role="tested_config")],
-            artifacts=artifacts, change_note="Recorded actual Newton output and physical verdict; process completion is separate from physics success."
+            artifacts=artifacts, change_note="Recorded actual native solver output and physical verdict; process completion is separate from physics success."
         ), expected_version=0)[0]
+
+
+class PPFGarmentRunManager(NewtonClothRunManager):
+    engine_id = "ppf"
+    def prepare(self, *args, **kwargs):
+        prepared=super().prepare(*args, **kwargs)
+        prepared["config"]["simulation"].update(substeps=8,iterations=2048)
+        prepared["profile"]["overrides"].update(substeps=8,iterations=2048)
+        prepared['config']['simulation']['ppf_parameters']={'image_id':'sha256:2a1fdc6da8775c05d5f57e3441e59dde0b7a0f99dfe03676abaf024c80e2e8ae','contact_gap_m':.0005,'strain_limit':.1,'ground_friction':prepared['config']['material']['friction']}
+        return prepared
+
+
+class PhysXGarmentRunManager(NewtonClothRunManager):
+    engine_id = "physx_surface"
+    def prepare(self, *args, **kwargs):
+        prepared=super().prepare(*args, **kwargs)
+        prepared['config']['simulation']['physx_parameters']={'rest_offset_m':.0003,'contact_offset_m':.002,'self_collision_filter_distance_m':.0006}
+        return prepared
+
+
+class XPBDGarmentRunManager(NewtonClothRunManager):
+    engine_id = "newton_xpbd"
+    def prepare(self, *args, **kwargs):
+        prepared=super().prepare(*args, **kwargs)
+        # Jacobi spring corrections on fine, light meshes require a smaller dt.
+        prepared["config"]["simulation"].update(substeps=512,iterations=2)
+        prepared["profile"]["overrides"].update(substeps=512,iterations=2)
+        return prepared
 
 
 class GenesisGarmentRunManager(NewtonClothRunManager):
@@ -516,11 +553,18 @@ class GenesisGarmentRunManager(NewtonClothRunManager):
 
 newton_cloth_run_manager = NewtonClothRunManager()
 genesis_garment_run_manager = GenesisGarmentRunManager()
+xpbd_garment_run_manager = XPBDGarmentRunManager()
+physx_garment_run_manager = PhysXGarmentRunManager()
+ppf_garment_run_manager = PPFGarmentRunManager()
+SOLVER_MANAGERS = {m.engine_id: m for m in [newton_cloth_run_manager, genesis_garment_run_manager, xpbd_garment_run_manager, physx_garment_run_manager, ppf_garment_run_manager]}
 
 class ClothComparisonManager(ClothRunManager):
-    def start_pair(self, asset_id, version, scenario="hanging", material_id="medium"):
-        # Preflight both sides before creating or starting any native worker.
-        for manager in [newton_cloth_run_manager, genesis_garment_run_manager]:
+    def start_pair(self, asset_id, version, scenario="hanging", material_id="medium", engine_ids=None, reuse=True):
+        engine_ids = engine_ids if engine_ids is not None else ["newton_vbd", "genesis_ipc"]
+        if not engine_ids or len(engine_ids)>5 or len(set(engine_ids))!=len(engine_ids) or any(e not in SOLVER_MANAGERS for e in engine_ids):
+            raise ClothRunError("select one to five distinct supported solvers")
+        # Validate every requested backend before creating a GPU job.
+        for manager in [SOLVER_MANAGERS[e] for e in engine_ids]:
             manager.prepare(asset_id, version, scenario=scenario, material_id=material_id)
         if material_id != 'medium':raise ValueError('comparison currently validates the medium material only')
         self.run_root.mkdir(parents=True,exist_ok=True)
@@ -532,7 +576,7 @@ class ClothComparisonManager(ClothRunManager):
             run_id=datetime.now(timezone.utc).strftime("run-%Y%m%dt%H%M%Sz-")+uuid4().hex[:8]
             directory=self._run_dir(run_id);directory.mkdir(parents=True)
             state={"run_id":run_id,"engine_id":"comparison","status":"queued","created_at":_now(),"children":[],
-                   "asset_id":asset_id,"version":version,"scenario":scenario,"material_id":material_id,"error":None}
+                   "asset_id":asset_id,"version":version,"scenario":scenario,"material_id":material_id,"error":None,"engine_ids":engine_ids,"reuse":reuse,"reused_children":[]}
             self._write_state(state)
             env=os.environ.copy();env['PYTHONPATH']=os.pathsep.join([str(BACKEND_ROOT/'src'),str(CONTRACTS_SRC)])
             with (directory/'supervisor.log').open('x') as log:
@@ -544,16 +588,20 @@ class ClothComparisonManager(ClothRunManager):
     def execute_pair(self, run_id):
         state=super().get(run_id);boot,ticks=process_identity(os.getpid());state.update(status='running',started_at=_now(),worker_pid=os.getpid(),worker_boot_id=boot,worker_start_ticks=ticks);self._write_state(state)
         try:
-            for manager in [newton_cloth_run_manager,genesis_garment_run_manager]:
-                child=manager.start(state['asset_id'],state['version'],scenario=state['scenario'],material_id=state['material_id'])
+            failures=[]
+            for engine in state.get('engine_ids',['newton_vbd','genesis_ipc']):
+                manager=SOLVER_MANAGERS[engine]
+                child=self.find_saved(manager,state['asset_id'],state['version'],state['scenario'],state['material_id']) if state.get('reuse',False) else None
+                if child:state.setdefault('reused_children',[]).append(child['run_id'])
+                else:child=manager.start(state['asset_id'],state['version'],scenario=state['scenario'],material_id=state['material_id'])
                 state['children'].append(child['run_id']);self._write_state(state)
                 deadline=time.monotonic()+manager.timeout_s+30
                 while child['status'] in {'queued','running'}:
                     if time.monotonic()>deadline:raise TimeoutError('native worker supervision timeout')
                     time.sleep(1);child=manager.get(child['run_id'])
-                if child['outcome']=='unavailable':raise ClothRunError(child.get('error') or 'native run incomplete')
-            self.trajectories(run_id) # enforce identical initialization before marking comparable
-            state.update(status='completed')
+                if child['outcome']=='unavailable':failures.append(engine+': '+(child.get('error') or 'native run incomplete'))
+            self.trajectories(run_id) # validate real initial conditions, including failed physical verdicts
+            state.update(status='failed' if failures else 'completed',error='; '.join(failures) or None)
         except Exception as e:state.update(status='failed',error=str(e))
         finally:state['finished_at']=_now();self._write_state(state)
 
@@ -568,26 +616,58 @@ class ClothComparisonManager(ClothRunManager):
         return state
 
     def trajectories(self,run_id):
-        import numpy as np
         state=super().get(run_id)
-        if state.get('engine_id')!='comparison' or len(state['children'])!=2:raise ValueError('both native trajectories are required')
+        if state.get('engine_id')!='comparison':raise ValueError('not a comparison run')
+        return self._trajectories(state['children'])
+
+    def find_saved(self,manager,asset_id,version,scenario,material_id):
+        wanted=manager.prepare(asset_id,version,scenario=scenario,material_id=material_id)['config']
+        for path in sorted(self.run_root.glob('run-*/state.json'),reverse=True):
+            run=json.loads(path.read_text())
+            if (run.get('engine_id'),run.get('status'),run.get('selected_asset_id'),run.get('selected_version'),run.get('scenario'),run.get('material_id'))!=(manager.engine_id,'completed',asset_id,version,scenario,material_id):continue
+            output=path.parent/'output'
+            try:
+                request=json.loads((output/'request.json').read_text());result=json.loads((output/'validation.json').read_text())
+                if request['config']!=wanted or result['configuration_sha256']!=_json_hash(wanted):continue
+                record=manager.registry.get(run['validation_asset_id'],run['validation_version'])
+                if manager.registry.integrity(record)['status']!='current':continue
+                if result['trajectory_sha256']!=file_digest(output/'trajectory.npz'):continue
+            except (OSError,KeyError,ValueError):continue
+            return run
+        return None
+
+    def saved_trajectories(self,asset_id,version=1,scenario='hanging',material_id='medium'):
+        children=[]
+        for manager in SOLVER_MANAGERS.values():
+            child=self.find_saved(manager,asset_id,version,scenario,material_id)
+            if child:children.append(child['run_id'])
+        if not children:return {'times':[],'faces':[],'sides':[],'initialization_matched':False,'scope':'no saved native results'}
+        return self._trajectories(children)
+
+    def _trajectories(self,children):
+        import numpy as np
         arrays=[];sides=[]
-        for child in state['children']:
+        for child in children:
             run=newton_cloth_run_manager.get(child)
+            if run.get('outcome')=='unavailable' or run.get('status')!='completed':continue
+            evidence=self.registry.get(run['validation_asset_id'],run['validation_version'])
+            if self.registry.integrity(evidence)['status']!='current':raise AssetIntegrityError('comparison evidence changed')
             output=self._run_dir(child)/'output'
             result=json.loads((output/'validation.json').read_text())
             if file_digest(output/'trajectory.npz')!=result['trajectory_sha256']:raise AssetIntegrityError('comparison trajectory changed')
             with np.load(output/'trajectory.npz',allow_pickle=False) as data: arrays.append({k:data[k].copy() for k in ['positions','faces','rest_triangles','pins','times']})
             init=json.loads((output/'initialization.json').read_text())
-            sides.append({'engine_id':run['engine_id'],'result':result,'initialization':init})
-        a,b=arrays
+            sides.append({'engine_id':run['engine_id'],'run_id':child,'created_at':run['created_at'],'result':result,'initialization':init})
+        if not arrays:raise ValueError("no completed native trajectory available")
+        a=arrays[0]
         for data in arrays:
             if data['positions'].ndim!=3 or data['positions'].shape[-1]!=3 or len(data['positions'])!=len(data['times']) or not np.isfinite(data['positions']).all():raise ValueError('invalid comparison positions')
-        if a['positions'].shape!=b['positions'].shape:raise ValueError('comparison position dimensions differ')
-        for key in ['faces','pins','rest_triangles','times']:
-            if a[key].shape!=b[key].shape or not np.allclose(a[key],b[key],atol=1e-8):raise ValueError('comparison mismatch: '+key)
-        if not np.allclose(a['positions'][0],b['positions'][0],atol=1e-6):raise ValueError('initial positions differ')
-        if not np.isclose(sides[0]['initialization']['unconstrained_total_mass_kg'],sides[1]['initialization']['unconstrained_total_mass_kg']):raise ValueError('total mass differs')
+        for i,b in enumerate(arrays[1:],1):
+            if a['positions'].shape!=b['positions'].shape:raise ValueError('comparison position dimensions differ')
+            for key in ['faces','pins','rest_triangles','times']:
+                if a[key].shape!=b[key].shape or not np.allclose(a[key],b[key],atol=1e-8):raise ValueError('comparison mismatch: '+key)
+            if not np.allclose(a['positions'][0],b['positions'][0],atol=1e-6):raise ValueError('initial positions differ')
+            if not np.isclose(sides[0]['initialization']['unconstrained_total_mass_kg'],sides[i]['initialization']['unconstrained_total_mass_kg']):raise ValueError('total mass differs')
         for side,data in zip(sides,arrays):side['positions']=data['positions'].round(6).tolist()
         return {'times':a['times'].tolist(),'faces':a['faces'].tolist(),'sides':sides,'initialization_matched':True,
                 'scope':'same geometry, mass, pins and initial pose; different uncalibrated constitutive and contact models'}
@@ -604,6 +684,6 @@ if __name__ == "__main__":
         cloth_comparison_manager.execute_pair(arguments.comparison_run)
     elif arguments.newton_run and arguments.lock_fd is not None:
         state=newton_cloth_run_manager.get(arguments.newton_run)
-        manager=genesis_garment_run_manager if state['engine_id']=='genesis_ipc' else newton_cloth_run_manager
+        manager=SOLVER_MANAGERS[state['engine_id']]
         manager._execute_newton(arguments.newton_run,arguments.lock_fd)
     else:parser.error('a run and inherited lock, or comparison run is required')
