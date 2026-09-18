@@ -1,0 +1,84 @@
+{
+  "physical": {
+    "outcome": "complete",
+    "passed_cells": 180,
+    "target_cells": 180,
+    "native_attempts": 157,
+    "worker_wall_seconds": 16349.500260118395,
+    "storage_bytes": 2419844731,
+    "current_recommended_configurations_verified": true
+  },
+  "catalog": {
+    "outcome": "passed",
+    "models": 30
+  },
+  "successful_browser_reports": [
+    {
+      "path": "browser/2026-09-18T02-59-58-044Z-replay/report.json",
+      "caseKey": "tshirt-000-light-hanging",
+      "mode": "replay",
+      "runId": "run-20260918t024855z-7fdcc5eb"
+    },
+    {
+      "path": "browser/2026-09-18T03-05-22-351Z-run/report.json",
+      "caseKey": "open_coat-000-heavy-drop",
+      "mode": "run",
+      "runId": "run-20260918t030528z-664ca612"
+    },
+    {
+      "path": "browser/2026-09-18T03-08-46-534Z-run/report.json",
+      "caseKey": "trousers-000-heavy-drop",
+      "mode": "run",
+      "runId": "run-20260918t030858z-f3b33271"
+    },
+    {
+      "path": "browser/2026-09-18T03-11-26-350Z-custom/report.json",
+      "caseKey": "tshirt-000-light-hanging",
+      "mode": "custom",
+      "runId": "run-20260918t031132z-e37f9f99"
+    },
+    {
+      "path": "browser/2026-09-18T03-12-20-121Z-failure/report.json",
+      "caseKey": "open_coat-000-light-drop",
+      "mode": "failure",
+      "runId": "run-20260918t025558z-a6e453bc"
+    },
+    {
+      "path": "browser/2026-09-18T03-16-37-080Z-replay/report.json",
+      "caseKey": "open_coat-000-light-drop",
+      "mode": "replay",
+      "runId": "run-20260918t025907z-4e2cd615"
+    },
+    {
+      "path": "browser/2026-09-18T03-49-50-122Z-run/report.json",
+      "caseKey": "open_coat-000-heavy-drop",
+      "mode": "run",
+      "runId": "run-20260918t034956z-ae9873cc"
+    },
+    {
+      "path": "browser/2026-09-18T04-38-38-131Z-run/report.json",
+      "caseKey": "open_coat-001-medium-drop",
+      "mode": "run",
+      "runId": "run-20260918t043844z-40d97ab9"
+    },
+    {
+      "path": "browser/2026-09-18T05-16-51-696Z-run/report.json",
+      "caseKey": "open_coat-001-heavy-drop",
+      "mode": "run",
+      "runId": "run-20260918t051658z-072dc1f5"
+    },
+    {
+      "path": "browser/2026-09-18T06-40-36-363Z-replay/report.json",
+      "caseKey": "trousers-007-light-drop",
+      "mode": "replay",
+      "runId": "run-20260918t063446z-dc361ceb"
+    },
+    {
+      "path": "browser/2026-09-18T08-10-32-304Z-replay/report.json",
+      "caseKey": "tshirt-009-heavy-drop",
+      "mode": "replay",
+      "runId": "run-20260918t080800z-98ee4e0f"
+    }
+  ],
+  "retained_browser_failures": 3
+}

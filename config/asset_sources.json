@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "sources": {
+    "cloth-batch-v1": {
+      "root": "/data/zhanghejun/simulation-demos/cloth-batch-v1",
+      "label": "可调布料场景 v1"
+    },
+    "studio-cloth-runs": {
+      "root": "/data/zhanghejun/robot-data-studio/data/cloth_runs",
+      "label": "Studio 发起的布料运行"
+    },
+    "clothforge-pilot-v1": {
+      "root": "/data/zhanghejun/ClothForge/data/pilot_v1",
+      "label": "ClothForge 衣物生成与动力学试点 v1"
+    },
+    "clothforge-repair-v2": {
+      "root": "/data/zhanghejun/ClothForge/data/repair_v2",
+      "label": "ClothForge 已验证的衣物配置与轨迹"
+    }
+  }
+}

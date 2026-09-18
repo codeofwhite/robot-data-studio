@@ -1,5 +1,6 @@
 """Versioned, runtime-light contracts shared by robot data workers and Studio."""
 
+from .asset import AssetArtifact, AssetDraft, AssetReference, AssetVersion
 from .camera import CameraProfileV1, camera_profile_metadata, load_camera_profile
 from .episode import AugmentationLineageV1, EpisodeManifestV1, EvaluatorResultV1, SceneProvenanceV1, SoftwareProvenanceV1
 from .features import ActionProfileV1, FeatureRole, FeatureSpecV1
@@ -19,6 +20,7 @@ from .scene import (
 )
 
 __all__ = [
+    "AssetArtifact", "AssetDraft", "AssetReference", "AssetVersion",
     "SceneDescriptor",
     "SceneParameter",
     "ScenePlugin",

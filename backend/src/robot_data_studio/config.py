@@ -12,6 +12,21 @@ CONTRACTS_SRC = PROJECT_ROOT / "packages" / "robot-data-contracts" / "src"
 
 @dataclass(frozen=True)
 class Settings:
+    asset_root: Path = Path(os.getenv("ROBOT_DATA_STUDIO_ASSET_ROOT", PROJECT_ROOT / "assets" / "registry"))
+    asset_sources_file: Path = Path(os.getenv("ROBOT_DATA_STUDIO_ASSET_SOURCES", PROJECT_ROOT / "config" / "asset_sources.json"))
+    cloth_run_root: Path = Path(os.getenv("ROBOT_DATA_STUDIO_CLOTH_RUN_ROOT", PROJECT_ROOT / "data" / "cloth_runs"))
+    clothforge_root: Path = Path(os.getenv("ROBOT_DATA_STUDIO_CLOTHFORGE_ROOT", "/data/zhanghejun/ClothForge"))
+    clothforge_python: str = os.getenv("ROBOT_DATA_STUDIO_CLOTHFORGE_PYTHON", "/data/zhanghejun/miniconda3/envs/newton-cloth/bin/python")
+    clothforge_gpu_id: int = int(os.getenv("ROBOT_DATA_STUDIO_CLOTHFORGE_GPU_ID", "5"))
+    clothforge_timeout_s: int = int(os.getenv("ROBOT_DATA_STUDIO_CLOTHFORGE_TIMEOUT_S", "300"))
+    clothforge_min_free_mb: int = int(os.getenv("ROBOT_DATA_STUDIO_CLOTHFORGE_MIN_FREE_MB", "8192"))
+    cloth_batch_root: Path = Path(
+        os.getenv("ROBOT_DATA_STUDIO_CLOTH_BATCH_ROOT", "/data/zhanghejun/simulation-demos/cloth-batch-v1")
+    )
+    cloth_genesis_python: str = os.getenv(
+        "ROBOT_DATA_STUDIO_CLOTH_GENESIS_PYTHON", "/data/zhanghejun/miniconda3/envs/genesis/bin/python"
+    )
+    cloth_genesis_gpu_id: int = int(os.getenv("ROBOT_DATA_STUDIO_CLOTH_GENESIS_GPU_ID", "1"))
     db_path: Path = Path(os.getenv("ROBOT_DATA_STUDIO_DB", PROJECT_ROOT / "data" / "studio.db"))
     data_root: Path = Path(os.getenv("ROBOT_DATA_STUDIO_DATA_ROOT", PROJECT_ROOT / "data"))
     camera_profile_root: Path = Path(

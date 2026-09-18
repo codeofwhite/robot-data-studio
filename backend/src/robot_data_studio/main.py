@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .db import initialize
-from .routes import consumer_smokes, datasets, episodes, exports, health, sessions
+from .routes import assets, consumer_smokes, datasets, episodes, exports, health, sessions
 from .services.worker_manager import worker_manager
 
 
@@ -26,6 +26,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(assets.router, prefix="/api")
 app.include_router(health.router, prefix="/api")
 app.include_router(datasets.router, prefix="/api")
 app.include_router(sessions.router, prefix="/api")
