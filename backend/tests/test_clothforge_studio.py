@@ -145,3 +145,37 @@ def test_low_free_gpu_memory_does_not_start_a_job(garment, monkeypatch):
     monkeypatch.setattr('robot_data_studio.services.cloth_run_service.subprocess.check_output', lambda *a, **k: '512')
     with pytest.raises(AssetConflict): manager.start(model.asset_id, 1)
     assert not list(manager.run_root.glob('run-*'))
+
+def test_ipc_configuration_is_distinct_and_preserves_physics(garment):
+    from robot_data_studio.services.cloth_run_service import GenesisGarmentRunManager
+    manager, model, folder = garment
+    registry=manager.registry
+    ipc=GenesisGarmentRunManager(registry=registry,run_root=manager.run_root,runner_root=manager.runner_root,python=manager.python)
+    a=manager.prepare(model.asset_id,1);b=ipc.prepare(model.asset_id,1)
+    assert a['config']['material']==b['config']['material']
+    assert a['config']['mesh_sha256']==b['config']['mesh_sha256']
+    assert a['config']['gates']==b['config']['gates']
+    assert b['config']['simulation']['solver']=='genesis_ipc'
+
+@pytest.mark.parametrize('damage', [None, 'mass', 'times', 'positions', 'hash'])
+def test_comparison_refuses_unmatched_or_changed_trajectories(tmp_path,monkeypatch,damage):
+    import numpy as np
+    from robot_data_studio.services import cloth_run_service as service
+    manager=service.ClothComparisonManager(run_root=tmp_path)
+    pair='run-20260918t000000z-aaaaaaaa'
+    children=['run-20260918t000001z-bbbbbbbb','run-20260918t000002z-cccccccc']
+    manager._write_state({'run_id':pair,'engine_id':'comparison','children':children})
+    monkeypatch.setattr(service.newton_cloth_run_manager,'get',lambda rid:{'engine_id':'newton_vbd' if rid==children[0] else 'genesis_ipc'})
+    for i,rid in enumerate(children):
+        out=manager._run_dir(rid)/'output';out.mkdir(parents=True)
+        positions=np.zeros((2,3,3));times=np.array([0.,1.])
+        if i and damage=='positions':positions[1,0,0]=np.nan
+        if i and damage=='times':times[1]=2
+        np.savez(out/'trajectory.npz',positions=positions,times=times,faces=np.array([[0,1,2]]),rest_triangles=np.zeros((1,3,2)),pins=np.array([0]))
+        (out/'validation.json').write_text(json.dumps({'trajectory_sha256':'wrong' if i and damage=='hash' else file_digest(out/'trajectory.npz')}))
+        (out/'initialization.json').write_text(json.dumps({'unconstrained_total_mass_kg':2 if i and damage=='mass' else 1}))
+    if damage:
+        with pytest.raises(ValueError):manager.trajectories(pair)
+    else:
+        result=manager.trajectories(pair)
+        assert result['initialization_matched'] and len(result['sides'])==2

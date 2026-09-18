@@ -150,7 +150,7 @@ def _resolve_selected_episodes(dataset_id: int, episode_ids: list[int]) -> list[
     with transaction() as connection:
         rows = connection.execute(
             f"""SELECT e.id, e.episode_uuid, e.path, e.qa_status, s.status AS session_status,
-               s.dataset_id, d.root_path AS dataset_root FROM episodes e
+               s.dataset_id, s.config_json AS session_config_json, d.root_path AS dataset_root FROM episodes e
                JOIN sessions s ON s.id = e.session_id
                JOIN datasets d ON d.id = s.dataset_id
                WHERE e.id IN ({placeholders})""",
@@ -168,6 +168,19 @@ def _resolve_selected_episodes(dataset_id: int, episode_ids: list[int]) -> list[
             raise ValueError(f"episode {episode_id} belongs to a trashed session")
         source = Path(episode["path"]).resolve()
         raw_root = (Path(episode["dataset_root"]).resolve() / "raw").resolve()
+        config = json.loads(episode["session_config_json"])
+        if config.get("imported_read_only"):
+            # Import records reference immutable delivered demonstrations in place.
+            # Re-resolve against the catalog allowlist instead of trusting a DB path.
+            from .cloth_catalog_service import catalog, run_path
+            attempt = next((a for task in catalog()["tasks"] for a in task["attempts"]
+                            if a.get("importable") and a["batch"] == config.get("source_batch")
+                            and a["run_id"] == config.get("source_run")), None)
+            if attempt is None:
+                raise ValueError(f"episode {episode_id} imported source is no longer delivered")
+            raw_root = run_path(attempt["batch"], attempt["path"]) / "episodes"
+            if source.parent != raw_root or not source.name.startswith("episode_"):
+                raise ValueError(f"episode {episode_id} imported source does not match its run")
         if not source.is_relative_to(raw_root) or not source.is_dir():
             raise ValueError(f"episode {episode_id} source directory is unavailable")
         episode["source"] = source

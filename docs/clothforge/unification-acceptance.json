@@ -1,0 +1,983 @@
+{
+  "date": "2026-09-18",
+  "scope": "synthetic medium garments, 2 seconds, 61 saved frames; not calibrated sim-to-real",
+  "catalog": {
+    "delivered": 25,
+    "indexed": 25
+  },
+  "original_qa_preserved": 126,
+  "pending_imports": 25,
+  "pairs": [
+    {
+      "pair_id": "run-20260918t091327z-fe42cdae",
+      "asset_id": "MDL-clothforge-tshirt-000",
+      "scenario": "hanging",
+      "initialization_matched": true,
+      "final_vertex_rms_difference_m": 0.013826577569677048,
+      "sides": [
+        {
+          "run_id": "run-20260918t091327z-f3a752d8",
+          "engine_id": "newton_vbd",
+          "outcome": "passed",
+          "failed_gates": [],
+          "metrics": {
+            "maximum_area_ratio": 1.0731275619591123,
+            "maximum_ground_penetration_m": 0.0,
+            "maximum_principal_stretch": 1.0731270324194149,
+            "maximum_self_intersection_pairs": 0,
+            "maximum_speed_m_s": 0.34296080470085144,
+            "minimum_area_ratio": 0.9989786634773676,
+            "saved_frames": 61,
+            "seam_gap_m": 0.0,
+            "seam_representation": "shared_vertex_topology",
+            "self_contact_check": "all_saved_frames_nonadjacent_triangle_intersections",
+            "state_finite": true
+          },
+          "worker_wall_seconds": 85.81687637418509,
+          "physical_wall_seconds": 79.1288188137114,
+          "trajectory_sha256": "823bee6ebbbaf4d8d3ec74be9b401f804667e484c70fc613d14d01c1c1fc0a0c",
+          "configuration_sha256": "5ad8a1bade7305c25179de7bd68bd307b3f747a2a69b0c1aac85ca9b069cce2d",
+          "initialization": {
+            "collision": "Newton VBD vertex-triangle and edge-edge self contact",
+            "fixture": "fixed mesh vertices at two shoulders/waist locations",
+            "free_seam_hinge_edges": 56,
+            "gravity_m_s2": [
+              0,
+              0,
+              -9.81
+            ],
+            "ground_material": {
+              "kd": 100.0,
+              "ke": 2500.0,
+              "mu": 1.0
+            },
+            "logical_gpu": "cuda:0",
+            "material_area_m2": 0.7533271019847667,
+            "material_rest_reference": "per-face planar pattern metric",
+            "native_versions": {
+              "newton": "1.4.0",
+              "numpy": "2.4.6",
+              "warp-lang": "1.16.0"
+            },
+            "physical_gpu": "5",
+            "pins": [
+              63,
+              80,
+              312,
+              341
+            ],
+            "profile_id": "studio-recommended",
+            "resolved_simulation": {
+              "collision_detection_interval": 1,
+              "duration_s": 2,
+              "edge_contact_buffer_size": 128,
+              "fps": 30,
+              "gpu_physical_index": 5,
+              "iterations": 15,
+              "material_id": "medium",
+              "max_gpu_wall_seconds": 7200,
+              "max_output_bytes": 20000000000,
+              "particle_radius_m": 0.002,
+              "scenarios": [
+                "hanging",
+                "drop"
+              ],
+              "self_contact_margin_m": 0.006,
+              "self_contact_radius_m": 0.002,
+              "soft_contact_kd": 10.0,
+              "soft_contact_ke": 10000.0,
+              "solver": "newton_vbd",
+              "substeps": 64,
+              "topological_contact_filter_threshold": 1,
+              "variants": [
+                0,
+                1
+              ],
+              "vertex_contact_buffer_size": 64
+            },
+            "seam_representation": "shared vertices, permanent ideal stitching",
+            "unconstrained_total_mass_kg": 0.16573196243664867
+          }
+        },
+        {
+          "run_id": "run-20260918t091454z-0cf14e74",
+          "engine_id": "genesis_ipc",
+          "outcome": "passed",
+          "failed_gates": [],
+          "metrics": {
+            "maximum_area_ratio": 1.0731315165590507,
+            "maximum_ground_penetration_m": 0.0,
+            "maximum_principal_stretch": 1.0731315165590503,
+            "maximum_self_intersection_pairs": 0,
+            "maximum_speed_m_s": 0.8734602733845117,
+            "minimum_area_ratio": 0.9993008298641635,
+            "saved_frames": 61,
+            "seam_gap_m": 0.0,
+            "seam_representation": "shared_vertex_topology",
+            "self_contact_check": "all_saved_frames_nonadjacent_triangle_intersections",
+            "state_finite": true
+          },
+          "worker_wall_seconds": 122.66431483253837,
+          "physical_wall_seconds": 73.01411281898618,
+          "trajectory_sha256": "cb156f61d4afe23b4fea4d5c22d9852f078adfbb6ced33e39cb0297e89e1f0b7",
+          "configuration_sha256": "75cf70985509f1085716e116c19221d183d153f2962816d3c536d7820c33725a",
+          "initialization": {
+            "dt": 0.004166666666666667,
+            "gravity_m_s2": [
+              0,
+              0,
+              -9.81
+            ],
+            "ground_z_m": 0,
+            "initial_pose_max_error": 0.0,
+            "mass_source": "native vertex volumes times density; IPC thickness is half-thickness",
+            "material_area_m2": 0.7533271019847667,
+            "material_mapping": {
+              "bending_stiffness": 0.005,
+              "calibration_status": "synthetic_unmeasured",
+              "density_kg_m3": 183.33333333333334,
+              "friction": 0.5,
+              "mapping": "nominal membrane scale and numeric bending preset; different energies, not calibrated equivalence",
+              "poisson": 0.3333333333333333,
+              "thickness_m": 0.0006,
+              "unmapped": [
+                "tri_kd",
+                "edge_kd"
+              ],
+              "young_pa": 13333333.333333334
+            },
+            "material_rest_reference": "per-face planar pattern metric",
+            "native_versions": {
+              "genesis": "1.3.1",
+              "pyuipc": "0.0.25"
+            },
+            "physical_gpu": "5",
+            "pins": [
+              63,
+              80,
+              312,
+              341
+            ],
+            "seam_representation": "shared vertices, free seam hinges",
+            "solver": "StrainLimitingBaraffWitkinShell + DiscreteShellBending / IPC",
+            "substeps": 8,
+            "unconstrained_total_mass_kg": 0.16573196243664867
+          }
+        }
+      ]
+    },
+    {
+      "pair_id": "run-20260918t091658z-f66fe840",
+      "asset_id": "MDL-clothforge-tshirt-000",
+      "scenario": "drop",
+      "initialization_matched": true,
+      "final_vertex_rms_difference_m": 0.34034917505575246,
+      "sides": [
+        {
+          "run_id": "run-20260918t091658z-86d4ce9e",
+          "engine_id": "newton_vbd",
+          "outcome": "passed",
+          "failed_gates": [],
+          "metrics": {
+            "maximum_area_ratio": 1.0731275619591123,
+            "maximum_ground_penetration_m": 0.0,
+            "maximum_principal_stretch": 1.0731270324194149,
+            "maximum_self_intersection_pairs": 0,
+            "maximum_speed_m_s": 3.444674491882324,
+            "minimum_area_ratio": 0.9657201906227557,
+            "saved_frames": 61,
+            "seam_gap_m": 0.0,
+            "seam_representation": "shared_vertex_topology",
+            "self_contact_check": "all_saved_frames_nonadjacent_triangle_intersections",
+            "state_finite": true
+          },
+          "worker_wall_seconds": 90.12214158847928,
+          "physical_wall_seconds": 83.8461446724832,
+          "trajectory_sha256": "37fb37f54b2c5634d9c9fa1938c41e52338ad8ed323c1c71f61bcd43d73b2682",
+          "configuration_sha256": "5ad8a1bade7305c25179de7bd68bd307b3f747a2a69b0c1aac85ca9b069cce2d",
+          "initialization": {
+            "collision": "Newton VBD vertex-triangle and edge-edge self contact",
+            "fixture": "none",
+            "free_seam_hinge_edges": 56,
+            "gravity_m_s2": [
+              0,
+              0,
+              -9.81
+            ],
+            "ground_material": {
+              "kd": 100.0,
+              "ke": 2500.0,
+              "mu": 1.0
+            },
+            "logical_gpu": "cuda:0",
+            "material_area_m2": 0.7533271019847667,
+            "material_rest_reference": "per-face planar pattern metric",
+            "native_versions": {
+              "newton": "1.4.0",
+              "numpy": "2.4.6",
+              "warp-lang": "1.16.0"
+            },
+            "physical_gpu": "5",
+            "pins": [],
+            "profile_id": "studio-recommended",
+            "resolved_simulation": {
+              "collision_detection_interval": 1,
+              "duration_s": 2,
+              "edge_contact_buffer_size": 128,
+              "fps": 30,
+              "gpu_physical_index": 5,
+              "iterations": 15,
+              "material_id": "medium",
+              "max_gpu_wall_seconds": 7200,
+              "max_output_bytes": 20000000000,
+              "particle_radius_m": 0.002,
+              "scenarios": [
+                "hanging",
+                "drop"
+              ],
+              "self_contact_margin_m": 0.006,
+              "self_contact_radius_m": 0.002,
+              "soft_contact_kd": 10.0,
+              "soft_contact_ke": 10000.0,
+              "solver": "newton_vbd",
+              "substeps": 64,
+              "topological_contact_filter_threshold": 1,
+              "variants": [
+                0,
+                1
+              ],
+              "vertex_contact_buffer_size": 64
+            },
+            "seam_representation": "shared vertices, permanent ideal stitching",
+            "unconstrained_total_mass_kg": 0.16573196243664867
+          }
+        },
+        {
+          "run_id": "run-20260918t091830z-b64fada2",
+          "engine_id": "genesis_ipc",
+          "outcome": "passed",
+          "failed_gates": [],
+          "metrics": {
+            "maximum_area_ratio": 1.0731315165590507,
+            "maximum_ground_penetration_m": 0.0,
+            "maximum_principal_stretch": 1.0731315165590503,
+            "maximum_self_intersection_pairs": 0,
+            "maximum_speed_m_s": 4.294902790177839,
+            "minimum_area_ratio": 0.9020230525211491,
+            "saved_frames": 61,
+            "seam_gap_m": 0.0,
+            "seam_representation": "shared_vertex_topology",
+            "self_contact_check": "all_saved_frames_nonadjacent_triangle_intersections",
+            "state_finite": true
+          },
+          "worker_wall_seconds": 212.04187028855085,
+          "physical_wall_seconds": 197.93986489251256,
+          "trajectory_sha256": "8a076f6bff9a01cab735e591a2ccdf93bee8e735a1146ad08d88e8a44d395d07",
+          "configuration_sha256": "75cf70985509f1085716e116c19221d183d153f2962816d3c536d7820c33725a",
+          "initialization": {
+            "dt": 0.004166666666666667,
+            "gravity_m_s2": [
+              0,
+              0,
+              -9.81
+            ],
+            "ground_z_m": 0,
+            "initial_pose_max_error": 0.0,
+            "mass_source": "native vertex volumes times density; IPC thickness is half-thickness",
+            "material_area_m2": 0.7533271019847667,
+            "material_mapping": {
+              "bending_stiffness": 0.005,
+              "calibration_status": "synthetic_unmeasured",
+              "density_kg_m3": 183.33333333333334,
+              "friction": 0.5,
+              "mapping": "nominal membrane scale and numeric bending preset; different energies, not calibrated equivalence",
+              "poisson": 0.3333333333333333,
+              "thickness_m": 0.0006,
+              "unmapped": [
+                "tri_kd",
+                "edge_kd"
+              ],
+              "young_pa": 13333333.333333334
+            },
+            "material_rest_reference": "per-face planar pattern metric",
+            "native_versions": {
+              "genesis": "1.3.1",
+              "pyuipc": "0.0.25"
+            },
+            "physical_gpu": "5",
+            "pins": [],
+            "seam_representation": "shared vertices, free seam hinges",
+            "solver": "StrainLimitingBaraffWitkinShell + DiscreteShellBending / IPC",
+            "substeps": 8,
+            "unconstrained_total_mass_kg": 0.16573196243664867
+          }
+        }
+      ]
+    },
+    {
+      "pair_id": "run-20260918t092204z-7763ee61",
+      "asset_id": "MDL-clothforge-trousers-000",
+      "scenario": "hanging",
+      "initialization_matched": true,
+      "final_vertex_rms_difference_m": 0.0018557477947357883,
+      "sides": [
+        {
+          "run_id": "run-20260918t092205z-440d9940",
+          "engine_id": "newton_vbd",
+          "outcome": "passed",
+          "failed_gates": [],
+          "metrics": {
+            "maximum_area_ratio": 1.0536832529839864,
+            "maximum_ground_penetration_m": 0.0,
+            "maximum_principal_stretch": 1.05368324501362,
+            "maximum_self_intersection_pairs": 0,
+            "maximum_speed_m_s": 0.23030781745910645,
+            "minimum_area_ratio": 0.9972571970754913,
+            "saved_frames": 61,
+            "seam_gap_m": 0.0,
+            "seam_representation": "shared_vertex_topology",
+            "self_contact_check": "all_saved_frames_nonadjacent_triangle_intersections",
+            "state_finite": true
+          },
+          "worker_wall_seconds": 96.28143664076924,
+          "physical_wall_seconds": 89.03303225710988,
+          "trajectory_sha256": "95b825e928b4888d396276f0e0cbf2b02468342477d71a2c7af78bd81c764eab",
+          "configuration_sha256": "3788a8e95c2787dcb6876b3ab822b83a3ba064fec44a36b36ea24fc587ddd4c0",
+          "initialization": {
+            "collision": "Newton VBD vertex-triangle and edge-edge self contact",
+            "fixture": "fixed mesh vertices at two shoulders/waist locations",
+            "free_seam_hinge_edges": 96,
+            "gravity_m_s2": [
+              0,
+              0,
+              -9.81
+            ],
+            "ground_material": {
+              "kd": 100.0,
+              "ke": 2500.0,
+              "mu": 1.0
+            },
+            "logical_gpu": "cuda:0",
+            "material_area_m2": 0.9318514830568987,
+            "material_rest_reference": "per-face planar pattern metric",
+            "native_versions": {
+              "newton": "1.4.0",
+              "numpy": "2.4.6",
+              "warp-lang": "1.16.0"
+            },
+            "physical_gpu": "5",
+            "pins": [
+              90,
+              393,
+              544,
+              806
+            ],
+            "profile_id": "studio-recommended",
+            "resolved_simulation": {
+              "collision_detection_interval": 1,
+              "duration_s": 2,
+              "edge_contact_buffer_size": 128,
+              "fps": 30,
+              "gpu_physical_index": 5,
+              "iterations": 15,
+              "material_id": "medium",
+              "max_gpu_wall_seconds": 7200,
+              "max_output_bytes": 20000000000,
+              "particle_radius_m": 0.002,
+              "scenarios": [
+                "hanging",
+                "drop"
+              ],
+              "self_contact_margin_m": 0.006,
+              "self_contact_radius_m": 0.002,
+              "soft_contact_kd": 10.0,
+              "soft_contact_ke": 10000.0,
+              "solver": "newton_vbd",
+              "substeps": 64,
+              "topological_contact_filter_threshold": 1,
+              "variants": [
+                0,
+                1
+              ],
+              "vertex_contact_buffer_size": 64
+            },
+            "seam_representation": "shared vertices, permanent ideal stitching",
+            "unconstrained_total_mass_kg": 0.20500732627251772
+          }
+        },
+        {
+          "run_id": "run-20260918t092342z-8e783a63",
+          "engine_id": "genesis_ipc",
+          "outcome": "passed",
+          "failed_gates": [],
+          "metrics": {
+            "maximum_area_ratio": 1.0536780471568972,
+            "maximum_ground_penetration_m": 0.0,
+            "maximum_principal_stretch": 1.0536780471568972,
+            "maximum_self_intersection_pairs": 0,
+            "maximum_speed_m_s": 0.3548526191855903,
+            "minimum_area_ratio": 0.9986873196641595,
+            "saved_frames": 61,
+            "seam_gap_m": 0.0,
+            "seam_representation": "shared_vertex_topology",
+            "self_contact_check": "all_saved_frames_nonadjacent_triangle_intersections",
+            "state_finite": true
+          },
+          "worker_wall_seconds": 91.78293272852898,
+          "physical_wall_seconds": 64.07527209445834,
+          "trajectory_sha256": "0039e00a5fd7048f4c72b2a8d2e78449a368b4f44cf60298a4726c5d23899fe9",
+          "configuration_sha256": "ca488f81176479fe1a82d326952cb111fd7179fdd8c820b82d8ae7847e687224",
+          "initialization": {
+            "dt": 0.004166666666666667,
+            "gravity_m_s2": [
+              0,
+              0,
+              -9.81
+            ],
+            "ground_z_m": 0,
+            "initial_pose_max_error": 0.0,
+            "mass_source": "native vertex volumes times density; IPC thickness is half-thickness",
+            "material_area_m2": 0.9318514830568987,
+            "material_mapping": {
+              "bending_stiffness": 0.005,
+              "calibration_status": "synthetic_unmeasured",
+              "density_kg_m3": 183.33333333333334,
+              "friction": 0.5,
+              "mapping": "nominal membrane scale and numeric bending preset; different energies, not calibrated equivalence",
+              "poisson": 0.3333333333333333,
+              "thickness_m": 0.0006,
+              "unmapped": [
+                "tri_kd",
+                "edge_kd"
+              ],
+              "young_pa": 13333333.333333334
+            },
+            "material_rest_reference": "per-face planar pattern metric",
+            "native_versions": {
+              "genesis": "1.3.1",
+              "pyuipc": "0.0.25"
+            },
+            "physical_gpu": "5",
+            "pins": [
+              90,
+              393,
+              544,
+              806
+            ],
+            "seam_representation": "shared vertices, free seam hinges",
+            "solver": "StrainLimitingBaraffWitkinShell + DiscreteShellBending / IPC",
+            "substeps": 8,
+            "unconstrained_total_mass_kg": 0.2050073262725177
+          }
+        }
+      ]
+    },
+    {
+      "pair_id": "run-20260918t093311z-807d9b8b",
+      "asset_id": "MDL-clothforge-trousers-000",
+      "scenario": "drop",
+      "initialization_matched": true,
+      "final_vertex_rms_difference_m": 0.8126894988686483,
+      "sides": [
+        {
+          "run_id": "run-20260918t093311z-c6dc7195",
+          "engine_id": "newton_vbd",
+          "outcome": "passed",
+          "failed_gates": [],
+          "metrics": {
+            "maximum_area_ratio": 1.0642791006930723,
+            "maximum_ground_penetration_m": 0.0,
+            "maximum_principal_stretch": 1.110138367825,
+            "maximum_self_intersection_pairs": 0,
+            "maximum_speed_m_s": 4.410267353057861,
+            "minimum_area_ratio": 0.9263446028476812,
+            "saved_frames": 61,
+            "seam_gap_m": 0.0,
+            "seam_representation": "shared_vertex_topology",
+            "self_contact_check": "all_saved_frames_nonadjacent_triangle_intersections",
+            "state_finite": true
+          },
+          "worker_wall_seconds": 97.33692919462919,
+          "physical_wall_seconds": 89.26829024776816,
+          "trajectory_sha256": "d5fb2cae5318fd85693acf4c4b5ca14ac7cdf83a42a948cb741147403d747c79",
+          "configuration_sha256": "3788a8e95c2787dcb6876b3ab822b83a3ba064fec44a36b36ea24fc587ddd4c0",
+          "initialization": {
+            "collision": "Newton VBD vertex-triangle and edge-edge self contact",
+            "fixture": "none",
+            "free_seam_hinge_edges": 96,
+            "gravity_m_s2": [
+              0,
+              0,
+              -9.81
+            ],
+            "ground_material": {
+              "kd": 100.0,
+              "ke": 2500.0,
+              "mu": 1.0
+            },
+            "logical_gpu": "cuda:0",
+            "material_area_m2": 0.9318514830568987,
+            "material_rest_reference": "per-face planar pattern metric",
+            "native_versions": {
+              "newton": "1.4.0",
+              "numpy": "2.4.6",
+              "warp-lang": "1.16.0"
+            },
+            "physical_gpu": "5",
+            "pins": [],
+            "profile_id": "studio-recommended",
+            "resolved_simulation": {
+              "collision_detection_interval": 1,
+              "duration_s": 2,
+              "edge_contact_buffer_size": 128,
+              "fps": 30,
+              "gpu_physical_index": 5,
+              "iterations": 15,
+              "material_id": "medium",
+              "max_gpu_wall_seconds": 7200,
+              "max_output_bytes": 20000000000,
+              "particle_radius_m": 0.002,
+              "scenarios": [
+                "hanging",
+                "drop"
+              ],
+              "self_contact_margin_m": 0.006,
+              "self_contact_radius_m": 0.002,
+              "soft_contact_kd": 10.0,
+              "soft_contact_ke": 10000.0,
+              "solver": "newton_vbd",
+              "substeps": 64,
+              "topological_contact_filter_threshold": 1,
+              "variants": [
+                0,
+                1
+              ],
+              "vertex_contact_buffer_size": 64
+            },
+            "seam_representation": "shared vertices, permanent ideal stitching",
+            "unconstrained_total_mass_kg": 0.20500732627251772
+          }
+        },
+        {
+          "run_id": "run-20260918t093450z-6e0ada56",
+          "engine_id": "genesis_ipc",
+          "outcome": "passed",
+          "failed_gates": [],
+          "metrics": {
+            "maximum_area_ratio": 1.0536780471568972,
+            "maximum_ground_penetration_m": 0.0,
+            "maximum_principal_stretch": 1.0536780471568972,
+            "maximum_self_intersection_pairs": 0,
+            "maximum_speed_m_s": 6.261409911240242,
+            "minimum_area_ratio": 0.9329777778063117,
+            "saved_frames": 61,
+            "seam_gap_m": 0.0,
+            "seam_representation": "shared_vertex_topology",
+            "self_contact_check": "all_saved_frames_nonadjacent_triangle_intersections",
+            "state_finite": true
+          },
+          "worker_wall_seconds": 275.0761412717402,
+          "physical_wall_seconds": 261.0625046156347,
+          "trajectory_sha256": "989e69897e58a5d7d9a0c1a6a2006db2345fd8c9564dd926624d48c8dc46da65",
+          "configuration_sha256": "ca488f81176479fe1a82d326952cb111fd7179fdd8c820b82d8ae7847e687224",
+          "initialization": {
+            "dt": 0.004166666666666667,
+            "gravity_m_s2": [
+              0,
+              0,
+              -9.81
+            ],
+            "ground_z_m": 0,
+            "initial_pose_max_error": 0.0,
+            "mass_source": "native vertex volumes times density; IPC thickness is half-thickness",
+            "material_area_m2": 0.9318514830568987,
+            "material_mapping": {
+              "bending_stiffness": 0.005,
+              "calibration_status": "synthetic_unmeasured",
+              "density_kg_m3": 183.33333333333334,
+              "friction": 0.5,
+              "mapping": "nominal membrane scale and numeric bending preset; different energies, not calibrated equivalence",
+              "poisson": 0.3333333333333333,
+              "thickness_m": 0.0006,
+              "unmapped": [
+                "tri_kd",
+                "edge_kd"
+              ],
+              "young_pa": 13333333.333333334
+            },
+            "material_rest_reference": "per-face planar pattern metric",
+            "native_versions": {
+              "genesis": "1.3.1",
+              "pyuipc": "0.0.25"
+            },
+            "physical_gpu": "5",
+            "pins": [],
+            "seam_representation": "shared vertices, free seam hinges",
+            "solver": "StrainLimitingBaraffWitkinShell + DiscreteShellBending / IPC",
+            "substeps": 8,
+            "unconstrained_total_mass_kg": 0.2050073262725177
+          }
+        }
+      ]
+    },
+    {
+      "pair_id": "run-20260918t093927z-e93ee80b",
+      "asset_id": "MDL-clothforge-open_coat-000",
+      "scenario": "hanging",
+      "initialization_matched": true,
+      "final_vertex_rms_difference_m": 0.0704523394519654,
+      "sides": [
+        {
+          "run_id": "run-20260918t093928z-6d3edf66",
+          "engine_id": "newton_vbd",
+          "outcome": "passed",
+          "failed_gates": [],
+          "metrics": {
+            "maximum_area_ratio": 1.0669167103239865,
+            "maximum_ground_penetration_m": 0.0,
+            "maximum_principal_stretch": 1.0669181617697672,
+            "maximum_self_intersection_pairs": 0,
+            "maximum_speed_m_s": 1.3603794574737549,
+            "minimum_area_ratio": 0.9806327195247528,
+            "saved_frames": 61,
+            "seam_gap_m": 0.0,
+            "seam_representation": "shared_vertex_topology",
+            "self_contact_check": "all_saved_frames_nonadjacent_triangle_intersections",
+            "state_finite": true
+          },
+          "worker_wall_seconds": 97.85506237670779,
+          "physical_wall_seconds": 90.13989268615842,
+          "trajectory_sha256": "e2ac59fb2c137801898cf6ed6517fb15595e08ea6e751c60b583edc964d87eb8",
+          "configuration_sha256": "ec134fe3ebed84cde7393667be8f9bb108fb0f5c09339e64503b1225813895ec",
+          "initialization": {
+            "collision": "Newton VBD vertex-triangle and edge-edge self contact",
+            "fixture": "fixed mesh vertices at two shoulders/waist locations",
+            "free_seam_hinge_edges": 100,
+            "gravity_m_s2": [
+              0,
+              0,
+              -9.81
+            ],
+            "ground_material": {
+              "kd": 100.0,
+              "ke": 2500.0,
+              "mu": 1.0
+            },
+            "logical_gpu": "cuda:0",
+            "material_area_m2": 1.2468014092979187,
+            "material_rest_reference": "per-face planar pattern metric",
+            "native_versions": {
+              "newton": "1.4.0",
+              "numpy": "2.4.6",
+              "warp-lang": "1.16.0"
+            },
+            "physical_gpu": "5",
+            "pins": [
+              110,
+              510,
+              557,
+              732
+            ],
+            "profile_id": "studio-recommended",
+            "resolved_simulation": {
+              "collision_detection_interval": 1,
+              "duration_s": 2,
+              "edge_contact_buffer_size": 128,
+              "fps": 30,
+              "gpu_physical_index": 5,
+              "iterations": 15,
+              "material_id": "medium",
+              "max_gpu_wall_seconds": 7200,
+              "max_output_bytes": 20000000000,
+              "particle_radius_m": 0.002,
+              "scenarios": [
+                "hanging",
+                "drop"
+              ],
+              "self_contact_margin_m": 0.006,
+              "self_contact_radius_m": 0.002,
+              "soft_contact_kd": 10.0,
+              "soft_contact_ke": 10000.0,
+              "solver": "newton_vbd",
+              "substeps": 64,
+              "topological_contact_filter_threshold": 1,
+              "variants": [
+                0,
+                1
+              ],
+              "vertex_contact_buffer_size": 64
+            },
+            "seam_representation": "shared vertices, permanent ideal stitching",
+            "unconstrained_total_mass_kg": 0.2742963100455421
+          }
+        },
+        {
+          "run_id": "run-20260918t094106z-d95c72e8",
+          "engine_id": "genesis_ipc",
+          "outcome": "passed",
+          "failed_gates": [],
+          "metrics": {
+            "maximum_area_ratio": 1.06692003334117,
+            "maximum_ground_penetration_m": 0.0,
+            "maximum_principal_stretch": 1.0669200333411752,
+            "maximum_self_intersection_pairs": 0,
+            "maximum_speed_m_s": 1.6278288851389722,
+            "minimum_area_ratio": 0.9965482060283894,
+            "saved_frames": 61,
+            "seam_gap_m": 0.0,
+            "seam_representation": "shared_vertex_topology",
+            "self_contact_check": "all_saved_frames_nonadjacent_triangle_intersections",
+            "state_finite": true
+          },
+          "worker_wall_seconds": 159.0704399123788,
+          "physical_wall_seconds": 132.10529429093003,
+          "trajectory_sha256": "1b91c24ed737d2217161f80860d998b0010380f0eef66bc3ac0a9901029e1f07",
+          "configuration_sha256": "037b6dee35e789a40ddd6c8973f70775a09f334ebfab1356e3bf73a4ed8eebbc",
+          "initialization": {
+            "dt": 0.004166666666666667,
+            "gravity_m_s2": [
+              0,
+              0,
+              -9.81
+            ],
+            "ground_z_m": 0,
+            "initial_pose_max_error": 0.0,
+            "mass_source": "native vertex volumes times density; IPC thickness is half-thickness",
+            "material_area_m2": 1.2468014092979187,
+            "material_mapping": {
+              "bending_stiffness": 0.005,
+              "calibration_status": "synthetic_unmeasured",
+              "density_kg_m3": 183.33333333333334,
+              "friction": 0.5,
+              "mapping": "nominal membrane scale and numeric bending preset; different energies, not calibrated equivalence",
+              "poisson": 0.3333333333333333,
+              "thickness_m": 0.0006,
+              "unmapped": [
+                "tri_kd",
+                "edge_kd"
+              ],
+              "young_pa": 13333333.333333334
+            },
+            "material_rest_reference": "per-face planar pattern metric",
+            "native_versions": {
+              "genesis": "1.3.1",
+              "pyuipc": "0.0.25"
+            },
+            "physical_gpu": "5",
+            "pins": [
+              110,
+              510,
+              557,
+              732
+            ],
+            "seam_representation": "shared vertices, free seam hinges",
+            "solver": "StrainLimitingBaraffWitkinShell + DiscreteShellBending / IPC",
+            "substeps": 8,
+            "unconstrained_total_mass_kg": 0.2742963100455421
+          }
+        }
+      ]
+    },
+    {
+      "pair_id": "run-20260918t094350z-f72099dc",
+      "asset_id": "MDL-clothforge-open_coat-000",
+      "scenario": "drop",
+      "initialization_matched": true,
+      "final_vertex_rms_difference_m": 0.7318071267918094,
+      "sides": [
+        {
+          "run_id": "run-20260918t094350z-2cc9046e",
+          "engine_id": "newton_vbd",
+          "outcome": "passed",
+          "failed_gates": [],
+          "metrics": {
+            "maximum_area_ratio": 1.100967288557719,
+            "maximum_ground_penetration_m": 0.0,
+            "maximum_principal_stretch": 1.1207537727405141,
+            "maximum_self_intersection_pairs": 0,
+            "maximum_speed_m_s": 5.44036340713501,
+            "minimum_area_ratio": 0.9155808065865559,
+            "saved_frames": 61,
+            "seam_gap_m": 0.0,
+            "seam_representation": "shared_vertex_topology",
+            "self_contact_check": "all_saved_frames_nonadjacent_triangle_intersections",
+            "state_finite": true
+          },
+          "worker_wall_seconds": 182.302245400846,
+          "physical_wall_seconds": 174.52282761782408,
+          "trajectory_sha256": "70778c56a29b794de4c6123b0c9ab9e48a30677151f324337d4e281424e74f93",
+          "configuration_sha256": "50db2b276008b3c5f1cc352c847251d0edaf47cd3310d9737eb47f0b3ce71ebf",
+          "initialization": {
+            "collision": "Newton VBD vertex-triangle and edge-edge self contact",
+            "fixture": "none",
+            "free_seam_hinge_edges": 100,
+            "gravity_m_s2": [
+              0,
+              0,
+              -9.81
+            ],
+            "ground_material": {
+              "kd": 100.0,
+              "ke": 2500.0,
+              "mu": 1.0
+            },
+            "logical_gpu": "cuda:0",
+            "material_area_m2": 1.2468014092979187,
+            "material_rest_reference": "per-face planar pattern metric",
+            "native_versions": {
+              "newton": "1.4.0",
+              "numpy": "2.4.6",
+              "warp-lang": "1.16.0"
+            },
+            "physical_gpu": "5",
+            "pins": [],
+            "profile_id": "studio-recommended",
+            "resolved_simulation": {
+              "collision_detection_interval": 1,
+              "duration_s": 2,
+              "edge_contact_buffer_size": 128,
+              "fps": 30,
+              "gpu_physical_index": 5,
+              "iterations": 30,
+              "material_id": "medium",
+              "max_gpu_wall_seconds": 7200,
+              "max_output_bytes": 20000000000,
+              "particle_radius_m": 0.002,
+              "scenarios": [
+                "hanging",
+                "drop"
+              ],
+              "self_contact_margin_m": 0.006,
+              "self_contact_radius_m": 0.002,
+              "soft_contact_kd": 10.0,
+              "soft_contact_ke": 10000.0,
+              "solver": "newton_vbd",
+              "substeps": 64,
+              "topological_contact_filter_threshold": 1,
+              "variants": [
+                0,
+                1
+              ],
+              "vertex_contact_buffer_size": 64
+            },
+            "seam_representation": "shared vertices, permanent ideal stitching",
+            "unconstrained_total_mass_kg": 0.2742963100455421
+          }
+        },
+        {
+          "run_id": "run-20260918t094653z-067bce66",
+          "engine_id": "genesis_ipc",
+          "outcome": "passed",
+          "failed_gates": [],
+          "metrics": {
+            "maximum_area_ratio": 1.06692003334117,
+            "maximum_ground_penetration_m": 0.0,
+            "maximum_principal_stretch": 1.0669200333411752,
+            "maximum_self_intersection_pairs": 0,
+            "maximum_speed_m_s": 4.736269274171696,
+            "minimum_area_ratio": 0.927136476623072,
+            "saved_frames": 61,
+            "seam_gap_m": 0.0,
+            "seam_representation": "shared_vertex_topology",
+            "self_contact_check": "all_saved_frames_nonadjacent_triangle_intersections",
+            "state_finite": true
+          },
+          "worker_wall_seconds": 353.87853867188096,
+          "physical_wall_seconds": 340.5774247609079,
+          "trajectory_sha256": "e8b9aaa093921f3eb2908e5c98bc2e019c6bb8a4b60b6b3b5fea29cd271d749a",
+          "configuration_sha256": "037b6dee35e789a40ddd6c8973f70775a09f334ebfab1356e3bf73a4ed8eebbc",
+          "initialization": {
+            "dt": 0.004166666666666667,
+            "gravity_m_s2": [
+              0,
+              0,
+              -9.81
+            ],
+            "ground_z_m": 0,
+            "initial_pose_max_error": 0.0,
+            "mass_source": "native vertex volumes times density; IPC thickness is half-thickness",
+            "material_area_m2": 1.2468014092979187,
+            "material_mapping": {
+              "bending_stiffness": 0.005,
+              "calibration_status": "synthetic_unmeasured",
+              "density_kg_m3": 183.33333333333334,
+              "friction": 0.5,
+              "mapping": "nominal membrane scale and numeric bending preset; different energies, not calibrated equivalence",
+              "poisson": 0.3333333333333333,
+              "thickness_m": 0.0006,
+              "unmapped": [
+                "tri_kd",
+                "edge_kd"
+              ],
+              "young_pa": 13333333.333333334
+            },
+            "material_rest_reference": "per-face planar pattern metric",
+            "native_versions": {
+              "genesis": "1.3.1",
+              "pyuipc": "0.0.25"
+            },
+            "physical_gpu": "5",
+            "pins": [],
+            "seam_representation": "shared vertices, free seam hinges",
+            "solver": "StrainLimitingBaraffWitkinShell + DiscreteShellBending / IPC",
+            "substeps": 8,
+            "unconstrained_total_mass_kg": 0.2742963100455421
+          }
+        }
+      ]
+    }
+  ],
+  "native_attempts": 18,
+  "worker_seconds": 2758.2799653448164,
+  "conservative_new_artifact_bytes": 191978400,
+  "browser": {
+    "passed": true,
+    "pair": "run-20260918t094350z-f72099dc",
+    "checks": [
+      "catalog",
+      "task_filter",
+      "real_video_playback",
+      "idempotent_import",
+      "reload",
+      "two_canvases",
+      "shared_timeline",
+      "play_pause",
+      "camera_interaction",
+      "comparison_restore"
+    ],
+    "pageErrors": []
+  },
+  "tests": {
+    "staged_studio_and_contracts": 57,
+    "clothforge": 19,
+    "typescript": "passed",
+    "production_build": "passed"
+  },
+  "notes": [
+    "An initial IPC trousers drop exceeded 300 seconds; retained as unavailable. Retry uses the same physics with a 600-second supervisor limit.",
+    "New imports remain pending; tests using accepted records operate on an isolated database.",
+    "LeRobot joint data preflight is separate from actual export/training. OpenPI requires missing base/wrist RGB."
+  ],
+  "browser_native_launch": {
+    "passed": true,
+    "pair_id": "run-20260918t095340z-71db5a2b",
+    "pageErrors": [],
+    "checks": [
+      "UI click starts native pair",
+      "both native solvers passed",
+      "automatic trajectory load",
+      "two canvases",
+      "shared timeline"
+    ]
+  },
+  "isolated_export_preflight": {
+    "lerobot": {
+      "passed": 25,
+      "total": 25
+    },
+    "openpi_lerobot_v21": {
+      "passed": 0,
+      "total": 25
+    }
+  }
+}

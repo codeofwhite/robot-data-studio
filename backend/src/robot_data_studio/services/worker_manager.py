@@ -224,6 +224,8 @@ class WorkerManager:
         session = get_session(session_id)
         if not session:
             raise KeyError(session_id)
+        if session["config"].get("imported_read_only"):
+            raise ValueError("Imported evidence cannot launch a collector")
         if session["status"] == "trashed":
             raise ValueError("restore the session before starting its worker")
         with self._lock:

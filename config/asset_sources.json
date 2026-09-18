@@ -16,6 +16,14 @@
     "clothforge-repair-v2": {
       "root": "/data/zhanghejun/ClothForge/data/repair_v2",
       "label": "ClothForge 已验证的衣物配置与轨迹"
+    },
+    "robot-cloth-scenes-v1": {
+      "root": "/data/zhanghejun/robot-data-studio/assets/sources/robot-cloth-scenes-v1",
+      "label": "写实机器人布料任务场景 v1"
+    },
+    "curobo-cloth-v1": {
+      "root": "/data/zhanghejun/robot-data-studio/data/expert_demos/curobo-cloth-v1",
+      "label": "cuRobo 布料专家数据与参数任务 v1"
     }
   }
 }

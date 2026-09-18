@@ -162,6 +162,8 @@ def trash_session(session_id: str) -> dict:
     session = get_session(session_id)
     if not session:
         raise KeyError(session_id)
+    if session["config"].get("imported_read_only"):
+        raise ValueError("Imported cloth evidence is read-only; source files cannot be moved or deleted")
     if session["status"] == "trashed":
         return session
     with transaction() as connection:
@@ -209,6 +211,8 @@ def restore_session(session_id: str) -> dict:
     session = get_session(session_id)
     if not session:
         raise KeyError(session_id)
+    if session["config"].get("imported_read_only"):
+        raise ValueError("Imported cloth evidence is read-only; source files cannot be moved or deleted")
     if session["status"] != "trashed":
         raise ValueError("only trashed sessions can be restored")
     config = dict(session["config"])
@@ -257,6 +261,8 @@ def permanently_delete_session(
     session = get_session(session_id)
     if not session:
         raise KeyError(session_id)
+    if session["config"].get("imported_read_only"):
+        raise ValueError("Imported cloth evidence is read-only; source files cannot be moved or deleted")
     if confirm_session_id != session_id:
         raise ValueError("confirmation must exactly match the session ID")
     if session["status"] != "trashed":
