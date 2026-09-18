@@ -169,3 +169,59 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src:third_party/GarmentCode .venv-generatio
 ```
 
 审查标签 `SELF_REVIEWED_PROVISIONAL`；原生执行、浏览器和哈希/配置匹配证据均已落盘。ClothForge 本轮本地提交：`26c875a`。
+
+
+## XPBD / PhysX 物理修复（2026-09-18）
+
+本轮结论见 `data/cloth_contact_repair_v1/report.json`；当前工作是物理修复，不是材料或尺寸扩量。原始衣物网格、材料预设、质量来源和表面验收门槛保持不变。历史试错结果保留，不把运行结束等同于物理通过。
+
+### 改动与数据流
+
+| 文件 | Before → After / 原因与影响 |
+| --- | --- |
+| `ClothForge/src/clothforge/xpbd_contact.py`（新增） | 原生粒子接触 → 每步增加顶点–面、边–边接触与明确的 1.10 主伸长约束目标（迭代近似，并非严格上界）、材料面积弹性；使用质量加权且共享松弛系数的投影以保留内部线动量。它是 XPBD 扩展，并非未修改的原生 XPBD，也不是经过证明的连续碰撞检测。 |
+| `ClothForge/src/clothforge/newton_worker.py` | 接入扩展；修复小时间步从世界坐标 float32 差分重建速度导致的虚假加速/停滞，改用增量速度更新；使用求解器保存的步前位置而非已被修改的输入缓冲；在初始化证据中记录扩展和材料映射。原来的零弹簧阻尼由材料名义阻尼替代，面积使用原 `tri_ka`，不等同 VBD 能量模型。 |
+| `ClothForge/src/clothforge/physx_worker.py` | 错误的面密度直接传入体密度接口、无效 stretch/shear 设置 → 按厚度换算体密度、Young 模量及弯曲尺度，并显式写入总质量。移除冗余 API 和额外未记录的启动步；记录 USD、碰撞属性和原生时间。增加掉落前 0.2 秒质心运动检查，超过 5 mm 或缺失数据仍标失败。结果在原运行结束前原子替换，避免独占文件创建冲突。 |
+| `ClothForge/tests/test_xpbd_contact.py`（新增） | 覆盖顶点–面/边–边、边界绕序、微小时间步速度、自由落体、面积/拉伸和动量守恒。 |
+| `ClothForge/tests/test_physx_material.py`（新增） | 覆盖面积质量/膜参数单位换算，以及形状通过不能掩盖运动异常。 |
+| `backend/src/robot_data_studio/services/cloth_run_service.py` | Studio 默认配置写入新的求解参数和修订号；配置哈希变化，使旧失败结果不会被当成当前配置缓存。接口字段及入库流程保持原有契约。 |
+| `backend/tests/test_clothforge_studio.py` | 验证接触修复配置不改变材料、网格、验收门槛，并使缓存键失效。 |
+| `docs/CLOTHFORGE_STATUS.md` | 保存本轮范围、限制、验证和交付证据。 |
+
+原生 XPBD 的速度钳制在增量更新扩展中不再使用；实际超速仍由原验收门槛拒绝。早期出现“形状通过但几乎静止”的试验不计作修复成功。PhysX 的质量是显式 authored 总质量及原生参考面积检查，当前接口未提供运行时节点质量读回；不声称已测得原生节点质量。PhysX 缝线仍使用统一弯曲设置，材料阻尼尚未实现与 Newton 等价的映射。
+
+PhysX 参数单位依据本机 Isaac Sim 6.0.1 schema 与 [官方变形体说明](https://docs.omniverse.nvidia.com/kit/docs/omni_physics/110.1/dev_guide/deformables/deformable_bodies.html)。修正单位并不意味着已消除 PhysX 的自相交或运动异常。
+
+### 验证与边界
+
+- 后端资产/布料相关回归：`pytest ...test_clothforge_studio.py ...test_cloth_run_service.py ...test_cloth_import.py ...test_assets.py`，63 passed、3 skipped；既有 Starlette/httpx 弃用告警保留。
+- ClothForge 生成环境：`unittest discover -s tests -v`，22 passed、1 skipped（该环境没有 Warp）；另补结果写入回归并单独执行 PhysX 测试，3 passed。
+- 既有 Newton 环境单独执行 `test_xpbd_contact.py`：8 passed，包括质量不均及不同邻接数时的内部动量检查。
+- 原生验证限定 GPU 5、最多 36 次/3600 秒累计 worker 验收时间/2 GB 新运行结果，不终止其他任务。未启动的队列不计入原生次数，但保留账本。
+- 目标覆盖为 medium 材料、三款 000 衣物、悬挂/掉落、2 秒及 61 个保存帧；不证明其它材料、长时稳定、所有时刻无穿插或 sim-to-real。
+- 审阅等级：`SELF_REVIEWED_PROVISIONAL`，未使用外部审阅服务。
+
+### 本轮最终结果
+
+XPBD 最终配置 **6/6 通过**；PhysX 最终配置 **0/4 通过**，另有外套悬挂/掉落两项未在本轮预算内执行。因此 `all_requested_repairs_passed=false`，不能宣称全部修复完成。Newton VBD、Genesis IPC、PPF 的各 6 条历史结果仅复用展示，没有在本轮重新运行或新增物理结论。
+
+| 求解器 | 衣物 / 场景 | 结论 | 最大自交对数 | 额外运动问题 | 运行 ID |
+| --- | --- | --- | ---: | --- | --- |
+| newton_xpbd | tshirt-000 / hanging | passed | 0 | 无 | `run-20260918t123032z-0110badb` |
+| physx_surface | tshirt-000 / hanging | failed | 11 | 无 | `run-20260918t123821z-40b41342` |
+| newton_xpbd | tshirt-000 / drop | passed | 0 | 无 | `run-20260918t123432z-3125df01` |
+| physx_surface | tshirt-000 / drop | failed | 107 | freefall_motion_mismatch | `run-20260918t124223z-05d942b5` |
+| newton_xpbd | trousers-000 / hanging | passed | 0 | 无 | `run-20260918t123852z-c0111ad3` |
+| physx_surface | trousers-000 / hanging | failed | 66 | 无 | `run-20260918t124714z-c62a03f2` |
+| newton_xpbd | trousers-000 / drop | passed | 0 | 无 | `run-20260918t124321z-a8839ade` |
+| physx_surface | trousers-000 / drop | failed | 61 | freefall_motion_mismatch | `run-20260918t124746z-3583aa32` |
+| newton_xpbd | open_coat-000 / hanging | passed | 0 | 无 | `run-20260918t122607z-17738b5b` |
+| newton_xpbd | open_coat-000 / drop | passed | 0 | 无 | `run-20260918t121757z-2a9e4706` |
+
+36 次原生尝试，累计 3554.84 秒（59.25 分钟），新运行产物 168,734,104 字节；达到次数上限后停止。结果包含正常执行但物理失败；早期写入异常及废弃候选均留在预算账本中。
+
+浏览器实操通过：T 恤悬挂/掉落均可切换五个已保存求解器；XPBD/PhysX 并排/单视图、同步播放/暂停、时间轴、相机重置、刷新恢复、两条缓存结果复用通过；无页面异常。截图 `data/cloth_contact_repair_v1/xpbd-physx-drop.png`，录像在同目录 `browser-video/`。本轮未修改前端说明文字，其中旧的“XPBD 使用粒子接触”简介尚未涵盖新增表面扩展；实际启用设置可在“实际模型与参数”和运行初始化证据中查看。
+
+证据目录：`data/cloth_contact_repair_v1/` 的 `report.json`、`budget.json`、`verification.json`、`browser-report.json`；运行原始轨迹位于 `data/cloth_runs/`。这些大体积/运行时证据不纳入 Git。
+
+报告 SHA-256：`0a4253edc70ec5f6a2279ea84a15cff9581f10ef74724bd21233aa6f30cc939f`。ClothForge 源码提交：`1fd4298`。尚未完成：PhysX 原生 Surface 的自相交、自由落体偏差，以及外套两例最终配置覆盖；未追加 GPU 预算、安装依赖或宣称 sim-to-real 成功。

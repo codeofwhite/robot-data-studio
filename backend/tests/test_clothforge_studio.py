@@ -223,3 +223,27 @@ def test_ppf_native_progress_is_visible_before_process_completion(tmp_path,monke
     monkeypatch.setattr(service.ClothRunManager,'get',lambda *a:dict(state))
     manager=service.PPFGarmentRunManager(run_root=tmp_path)
     assert manager.get('run-20260918t000000z-abcdef00')['progress']==expected
+
+@pytest.mark.parametrize('engine', ['newton_xpbd', 'physx_surface'])
+def test_contact_repair_keeps_source_material_geometry_and_gates(garment, engine):
+    from robot_data_studio.services.cloth_run_service import XPBDGarmentRunManager, PhysXGarmentRunManager
+    baseline, model, folder = garment
+    cls = XPBDGarmentRunManager if engine == 'newton_xpbd' else PhysXGarmentRunManager
+    manager = cls(baseline.registry, baseline.run_root, baseline.runner_root, python=__file__)
+    before = (folder/'config-medium.json').read_bytes()
+    source = json.loads(before)
+    prepared = manager.prepare(model.asset_id, 1, scenario='drop')
+    for key in ['material','mesh_sha256','gates']:
+        assert prepared['config'][key] == source[key]
+    assert (folder/'config-medium.json').read_bytes() == before
+    new = prepared['config']['simulation']
+    old = deepcopy(prepared['config'])
+    if engine == 'newton_xpbd':
+        assert new['xpbd_surface_contact']['maximum_stretch'] < source['gates']['maximum_principal_stretch']
+        old['simulation'].pop('xpbd_surface_contact')
+    else:
+        p = new['physx_parameters']
+        assert p['contact_offset_m'] > p['rest_offset_m'] >= 0
+        assert p['self_collision_filter_distance_m'] >= 2*p['rest_offset_m']
+        old['simulation']['physx_parameters'] = {'rest_offset_m':.0003,'contact_offset_m':.002,'self_collision_filter_distance_m':.0006}
+    assert _json_hash(old) != _json_hash(prepared['config'])

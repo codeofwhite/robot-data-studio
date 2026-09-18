@@ -525,7 +525,9 @@ class PhysXGarmentRunManager(NewtonClothRunManager):
     engine_id = "physx_surface"
     def prepare(self, *args, **kwargs):
         prepared=super().prepare(*args, **kwargs)
-        prepared['config']['simulation']['physx_parameters']={'rest_offset_m':.0003,'contact_offset_m':.002,'self_collision_filter_distance_m':.0006}
+        prepared['config']['simulation']['physx_parameters']={'rest_offset_m':.0003,'contact_offset_m':.002,'self_collision_filter_distance_m':.0006,'pair_updates':4,'collision_iterations':4,'contact_revision':'contact-v14-motion-audit','disable_sleep':True,'explicit_zero_material_damping':True,'motion_tolerance_m':.005}
+        prepared['config']['simulation'].update(substeps=8,iterations=32)
+        prepared['profile']['overrides'].update(substeps=8,iterations=32)
         return prepared
 
 
@@ -534,8 +536,9 @@ class XPBDGarmentRunManager(NewtonClothRunManager):
     def prepare(self, *args, **kwargs):
         prepared=super().prepare(*args, **kwargs)
         # Jacobi spring corrections on fine, light meshes require a smaller dt.
-        prepared["config"]["simulation"].update(substeps=512,iterations=2)
-        prepared["profile"]["overrides"].update(substeps=512,iterations=2)
+        prepared["config"]["simulation"].update(substeps=512,iterations=4)
+        prepared["profile"]["overrides"].update(substeps=512,iterations=4)
+        prepared["config"]["simulation"]["xpbd_surface_contact"]={"revision":"surface-v9-conservative-contact","gap_m":.001,"margin_m":.004,"iterations":12,"maximum_stretch":1.10,"spring_damping_from_material":True,"area_stiffness_from_material":True,"symmetric_projection":True,"topological_exclusion_hops":0}
         return prepared
 
 
