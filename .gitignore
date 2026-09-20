@@ -41,6 +41,17 @@ yarn-error.log*
 *.db-wal
 *.db-shm
 
+# asset registry runtime data (server-written, see docs/ASSET_REGISTRY.md)
+/assets/
+
+# upstream meshes and textures materialized under expert_demos/*/runtime/
+# (no trailing slash: cloth_v1/runtime/source/assets is a symlink, not a directory)
+/expert_demos/*/runtime/upstream_assets
+/expert_demos/*/runtime/source/assets
+
+# typescript incremental build info
+/tsconfig.tsbuildinfo
+
 # deployment and generated files
 .vercel
 next-env.d.ts

@@ -37,6 +37,7 @@ type Engine = {
     parameters: SceneParameter[];
   }>;
   camera_profiles: Array<{ id: string; label: string; match_level: string; roles: string[] }>;
+  renderer_profiles: Array<{ id: string; label: string; description: string; profile_version: number; rendering_mode: 'performance' | 'balanced' | 'quality' }>;
   session_limits?: {
     target_episodes?: {
       minimum: number;
@@ -62,6 +63,7 @@ export default function NewSessionPage() {
   const [gpu, setGpu] = useState(0);
   const [fps, setFps] = useState(10);
   const [cameraProfile, setCameraProfile] = useState('');
+  const [rendererProfile, setRendererProfile] = useState('');
   const [advanced, setAdvanced] = useState(false);
   const [sceneParams, setSceneParams] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
@@ -89,6 +91,7 @@ export default function NewSessionPage() {
     setScene(Object.keys(descriptor.scenes)[0] ?? '');
     setMode(descriptor.control_modes.includes('gello') ? 'gello' : descriptor.control_modes[0]);
     setCameraProfile(descriptor.camera_profiles[0]?.id ?? '');
+    setRendererProfile(descriptor.renderer_profiles.find((profile) => profile.rendering_mode === 'balanced')?.id ?? descriptor.renderer_profiles[0]?.id ?? '');
     setTarget(
       descriptor.session_limits?.target_episodes?.default ??
         (descriptor.capabilities.batch_generation ? 1 : 50),
@@ -141,6 +144,7 @@ export default function NewSessionPage() {
           width: 640,
           height: 480,
           camera_profile_id: cameraProfile,
+          ...(rendererProfile ? { renderer_profile_id: rendererProfile } : {}),
           scene_params: sceneParams,
         }),
       });
@@ -223,6 +227,13 @@ export default function NewSessionPage() {
                     {selectedEngine?.camera_profiles.map((profile) => <NativeSelectOption key={profile.id} value={profile.id}>{profile.label} · {profile.roles.join(' + ')} · {profile.match_level}</NativeSelectOption>)}
                   </NativeSelect>
                 </div>
+                {Boolean(selectedEngine?.renderer_profiles.length) && <div>
+                  <Label className="mb-2">Renderer Profile</Label>
+                  <NativeSelect className="w-full" value={rendererProfile} onChange={(event) => setRendererProfile(event.target.value)}>
+                    {selectedEngine?.renderer_profiles.map((profile) => <NativeSelectOption key={profile.id} value={profile.id}>{profile.label} · {profile.rendering_mode} · v{profile.profile_version}</NativeSelectOption>)}
+                  </NativeSelect>
+                  <p className="mt-2 text-xs text-muted-foreground">{selectedEngine?.renderer_profiles.find((profile) => profile.id === rendererProfile)?.description}</p>
+                </div>}
               </CardContent>
             </Card>
 
@@ -269,6 +280,7 @@ export default function NewSessionPage() {
                 <Summary label="Task" value={selected?.label ?? '等待场景'} />
                 <Summary label="Control" value={mode.toUpperCase()} />
                 <Summary label="Camera" value={selectedEngine?.camera_profiles.find((item) => item.id === cameraProfile)?.label ?? '—'} />
+                <Summary label="Renderer" value={selectedEngine?.renderer_profiles.find((item) => item.id === rendererProfile)?.label ?? '引擎默认'} />
                 <Summary label="Quota" value={`${target} episodes`} />
                 <Summary label="Worker" value={usesCollectorPort ? `GPU ${gpu} · :${port}` : `GPU ${gpu} · headless batch`} />
                 <div className="rounded-lg border border-primary/25 bg-primary/5 p-3 text-xs leading-5 text-muted-foreground"><Check className="mr-1 inline size-3.5 text-primary" />状态、动作、图像、时间戳和引擎 provenance 会进入统一 Episode 索引。</div>

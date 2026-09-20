@@ -113,6 +113,8 @@ def test_isaac_launch_uses_gpu_id_and_single_cuda_visibility():
     assert "CUDA_VISIBLE_DEVICES" not in launch.unset_env
     assert str(CONTRACTS_SRC) in launch.env_updates["PYTHONPATH"].split(":")
     assert launch.command[launch.command.index("--camera-profile-file") + 1].endswith("lab_d435i_dual_v1.json")
+    assert launch.command[launch.command.index("--renderer-profile-file") + 1].endswith("isaac_balanced_v1.json")
+    assert launch.command[launch.command.index("--rendering_mode") + 1] == "balanced"
     kit_args = launch.command[launch.command.index("--kit_args") + 1]
     assert "--/app/window/width=960" in kit_args
     assert "--/app/window/height=720" in kit_args
@@ -120,6 +122,20 @@ def test_isaac_launch_uses_gpu_id_and_single_cuda_visibility():
     assert launch.readiness.timeout_s == 600
     assert "gpu:6" in launch.resources
     assert "tcp:8080" in launch.resources
+
+
+def test_isaac_quality_renderer_profile_is_explicit_and_allowlisted() -> None:
+    adapter = IsaacSimAdapter()
+    config = {
+        "scene_id": "franka_empty", "control_mode": "keyboard", "gpu": 0, "port": 8080,
+        "control_fps": 20, "width": 640, "height": 480, "scene_params": {},
+        "camera_profile_id": "lab_d435i_dual_v1", "renderer_profile_id": "isaac_quality_v1",
+    }
+    command = adapter.build_collect_command(config, Path("/tmp/isaac-quality"))
+    assert command[command.index("--rendering_mode") + 1] == "quality"
+    assert command[command.index("--renderer-profile-file") + 1].endswith("isaac_quality_v1.json")
+    with pytest.raises(ValueError, match="unsupported Isaac renderer profile"):
+        adapter.build_collect_command({**config, "renderer_profile_id": "pathtracing"}, Path("/tmp/bad"))
 
 
 def test_isaac_keyboard_launch_is_allowlisted() -> None:

@@ -1,0 +1,275 @@
+{
+  "source": "/data/zhanghejun/simulation-demos/gpt6-single-arm-cloth/outputs/tabletop_fold_v3_gpt01/requests.jsonl",
+  "sha256": "715d90488d0edf7eb7ade8663920c3064af6725114803bf95e950c75d5641991",
+  "usage": "Design template only; cuRobo replans each motion from newly measured states. Historical outcomes are not new results.",
+  "actions": [
+    {
+      "translation": [
+        -0.02,
+        0,
+        0
+      ]
+    },
+    {
+      "translation": [
+        0,
+        0,
+        -0.02
+      ],
+      "rotation": [
+        0,
+        0,
+        0.08726646
+      ]
+    },
+    {
+      "translation": [
+        0,
+        0,
+        -0.02
+      ],
+      "rotation": [
+        0,
+        0,
+        0.08726646
+      ]
+    },
+    {
+      "translation": [
+        0.005,
+        0.015,
+        -0.012
+      ],
+      "rotation": [
+        0,
+        0,
+        0.08726646
+      ]
+    },
+    {
+      "translation": [
+        0,
+        0.008,
+        -0.018
+      ],
+      "rotation": [
+        0,
+        0,
+        0.08726646
+      ]
+    },
+    {
+      "translation": [
+        0,
+        0,
+        -0.02
+      ],
+      "rotation": [
+        0,
+        0,
+        0.08726646
+      ]
+    },
+    {
+      "translation": [
+        0,
+        0,
+        -0.02
+      ],
+      "rotation": [
+        0,
+        0,
+        0.08726646
+      ]
+    },
+    {
+      "translation": [
+        0,
+        0,
+        -0.02
+      ],
+      "rotation": [
+        0,
+        0,
+        0.08726646
+      ]
+    },
+    {
+      "translation": [
+        0,
+        0,
+        -0.02
+      ],
+      "rotation": [
+        0,
+        0,
+        0.08726646
+      ]
+    },
+    {
+      "translation": [
+        0,
+        0,
+        -0.01
+      ],
+      "rotation": [
+        0,
+        0,
+        0.08726646
+      ]
+    },
+    {
+      "gripper": "close"
+    },
+    {
+      "translation": [
+        0,
+        0,
+        0.015
+      ]
+    },
+    {
+      "translation": [
+        0.009,
+        -0.009,
+        0.014
+      ]
+    },
+    {
+      "translation": [
+        0.01,
+        -0.01,
+        0.014
+      ]
+    },
+    {
+      "translation": [
+        0.012,
+        -0.012,
+        0.01
+      ]
+    },
+    {
+      "translation": [
+        0.01,
+        -0.01,
+        0.014
+      ]
+    },
+    {
+      "translation": [
+        0.012,
+        -0.012,
+        0.01
+      ]
+    },
+    {
+      "translation": [
+        0.012,
+        -0.012,
+        0.01
+      ]
+    },
+    {
+      "translation": [
+        0.012,
+        -0.012,
+        0.01
+      ]
+    },
+    {
+      "translation": [
+        0.014,
+        -0.014,
+        0.002
+      ]
+    },
+    {
+      "translation": [
+        0.014,
+        -0.014,
+        0
+      ]
+    },
+    {
+      "translation": [
+        0.014,
+        -0.014,
+        -0.002
+      ]
+    },
+    {
+      "translation": [
+        0.0135,
+        -0.0135,
+        -0.004
+      ]
+    },
+    {
+      "translation": [
+        0.013,
+        -0.013,
+        -0.007
+      ]
+    },
+    {
+      "translation": [
+        0.012,
+        -0.012,
+        -0.01
+      ]
+    },
+    {
+      "translation": [
+        0.01,
+        -0.01,
+        -0.014
+      ]
+    },
+    {
+      "translation": [
+        0.01,
+        -0.01,
+        -0.014
+      ]
+    },
+    {
+      "translation": [
+        0.01,
+        -0.01,
+        -0.014
+      ]
+    },
+    {
+      "translation": [
+        0.003,
+        -0.003,
+        -0.018
+      ]
+    },
+    {
+      "gripper": "open"
+    },
+    {
+      "translation": [
+        0.012,
+        -0.012,
+        0.01
+      ]
+    },
+    {
+      "translation": [
+        0.014,
+        -0.014,
+        0
+      ]
+    },
+    {
+      "translation": [
+        -0.008,
+        0.008,
+        0.016
+      ]
+    }
+  ]
+}

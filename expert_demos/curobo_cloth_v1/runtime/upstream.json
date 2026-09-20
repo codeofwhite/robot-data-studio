@@ -1,0 +1,15 @@
+{
+  "source": "/data/zhanghejun/simulation-demos/gpt6-single-arm-cloth",
+  "files": {
+    "scene.py": "99eaee6553331ffcd23d46d0ed176503bde8ecdcbd4ddd376caf87d54db06c23",
+    "robot.py": "c0d687aa01f10c71921a198786356f75c566dc925b2284dcb4ba32bf728bca18",
+    "safety.py": "49572bb16f3b43828b301177e6af1bafc862ecc07ff981ab75e9fdab596da078",
+    "prepare_assets.py": "274498b30e35273990298e6871a0fc43b090d6f139f654065631687dec831f0d",
+    "ipc_axis_compat.py": "a023814646f91325668d6bbb938eb1500863b757e41cad64de6606236cf5308c",
+    "ipc_state_sync.py": "a58e25010603eaaea97fb1874b1e17c2ca4ca7a28072744ac6ec7598bfd59c22",
+    "table_geometry.py": "46d27959066afb22e2f134708fb33fe7ee5274b13bcbda62a8d11a8b6d3be4c9",
+    "camera.py": "cd86fbbb18153474f03c0c32b8849239143b1e19d135f471e4852218b4e3665f",
+    "evaluate.py": "1322a25b3ad3ca674c44dbb1749c464d93bbd46b625d0ea97bba50b73433681f"
+  },
+  "note": "Frozen local snapshot; upstream is never modified. New episodes are independently executed."
+}

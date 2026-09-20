@@ -60,6 +60,20 @@ def test_franka_writer_accepts_empty_optional_scene_metadata(tmp_path) -> None:
     assert writer.is_recording is False
 
 
+def test_franka_writer_preserves_renderer_profile_provenance(tmp_path) -> None:
+    renderer = {
+        "id": "isaac_quality_v1", "profile_version": 1, "rendering_mode": "quality",
+        "profile_sha256": "a" * 64, "kit_settings": {"/UJITSO/geometry": False},
+    }
+    writer = FrankaEpisodeWriter(
+        tmp_path, fps=10, engine_id="isaac_sim", engine_version="test",
+        scene_id="rigid_cube_lift", control_source="browser_se3_keyboard",
+        operator_command_names=["gripper_closed"], camera_names=[],
+        run_metadata={"renderer_profile": renderer},
+    )
+    assert writer._writer.scene.parameters["renderer_profile"] == renderer
+
+
 def test_episode_v1_contains_required_action_stages_and_timestamps(tmp_path) -> None:
     writer = EpisodeWriter(
         tmp_path, fps=20, robot_id="franka_panda", control_source="gello_joint_targets",

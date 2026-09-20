@@ -8,6 +8,7 @@ from typing import Any
 from robot_data_contracts import WorkerDescriptorV1
 
 from ..camera_profiles import camera_profile_descriptors
+from ..render_profiles import renderer_profile_descriptors
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,7 @@ class CollectionAdapter(ABC):
     scenes: dict[str, dict[str, Any]]
     control_modes: tuple[str, ...]
     camera_profile_ids: tuple[str, ...]
+    renderer_profile_ids: tuple[str, ...] = ()
 
     def descriptor(self) -> dict[str, Any]:
         worker = WorkerDescriptorV1(
@@ -59,6 +61,7 @@ class CollectionAdapter(ABC):
             "control_modes": list(self.control_modes),
             "scenes": self.scene_descriptors(),
             "camera_profiles": camera_profile_descriptors(self.camera_profile_ids),
+            "renderer_profiles": renderer_profile_descriptors(self.renderer_profile_ids),
             "worker": worker.model_dump(mode="json"),
         }
 

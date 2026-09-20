@@ -9,13 +9,13 @@
       "root": "/data/zhanghejun/robot-data-studio/data/cloth_runs",
       "label": "Studio 发起的布料运行"
     },
-    "clothforge-pilot-v1": {
-      "root": "/data/zhanghejun/ClothForge/data/pilot_v1",
-      "label": "ClothForge 衣物生成与动力学试点 v1"
+    "visual-workstation-v1": {
+      "root": "/data/zhanghejun/robot-data-studio/assets/sources/visual-workstation-v1",
+      "label": "真实餐厅工作站视觉资产 v1"
     },
-    "clothforge-repair-v2": {
-      "root": "/data/zhanghejun/ClothForge/data/repair_v2",
-      "label": "ClothForge 已验证的衣物配置与轨迹"
+    "visual-bimanual-tabletop-v1": {
+      "root": "/data/zhanghejun/robot-data-studio/assets/sources/visual-workstation-v1",
+      "label": "固定双 Franka PBR 桌面视觉资产 v1"
     },
     "robot-cloth-scenes-v1": {
       "root": "/data/zhanghejun/robot-data-studio/assets/sources/robot-cloth-scenes-v1",
@@ -24,6 +24,14 @@
     "curobo-cloth-v1": {
       "root": "/data/zhanghejun/robot-data-studio/data/expert_demos/curobo-cloth-v1",
       "label": "cuRobo 布料专家数据与参数任务 v1"
+    },
+    "clothforge-pilot-v1": {
+      "root": "/data/zhanghejun/ClothForge/data/pilot_v1",
+      "label": "ClothForge 衣物生成与动力学试点 v1"
+    },
+    "clothforge-repair-v2": {
+      "root": "/data/zhanghejun/ClothForge/data/repair_v2",
+      "label": "ClothForge 已验证的衣物配置与轨迹"
     }
   }
 }

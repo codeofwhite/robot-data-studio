@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "status": "candidate task specifications; not successful demonstrations",
+  "tasks": [
+    {
+      "id": "corner_lift",
+      "label": "布料角点夹持、抬升、保持、释放",
+      "profile": "single_franka",
+      "recipe": "reference_pinch_then_lift",
+      "criteria": {
+        "local_lift_m": 0.008,
+        "release_drop_m": 0.005,
+        "hold_s": 0.5,
+        "released_finger_m": 0.035
+      }
+    },
+    {
+      "id": "edge_retrieve",
+      "label": "从桌沿回收悬垂布料",
+      "profile": "single_franka",
+      "recipe": null,
+      "criteria": {
+        "supported_fraction_min": 0.95,
+        "support_gain_min": 0.15,
+        "release_hold_s": 1.0
+      }
+    },
+    {
+      "id": "place",
+      "label": "夹持移送并放到目标区域",
+      "profile": "single_franka",
+      "recipe": null,
+      "criteria": {
+        "centroid_error_m": 0.02,
+        "minimum_transport_m": 0.04,
+        "release_hold_s": 1.0
+      }
+    },
+    {
+      "id": "edge_align",
+      "label": "将指定布边对齐目标线",
+      "profile": "single_franka",
+      "recipe": null,
+      "criteria": {
+        "edge_rms_error_m": 0.012,
+        "edge_angle_error_deg": 5.0,
+        "release_hold_s": 1.0
+      }
+    },
+    {
+      "id": "feed",
+      "label": "沿指定方向送料指定长度",
+      "profile": "single_franka",
+      "recipe": null,
+      "criteria": {
+        "feed_length_m": 0.06,
+        "length_error_m": 0.01,
+        "cross_track_error_m": 0.015,
+        "release_hold_s": 1.0
+      }
+    },
+    {
+      "id": "smooth",
+      "label": "展开局部折角并铺平",
+      "profile": "single_franka",
+      "recipe": "reference_corner_unfold",
+      "criteria": {
+        "coverage_min": 0.93,
+        "coverage_gain_min": 0.08,
+        "height_q95_max_m": 0.015,
+        "release_hold_s": 1.0
+      }
+    },
+    {
+      "id": "fold",
+      "label": "沿目标折线完成单次折叠",
+      "profile": "single_franka",
+      "recipe": null,
+      "criteria": {
+        "edge_matching_rms_m": 0.015,
+        "layer_overlap_min": 0.85,
+        "release_hold_s": 1.0
+      }
+    },
+    {
+      "id": "bimanual_unfold",
+      "label": "双臂夹持展开布料",
+      "profile": "dual_franka",
+      "recipe": null,
+      "criteria": {
+        "coverage_min": 0.93,
+        "release_hold_s": 1.0
+      }
+    }
+  ]
+}

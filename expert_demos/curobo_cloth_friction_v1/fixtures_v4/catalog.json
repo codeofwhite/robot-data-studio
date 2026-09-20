@@ -1,0 +1,401 @@
+{
+  "schema_version": 1,
+  "batch_id": "fixtures_v4",
+  "robot": "FrankaLeft",
+  "material": "medium",
+  "seed": 194731,
+  "physics_dt_s": 0.01,
+  "assisted_strength": 100.0,
+  "target_region_xy_m": [
+    [
+      0.11,
+      -0.69
+    ],
+    [
+      0.69,
+      0.09
+    ]
+  ],
+  "fixtures": {
+    "rod": {
+      "length_m": 0.44,
+      "radius_m": 0.015,
+      "axis": "X",
+      "center_height_m": 1.01
+    },
+    "basket": {
+      "size_m": [
+        0.34,
+        0.28,
+        0.12
+      ],
+      "wall_m": 0.012,
+      "base_height_m": 0.78
+    },
+    "box": {
+      "size_m": [
+        0.22,
+        0.16,
+        0.09
+      ],
+      "base_height_m": 0.78
+    }
+  },
+  "tasks": {
+    "hang_on_rod": {
+      "name": "搭杆悬挂",
+      "required_stages": [
+        "task_start",
+        "acquired",
+        "cloth_lifted",
+        "crossed_rod",
+        "released_on_rod",
+        "task_complete",
+        "terminal_hold"
+      ],
+      "variants": {
+        "v001": {
+          "fixture": "rod",
+          "fixture_center_xy": [
+            -0.03,
+            0.34
+          ],
+          "initial_center": [
+            0.36,
+            -0.34
+          ],
+          "target_center": [
+            0.37,
+            -0.3
+          ],
+          "target_yaw_deg": 90,
+          "initial_profile": "flat",
+          "primary_corner": 167,
+          "rod_far_offset_m": 0.14
+        },
+        "v002": {
+          "fixture": "rod",
+          "fixture_center_xy": [
+            -0.05,
+            0.35500000000000004
+          ],
+          "initial_center": [
+            0.33999999999999997,
+            -0.325
+          ],
+          "target_center": [
+            0.35,
+            -0.285
+          ],
+          "target_yaw_deg": 90,
+          "initial_profile": "mild",
+          "primary_corner": 167,
+          "rod_far_offset_m": 0.13
+        },
+        "v003": {
+          "fixture": "rod",
+          "fixture_center_xy": [
+            -0.009999999999999998,
+            0.325
+          ],
+          "initial_center": [
+            0.38,
+            -0.35500000000000004
+          ],
+          "target_center": [
+            0.39,
+            -0.315
+          ],
+          "target_yaw_deg": 90,
+          "initial_profile": "reverse",
+          "primary_corner": 167,
+          "rod_far_offset_m": 0.15
+        }
+      }
+    },
+    "retrieve_from_rod": {
+      "name": "取下挂布并铺开",
+      "required_stages": [
+        "task_start",
+        "acquired",
+        "clear_of_rod",
+        "transferred_to_table",
+        "spread_complete",
+        "task_complete",
+        "terminal_hold"
+      ],
+      "variants": {
+        "v001": {
+          "fixture": "rod",
+          "fixture_center_xy": [
+            -0.03,
+            0.34
+          ],
+          "initial_center": [
+            0.36,
+            -0.34
+          ],
+          "target_center": [
+            0.37,
+            -0.3
+          ],
+          "target_yaw_deg": 90,
+          "initial_profile": "flat",
+          "primary_corner": 167,
+          "rod_far_offset_m": 0.14
+        },
+        "v002": {
+          "fixture": "rod",
+          "fixture_center_xy": [
+            -0.05,
+            0.35500000000000004
+          ],
+          "initial_center": [
+            0.33999999999999997,
+            -0.325
+          ],
+          "target_center": [
+            0.35,
+            -0.285
+          ],
+          "target_yaw_deg": 90,
+          "initial_profile": "mild",
+          "primary_corner": 167,
+          "rod_far_offset_m": 0.13
+        },
+        "v003": {
+          "fixture": "rod",
+          "fixture_center_xy": [
+            -0.009999999999999998,
+            0.325
+          ],
+          "initial_center": [
+            0.38,
+            -0.35500000000000004
+          ],
+          "target_center": [
+            0.39,
+            -0.315
+          ],
+          "target_yaw_deg": 90,
+          "initial_profile": "reverse",
+          "primary_corner": 167,
+          "rod_far_offset_m": 0.15
+        }
+      }
+    },
+    "place_in_basket": {
+      "name": "布料放入收纳筐",
+      "required_stages": [
+        "task_start",
+        "acquired",
+        "above_basket",
+        "lowered_into_basket",
+        "released_in_basket",
+        "task_complete",
+        "terminal_hold"
+      ],
+      "variants": {
+        "v001": {
+          "fixture": "basket",
+          "fixture_center_xy": [
+            -0.02,
+            0.34
+          ],
+          "initial_center": [
+            0.36,
+            -0.34
+          ],
+          "target_center": [
+            0.37,
+            -0.3
+          ],
+          "target_yaw_deg": 90,
+          "initial_profile": "flat",
+          "primary_corner": 167,
+          "rod_far_offset_m": 0.14
+        },
+        "v002": {
+          "fixture": "basket",
+          "fixture_center_xy": [
+            -0.04,
+            0.35500000000000004
+          ],
+          "initial_center": [
+            0.33999999999999997,
+            -0.325
+          ],
+          "target_center": [
+            0.35,
+            -0.285
+          ],
+          "target_yaw_deg": 90,
+          "initial_profile": "mild",
+          "primary_corner": 167,
+          "rod_far_offset_m": 0.13
+        },
+        "v003": {
+          "fixture": "basket",
+          "fixture_center_xy": [
+            0.0,
+            0.325
+          ],
+          "initial_center": [
+            0.38,
+            -0.35500000000000004
+          ],
+          "target_center": [
+            0.39,
+            -0.315
+          ],
+          "target_yaw_deg": 90,
+          "initial_profile": "reverse",
+          "primary_corner": 167,
+          "rod_far_offset_m": 0.15
+        }
+      }
+    },
+    "retrieve_from_basket": {
+      "name": "从筐中取布整理",
+      "required_stages": [
+        "task_start",
+        "acquired",
+        "clear_of_basket",
+        "transferred_to_table",
+        "spread_complete",
+        "task_complete",
+        "terminal_hold"
+      ],
+      "variants": {
+        "v001": {
+          "fixture": "basket",
+          "fixture_center_xy": [
+            -0.02,
+            0.34
+          ],
+          "initial_center": [
+            0.36,
+            -0.34
+          ],
+          "target_center": [
+            0.37,
+            -0.3
+          ],
+          "target_yaw_deg": 90,
+          "initial_profile": "flat",
+          "primary_corner": 167,
+          "rod_far_offset_m": 0.14
+        },
+        "v002": {
+          "fixture": "basket",
+          "fixture_center_xy": [
+            -0.04,
+            0.35500000000000004
+          ],
+          "initial_center": [
+            0.33999999999999997,
+            -0.325
+          ],
+          "target_center": [
+            0.35,
+            -0.285
+          ],
+          "target_yaw_deg": 90,
+          "initial_profile": "mild",
+          "primary_corner": 167,
+          "rod_far_offset_m": 0.13
+        },
+        "v003": {
+          "fixture": "basket",
+          "fixture_center_xy": [
+            0.0,
+            0.325
+          ],
+          "initial_center": [
+            0.38,
+            -0.35500000000000004
+          ],
+          "target_center": [
+            0.39,
+            -0.315
+          ],
+          "target_yaw_deg": 90,
+          "initial_profile": "reverse",
+          "primary_corner": 167,
+          "rod_far_offset_m": 0.15
+        }
+      }
+    },
+    "cover_box": {
+      "name": "用布覆盖盒子",
+      "required_stages": [
+        "task_start",
+        "acquired",
+        "above_box",
+        "draped_over_box",
+        "cover_adjusted",
+        "task_complete",
+        "terminal_hold"
+      ],
+      "variants": {
+        "v001": {
+          "fixture": "box",
+          "fixture_center_xy": [
+            0.37,
+            -0.29
+          ],
+          "initial_center": [
+            -0.1,
+            0.34
+          ],
+          "target_center": [
+            0.37,
+            -0.3
+          ],
+          "target_yaw_deg": 90,
+          "initial_profile": "flat",
+          "primary_corner": 147,
+          "rod_far_offset_m": 0.14
+        },
+        "v002": {
+          "fixture": "box",
+          "fixture_center_xy": [
+            0.35,
+            -0.27499999999999997
+          ],
+          "initial_center": [
+            -0.1,
+            0.34
+          ],
+          "target_center": [
+            0.35,
+            -0.285
+          ],
+          "target_yaw_deg": 90,
+          "initial_profile": "mild",
+          "primary_corner": 147,
+          "rod_far_offset_m": 0.13
+        },
+        "v003": {
+          "fixture": "box",
+          "fixture_center_xy": [
+            0.39,
+            -0.305
+          ],
+          "initial_center": [
+            -0.1,
+            0.34
+          ],
+          "target_center": [
+            0.39,
+            -0.315
+          ],
+          "target_yaw_deg": 90,
+          "initial_profile": "reverse",
+          "primary_corner": 147,
+          "rod_far_offset_m": 0.15
+        }
+      }
+    }
+  }
+}

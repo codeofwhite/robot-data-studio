@@ -25,7 +25,16 @@ class SessionCreate(BaseModel):
     width: int = Field(default=640, ge=64, le=4096)
     height: int = Field(default=480, ge=64, le=4096)
     camera_profile_id: str = Field(default="lab_d435i_dual_v1", pattern=r"^[a-z][a-z0-9_]*$")
+    renderer_profile_id: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]*$")
     scene_params: dict[str, float | int] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def resolve_renderer_profile(self):
+        if self.engine_id == "isaac_sim" and self.renderer_profile_id is None:
+            self.renderer_profile_id = "isaac_balanced_v1"
+        if self.engine_id != "isaac_sim" and self.renderer_profile_id is not None:
+            raise ValueError("renderer profiles are currently supported only by Isaac Sim")
+        return self
 
     @field_validator("dataset_name")
     @classmethod

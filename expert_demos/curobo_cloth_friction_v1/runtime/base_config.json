@@ -1,0 +1,225 @@
+{
+  "source_project": "/data/zhanghejun/simulation-demos/franka-dual-cloth-genesis",
+  "dt": 0.004,
+  "seed": 194731,
+  "max_actions": 60,
+  "initial_settle_s": 3,
+  "home": [
+    -0.135248452425,
+    0.240941748023,
+    -0.197972536087,
+    -2.213885784149,
+    0.073286965489,
+    2.448732376099,
+    0.401439338923,
+    0.04,
+    0.04
+  ],
+  "bases": [
+    [
+      -0.68,
+      0.13,
+      0.773
+    ]
+  ],
+  "yaws": [
+    0
+  ],
+  "table_height": 0.77,
+  "cloth": {
+    "E": 60000,
+    "nu": 0.3,
+    "rho": 200,
+    "thickness": 0.0006,
+    "bending": 0.01,
+    "friction": 0.6
+  },
+  "ipc": {
+    "d_hat": 0.0005,
+    "newton_tolerance": 0.005,
+    "rigid_object_coupling": "ipc_only",
+    "inherit_native_adjacent_filter": true,
+    "contact_eps_velocity": 0.0001
+  },
+  "arm_force_limits": [
+    87,
+    87,
+    87,
+    87,
+    12,
+    12,
+    12
+  ],
+  "finger_force_limit": 5,
+  "kp": [
+    4000,
+    4000,
+    3000,
+    3000,
+    1500,
+    1500,
+    1000,
+    600,
+    600
+  ],
+  "kv": [
+    150,
+    150,
+    120,
+    120,
+    70,
+    70,
+    50,
+    8,
+    8
+  ],
+  "tcp_offset": [
+    0,
+    0,
+    0.1034
+  ],
+  "release_duration_s": 0.8,
+  "max_step_m": 0.02,
+  "max_rotation_rad": 0.08726646259971647,
+  "max_tcp_speed": 0.05,
+  "max_joint_target_speed": 0.35,
+  "actual_joint_speed_limit": 1.2,
+  "actual_finger_speed_limit": 0.2,
+  "ik_position_tolerance": 0.002,
+  "ik_rotation_tolerance": 0.03,
+  "workspace_low": [
+    -0.48,
+    -0.43,
+    0.62
+  ],
+  "workspace_high": [
+    0.3,
+    0.33,
+    1.3
+  ],
+  "gates": {
+    "finger_limit_m": 0.00025,
+    "arm_limit_rad": 0.002,
+    "edge_ratio": 1.25,
+    "table_penetration_m": 0.001,
+    "initial_garment_max_height_m": 0.07
+  },
+  "camera_resolution": [
+    720,
+    720
+  ],
+  "video_fps": 10,
+  "camera": {
+    "top": {
+      "pos": [
+        -0.1,
+        -0.07,
+        1.65
+      ],
+      "lookat": [
+        -0.1,
+        -0.07,
+        0.77
+      ],
+      "up": [
+        0,
+        1,
+        0
+      ],
+      "fov": 48
+    },
+    "wrist_offset": [
+      0.075,
+      0,
+      0.015
+    ],
+    "wrist_look": [
+      0,
+      0,
+      0.19
+    ],
+    "wrist_up": [
+      0,
+      1,
+      0
+    ],
+    "wrist_fov": 75,
+    "front": {
+      "pos": [
+        -0.08,
+        -0.95,
+        1.3
+      ],
+      "lookat": [
+        -0.1,
+        -0.07,
+        0.83
+      ],
+      "up": [
+        0,
+        0,
+        1
+      ],
+      "fov": 50
+    }
+  },
+  "square": {
+    "width_m": 0.32,
+    "grid_n": 25,
+    "center_xy": [
+      -0.12,
+      -0.08
+    ],
+    "initial_clearance_m": 0.002,
+    "crease_u_minus_v_m": 0.10666666666666667,
+    "fold_angle_deg": 160,
+    "yaw_deg": 0,
+    "overhang_m": 0
+  },
+  "evaluation": {
+    "coverage_min": 0.93,
+    "coverage_gain_min": 0.08,
+    "height_q95_max_m": 0.015,
+    "persistence_s": 1.0,
+    "scanlines": 2048,
+    "coverage_convergence_tol": 0.002,
+    "initial_coverage_range": [
+      0.6,
+      0.9
+    ]
+  },
+  "task": "tabletop_single_corner_unfold_exploratory",
+  "table": {
+    "position": [
+      0,
+      0,
+      0.74
+    ],
+    "half_extents": [
+      0.9,
+      0.6,
+      0.03
+    ]
+  },
+  "preparation": {
+    "mode": "visual_policy_from_settled_fold",
+    "approach_y": -0.36,
+    "lift_m": 0.02,
+    "hold_s": 1.0,
+    "minimum_hanging_drop_m": 0.04,
+    "settled_motion_tolerance_m": 0.001,
+    "table_path_clearance_m": 0.002,
+    "grasp_orientation_euler_xyz_deg": [
+      180,
+      -90,
+      0
+    ],
+    "max_settle_s": 8,
+    "passive_stability": {
+      "duration_s": 80.0,
+      "max_displacement_m": 0.005,
+      "max_coverage_change": 0.02,
+      "minimum_supported_fraction": 0.65
+    }
+  }
+}

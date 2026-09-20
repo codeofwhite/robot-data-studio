@@ -47,6 +47,7 @@ def test_create_and_get_session(isolated_settings):
     assert session["engine_id"] == "genesis"
     assert session["config"]["control_mode"] == "gello"
     assert session["config"]["camera_profile_id"] == "lab_d435i_dual_v1"
+    assert session["config"]["renderer_profile_id"] is None
     assert session["config"]["sim_dt"] == pytest.approx(0.01)
     assert session["config"]["physics_steps_per_control"] == 10
     assert session["id"].endswith("_cloth_corner_lift_gello_" + session["id"][-8:])
@@ -70,6 +71,7 @@ def test_isaac_session_persists_engine_and_accepts_keyboard_control(isolated_set
     session = create_session(payload)
     assert session["engine_id"] == "isaac_sim"
     assert session["adapter_id"] == "isaac_sim"
+    assert session["config"]["renderer_profile_id"] == "isaac_balanced_v1"
 
     keyboard_session = create_session(
         SessionCreate(
@@ -82,6 +84,14 @@ def test_isaac_session_persists_engine_and_accepts_keyboard_control(isolated_set
     assert keyboard_session["engine_id"] == "isaac_sim"
     assert keyboard_session["control_mode"] == "keyboard"
     assert keyboard_session["config"]["control_mode"] == "keyboard"
+
+
+def test_renderer_profile_is_rejected_for_non_isaac_engine() -> None:
+    with pytest.raises(ValueError, match="only by Isaac Sim"):
+        SessionCreate(
+            dataset_name="pilot", scene_id="rigid_pick_place", control_mode="keyboard",
+            renderer_profile_id="isaac_quality_v1",
+        )
 
 
 def test_roboverse_session_is_noninteractive_batch_worker(isolated_settings):

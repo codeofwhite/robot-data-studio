@@ -1,0 +1,280 @@
+{
+  "schema_version": 1,
+  "batch_id": "folding_v3",
+  "seed": 194731,
+  "assisted_strength": 100.0,
+  "tasks": {
+    "unfold_half": {
+      "name": "展开对折布",
+      "required_stages": [
+        "task_start",
+        "upper_layer_acquired",
+        "half_opened",
+        "spread_complete",
+        "task_complete",
+        "terminal_hold"
+      ],
+      "variants": {
+        "v001": {
+          "kind": "rectangle",
+          "source_table": "B",
+          "target_table": "B",
+          "center": [
+            0.4,
+            -0.3
+          ],
+          "yaw_deg": 90,
+          "initial_fold_deg": 170,
+          "material": "cotton"
+        },
+        "v002": {
+          "kind": "rectangle",
+          "source_table": "B",
+          "target_table": "B",
+          "center": [
+            0.32,
+            -0.18
+          ],
+          "yaw_deg": 90,
+          "initial_fold_deg": 170,
+          "material": "cotton"
+        }
+      }
+    },
+    "towel_half_fold": {
+      "name": "毛巾单次对折",
+      "required_stages": [
+        "task_start",
+        "first_corner_folded",
+        "second_corner_folded",
+        "fold_complete",
+        "task_complete",
+        "terminal_hold"
+      ],
+      "variants": {
+        "v001": {
+          "kind": "rectangle",
+          "source_table": "B",
+          "target_table": "B",
+          "center": [
+            0.4,
+            -0.3
+          ],
+          "yaw_deg": 90,
+          "initial_fold_deg": 0,
+          "material": "terry"
+        },
+        "v002": {
+          "kind": "rectangle",
+          "source_table": "B",
+          "target_table": "B",
+          "center": [
+            0.32,
+            -0.18
+          ],
+          "yaw_deg": 90,
+          "initial_fold_deg": 0,
+          "material": "terry"
+        }
+      }
+    },
+    "folded_transfer": {
+      "name": "折好后跨桌搬运",
+      "required_stages": [
+        "task_start",
+        "first_corner_folded",
+        "second_corner_folded",
+        "fold_complete",
+        "layers_acquired",
+        "transfer_complete",
+        "placed_on_B",
+        "task_complete",
+        "terminal_hold"
+      ],
+      "variants": {
+        "v001": {
+          "kind": "rectangle",
+          "source_table": "A",
+          "target_table": "B",
+          "center": [
+            -0.1,
+            0.36
+          ],
+          "yaw_deg": 0,
+          "initial_fold_deg": 0,
+          "material": "terry",
+          "destination_center": [
+            0.4,
+            -0.3
+          ],
+          "destination_yaw_deg": 90
+        },
+        "v002": {
+          "kind": "rectangle",
+          "source_table": "A",
+          "target_table": "B",
+          "center": [
+            -0.12,
+            0.27
+          ],
+          "yaw_deg": 0,
+          "initial_fold_deg": 0,
+          "material": "terry",
+          "destination_center": [
+            0.32,
+            -0.18
+          ],
+          "destination_yaw_deg": 90
+        },
+        "v003": {
+          "kind": "rectangle",
+          "source_table": "A",
+          "target_table": "B",
+          "center": [
+            -0.12,
+            0.27
+          ],
+          "yaw_deg": 0,
+          "initial_fold_deg": 0,
+          "material": "terry",
+          "destination_center": [
+            0.32,
+            -0.18
+          ],
+          "destination_yaw_deg": 90,
+          "transfer_grasp_mode": "adjacent_paired_patch"
+        }
+      }
+    },
+    "garment_flip": {
+      "name": "衣物整件翻面",
+      "required_stages": [
+        "task_start",
+        "garment_acquired",
+        "garment_turned",
+        "garment_spread",
+        "task_complete",
+        "terminal_hold"
+      ],
+      "variants": {
+        "v001": {
+          "kind": "garment",
+          "source_table": "B",
+          "target_table": "B",
+          "center": [
+            0.4,
+            -0.3
+          ],
+          "yaw_deg": 0,
+          "material": "cotton",
+          "inside_out": false
+        },
+        "v002": {
+          "kind": "garment",
+          "source_table": "B",
+          "target_table": "B",
+          "center": [
+            0.32,
+            -0.18
+          ],
+          "yaw_deg": 0,
+          "material": "cotton",
+          "inside_out": false
+        },
+        "v003": {
+          "kind": "garment",
+          "source_table": "B",
+          "target_table": "B",
+          "center": [
+            0.32,
+            -0.18
+          ],
+          "yaw_deg": 0,
+          "material": "cotton",
+          "inside_out": false,
+          "reference_repair": "right_cuff_laplacian_v1"
+        },
+        "v004": {
+          "kind": "garment",
+          "source_table": "B",
+          "target_table": "B",
+          "center": [
+            0.32,
+            -0.18
+          ],
+          "yaw_deg": 0,
+          "material": "cotton",
+          "inside_out": false,
+          "reference_repair": "right_cuff_laplacian_v2"
+        }
+      },
+      "default_variant": "v004"
+    },
+    "garment_inside_out": {
+      "name": "衣物里外翻转",
+      "required_stages": [
+        "task_start",
+        "sleeve_inside_acquired",
+        "sleeve_everted",
+        "body_everted",
+        "second_sleeve_everted",
+        "garment_spread",
+        "task_complete",
+        "terminal_hold"
+      ],
+      "variants": {
+        "v001": {
+          "kind": "garment",
+          "source_table": "B",
+          "target_table": "B",
+          "center": [
+            0.4,
+            -0.3
+          ],
+          "yaw_deg": 0,
+          "material": "cotton",
+          "inside_out": true
+        },
+        "v002": {
+          "kind": "garment",
+          "source_table": "B",
+          "target_table": "B",
+          "center": [
+            0.32,
+            -0.18
+          ],
+          "yaw_deg": 0,
+          "material": "cotton",
+          "inside_out": true
+        },
+        "v003": {
+          "kind": "garment",
+          "source_table": "B",
+          "target_table": "B",
+          "center": [
+            0.32,
+            -0.18
+          ],
+          "yaw_deg": 0,
+          "material": "cotton",
+          "inside_out": true,
+          "reference_repair": "right_cuff_laplacian_v1"
+        },
+        "v004": {
+          "kind": "garment",
+          "source_table": "B",
+          "target_table": "B",
+          "center": [
+            0.32,
+            -0.18
+          ],
+          "yaw_deg": 0,
+          "material": "cotton",
+          "inside_out": true,
+          "reference_repair": "right_cuff_laplacian_v2"
+        }
+      },
+      "default_variant": "v004"
+    }
+  }
+}

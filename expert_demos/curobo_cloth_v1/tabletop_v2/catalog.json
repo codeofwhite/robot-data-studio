@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "batch_id": "tabletop_v2",
+  "robot": "FrankaLeft",
+  "material": "medium",
+  "seed": 194731,
+  "physics_dt_s": 0.01,
+  "assisted_strength": 100.0,
+  "target_region_xy_m": [[0.11, -0.69], [0.69, 0.09]],
+  "tasks": {
+    "edge_retrieve_spread": {
+      "name": "桌沿取布并铺开",
+      "required_stages": ["task_start", "acquired", "edge_recovered", "spread_complete", "task_complete", "terminal_hold"],
+      "variants": {
+        "v001": {"edge": "front", "hanging_length_m": 0.20, "edge_center": 0.40, "target_center": [0.40, -0.37], "target_yaw_deg": 90},
+        "v002": {"edge": "left", "hanging_length_m": 0.18, "edge_center": -0.35, "target_center": [0.39, -0.35], "target_yaw_deg": 0},
+        "v003": {"edge": "front", "hanging_length_m": 0.22, "edge_center": 0.44, "target_center": [0.40, -0.37], "target_yaw_deg": 90}
+      }
+    },
+    "directed_flatten": {
+      "name": "定向铺平",
+      "required_stages": ["task_start", "acquired", "spread_complete", "task_complete", "terminal_hold"],
+      "variants": {
+        "v001": {"profile": "mild", "initial_center": [0.37, -0.32], "target_center": [0.37, -0.30], "target_yaw_deg": 90},
+        "v002": {"profile": "folded", "initial_center": [0.35, -0.32], "target_center": [0.37, -0.30], "target_yaw_deg": 90},
+        "v003": {"profile": "reverse", "initial_center": [0.40, -0.32], "target_center": [0.37, -0.30], "target_yaw_deg": 90}
+      }
+    },
+    "translate_rotate_align": {
+      "name": "平移与旋转对齐",
+      "required_stages": ["task_start", "acquired", "alignment_complete", "task_complete", "terminal_hold"],
+      "variants": {
+        "v001": {"initial_center": [0.35, -0.33], "initial_yaw_deg": 70, "target_center": [0.39, -0.29], "target_yaw_deg": 90},
+        "v002": {"initial_center": [0.43, -0.34], "initial_yaw_deg": 108, "target_center": [0.39, -0.29], "target_yaw_deg": 90},
+        "v003": {"initial_center": [0.37, -0.37], "initial_yaw_deg": 62, "target_center": [0.39, -0.29], "target_yaw_deg": 90}
+      }
+    },
+    "unfold_corner": {
+      "name": "翻开折角",
+      "required_stages": ["task_start", "acquired", "corner_unfolded", "task_complete", "terminal_hold"],
+      "variants": {
+        "v001": {"corner_index": 20, "fold_leg_m": 0.16, "fold_angle_deg": 165, "target_center": [0.39, -0.32], "target_yaw_deg": 90},
+        "v002": {"corner_index": 315, "fold_leg_m": 0.16, "fold_angle_deg": 160, "target_center": [0.39, -0.32], "target_yaw_deg": 90},
+        "v003": {"corner_index": 20, "fold_leg_m": 0.12, "fold_angle_deg": 165, "target_center": [0.39, -0.32], "target_yaw_deg": 90}
+      }
+    }
+  }
+}

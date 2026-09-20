@@ -32,6 +32,9 @@ class Settings:
     camera_profile_root: Path = Path(
         os.getenv("ROBOT_DATA_STUDIO_CAMERA_PROFILE_ROOT", PROJECT_ROOT / "config" / "camera_profiles")
     )
+    renderer_profile_root: Path = Path(
+        os.getenv("ROBOT_DATA_STUDIO_RENDERER_PROFILE_ROOT", PROJECT_ROOT / "config" / "renderer_profiles")
+    )
     clothtwin_root: Path = Path(os.getenv("ROBOT_DATA_STUDIO_CLOTHTWIN_ROOT", "/data/zhanghejun/ClothTwin"))
     collector_python: str = os.getenv(
         "ROBOT_DATA_STUDIO_COLLECTOR_PYTHON", "/home/zhanghejun/miniconda3/envs/genesis/bin/python"

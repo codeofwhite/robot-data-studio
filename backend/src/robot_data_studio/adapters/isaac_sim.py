@@ -6,6 +6,7 @@ from typing import Any
 
 from ..config import CONTRACTS_SRC, settings
 from ..camera_profiles import validate_session_camera_profile
+from ..render_profiles import load_renderer_profile, validate_session_renderer_profile
 from .base import CollectionAdapter, WorkerLaunch, WorkerReadiness
 
 
@@ -60,6 +61,7 @@ class IsaacSimAdapter(CollectionAdapter):
     scenes = SCENES
     control_modes = ("keyboard", "gello")
     camera_profile_ids = ("lab_d435i_dual_v1",)
+    renderer_profile_ids = ("isaac_performance_v1", "isaac_balanced_v1", "isaac_quality_v1")
     capabilities = {
         "webrtc": True,
         "recording": True,
@@ -85,9 +87,19 @@ class IsaacSimAdapter(CollectionAdapter):
         if profile_id not in self.camera_profile_ids:
             raise ValueError(f"unsupported Isaac Sim camera profile: {profile_id}")
         validate_session_camera_profile(profile_id, width=int(config["width"]), height=int(config["height"]))
+        renderer_profile_id = str(config.get("renderer_profile_id") or "isaac_balanced_v1")
+        if renderer_profile_id not in self.renderer_profile_ids:
+            raise ValueError(f"unsupported Isaac renderer profile: {renderer_profile_id}")
+        validate_session_renderer_profile(renderer_profile_id)
 
     def build_collect_command(self, config: dict[str, Any], output_dir: Path) -> list[str]:
         self.validate_config(config)
+        renderer_profile_id = str(config.get("renderer_profile_id") or "isaac_balanced_v1")
+        renderer_profile = load_renderer_profile(renderer_profile_id)
+        kit_settings = " ".join(
+            f"--{key}={'true' if value is True else 'false' if value is False else value}"
+            for key, value in sorted(renderer_profile["kit_settings"].items())
+        )
         command = [
             str(settings.isaaclab_launcher),
             "-p",
@@ -101,7 +113,7 @@ class IsaacSimAdapter(CollectionAdapter):
             "--livestream",
             "1",
             "--rendering_mode",
-            "balanced",
+            renderer_profile["rendering_mode"],
             "--host",
             "127.0.0.1",
             "--port",
@@ -128,11 +140,12 @@ class IsaacSimAdapter(CollectionAdapter):
                 width=int(config["width"]),
                 height=int(config["height"]),
             )),
+            "--renderer-profile-file",
+            str(validate_session_renderer_profile(renderer_profile_id)),
             "--franka-usd",
             settings.isaac_franka_usd,
             "--kit_args",
-            "--/UJITSO/geometry=false --/persistent/UJITSO/geometry=false "
-            "--/app/window/width=960 --/app/window/height=720",
+            (kit_settings + " --/app/window/width=960 --/app/window/height=720").strip(),
         ]
         if config["scene_id"] in {"rigid_pick_place", "rigid_cube_lift"}:
             height = config.get("scene_params", {}).get("work_surface_height_m", 0.25)
