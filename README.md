@@ -7,6 +7,8 @@ retains its native simulation, rendering and safety implementation. The versione
 schemas and runtime-light writer/validator live in `packages/robot-data-contracts`;
 workers depend on that package and never import Studio.
 
+**Looking for where to start?** See [`docs/START_HERE.md`](docs/START_HERE.md) — repo map, which door to open by intent, and what the evidence levels do and do not prove.
+
 ## Start locally
 
 Backend (terminal 1):
