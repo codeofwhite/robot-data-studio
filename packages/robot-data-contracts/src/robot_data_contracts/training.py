@@ -6,7 +6,10 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict
 
 
-TrainingProfileId = Literal["physical_joint8", "openpi_franka_joint8", "fastwam_franka_joint8"]
+TrainingProfileId = Literal[
+    "physical_joint8", "openpi_franka_joint8", "fastwam_franka_joint8", "physical_dual_joint16"
+]
+DualTrainingProfileId = Literal["physical_dual_joint16"]
 
 
 class TrainingAdapterProfileV1(BaseModel):
@@ -28,11 +31,25 @@ _PHYSICAL_STATE_NAMES = (
     + tuple(f"panda_joint{i}_velocity_rad_s" for i in range(1, 8))
     + ("gripper_width_velocity_m_s",)
 )
+_PHYSICAL_ACTION_NAMES = tuple(f"target_{name}" for name in _JOINTS) + ("target_gripper_width_m",)
+_DUAL_PHYSICAL_STATE_NAMES = tuple(
+    f"left/{name}" for name in _PHYSICAL_STATE_NAMES
+) + tuple(f"right/{name}" for name in _PHYSICAL_STATE_NAMES)
+_DUAL_PHYSICAL_ACTION_NAMES = tuple(
+    f"left/{name}" for name in _PHYSICAL_ACTION_NAMES
+) + tuple(f"right/{name}" for name in _PHYSICAL_ACTION_NAMES)
 TRAINING_PROFILES = {
     "physical_joint8": TrainingAdapterProfileV1(
         id="physical_joint8", state_names=_PHYSICAL_STATE_NAMES,
-        action_names=tuple(f"target_{name}" for name in _JOINTS) + ("target_gripper_width_m",),
+        action_names=_PHYSICAL_ACTION_NAMES,
         state_dimension=16, action_dimension=8, gripper_semantics="total width in metres",
+        consumer_settings={"dataset_family": "lerobot"},
+    ),
+    "physical_dual_joint16": TrainingAdapterProfileV1(
+        id="physical_dual_joint16", state_names=_DUAL_PHYSICAL_STATE_NAMES,
+        action_names=_DUAL_PHYSICAL_ACTION_NAMES,
+        state_dimension=32, action_dimension=16,
+        gripper_semantics="two total widths in metres, left then right",
         consumer_settings={"dataset_family": "lerobot"},
     ),
     "openpi_franka_joint8": TrainingAdapterProfileV1(
@@ -76,3 +93,28 @@ def adapt_franka_joint8(
     elif profile_id not in TRAINING_PROFILES:
         raise ValueError(f"unknown training profile: {profile_id}")
     return adapted_state.astype(np.float32), adapted_action.astype(np.float32)
+
+
+def adapt_dual_franka_joint16(
+    policy_state: np.ndarray,
+    policy_action: np.ndarray,
+    profile_id: DualTrainingProfileId,
+    *,
+    maximum_gripper_width_m: float = 0.08,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Adapt canonical dual 32-D state and 16-D physical action without mutating raw data.
+
+    The single-arm ``adapt_franka_joint8`` refuses these shapes on purpose; dual
+    call sites must come here so the two contracts cannot be silently mixed.
+    """
+    state = np.asarray(policy_state, dtype=np.float32).reshape(-1)
+    action = np.asarray(policy_action, dtype=np.float32).reshape(-1)
+    if state.shape != (32,) or action.shape != (16,):
+        raise ValueError("canonical dual Franka policy state/action must have shapes (32,) and (16,)")
+    if not np.isfinite(state).all() or not np.isfinite(action).all():
+        raise ValueError("policy state/action must be finite")
+    if maximum_gripper_width_m <= 0:
+        raise ValueError("maximum_gripper_width_m must be positive")
+    if profile_id != "physical_dual_joint16":
+        raise ValueError(f"unknown dual training profile: {profile_id}")
+    return state.copy(), action.copy()

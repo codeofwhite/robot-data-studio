@@ -166,10 +166,30 @@ def deterministic_split(episode_uuid: str, explicit: str | None = None) -> str:
     return "valid" if bucket < 10 else "test" if bucket < 20 else "train"
 
 
+_FRANKA_JOINT8_LOW = np.asarray(
+    [-2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973, 0.0], dtype=np.float32
+)
+_FRANKA_JOINT8_HIGH = np.asarray(
+    [2.8973, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973, 0.08], dtype=np.float32
+)
+
+
+def _normalize_to_unit_range(value: np.ndarray, low: np.ndarray, high: np.ndarray) -> np.ndarray:
+    return np.clip(2.0 * (value - low) / (high - low) - 1.0, -1.0, 1.0).astype(np.float32)
+
+
 def normalize_franka_joint8(action: np.ndarray) -> np.ndarray:
     value = np.asarray(action, dtype=np.float32).reshape(-1)
-    low = np.asarray([-2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973, 0.0], dtype=np.float32)
-    high = np.asarray([2.8973, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973, 0.08], dtype=np.float32)
     if value.shape != (8,) or not np.isfinite(value).all():
         raise ValueError("canonical Franka action must contain 8 finite values")
-    return np.clip(2.0 * (value - low) / (high - low) - 1.0, -1.0, 1.0).astype(np.float32)
+    return _normalize_to_unit_range(value, _FRANKA_JOINT8_LOW, _FRANKA_JOINT8_HIGH)
+
+
+def normalize_dual_franka_joint16(action: np.ndarray) -> np.ndarray:
+    """Normalize a left-then-right 16-D dual Franka action with the single-arm limits."""
+    value = np.asarray(action, dtype=np.float32).reshape(-1)
+    if value.shape != (16,) or not np.isfinite(value).all():
+        raise ValueError("canonical dual Franka action must contain 16 finite values")
+    low = np.concatenate([_FRANKA_JOINT8_LOW, _FRANKA_JOINT8_LOW])
+    high = np.concatenate([_FRANKA_JOINT8_HIGH, _FRANKA_JOINT8_HIGH])
+    return _normalize_to_unit_range(value, low, high)

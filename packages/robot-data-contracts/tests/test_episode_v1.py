@@ -2,23 +2,37 @@ import json
 import sys
 
 import numpy as np
+import pytest
 from PIL import Image
 
 from robot_data_contracts import (
     TRAINING_PROFILES,
     AugmentationLineageV1,
+    DualFrankaEpisodeWriter,
     EpisodeWriter,
     EvaluatorResultV1,
     FrankaEpisodeWriter,
     SceneProvenanceV1,
     SoftwareProvenanceV1,
     WorkerDescriptorV1,
+    adapt_dual_franka_joint16,
     adapt_franka_joint8,
     inspect_episode,
     iter_training_frames,
     open_canonical_episode,
 )
-from robot_data_contracts.profiles.franka import FRANKA_JOINT8_ACTION, franka_feature_specs
+from robot_data_contracts.profiles.franka import (
+    FRANKA_JOINT8_ACTION,
+    franka_feature_specs,
+    policy_state_from_native,
+)
+from robot_data_contracts.profiles.franka_dual import (
+    DUAL_JOINT8_ACTION,
+    DUAL_ROBOT_ID,
+    dual_franka_feature_specs,
+    dual_policy_action_from_native,
+    dual_policy_state_from_native,
+)
 
 
 def test_episode_writer_falls_back_to_pillow_without_opencv(tmp_path, monkeypatch) -> None:
@@ -229,3 +243,101 @@ def test_canonical_reader_exposes_paths_and_training_view(tmp_path) -> None:
         episode_path, array_keys={"policy_state", "applied_action"}
     )
     assert set(selected.arrays) == {"policy_state", "applied_action"}
+
+
+def test_dual_franka_dimensions_follow_the_single_arm_contract() -> None:
+    specs = {spec.key: spec for spec in dual_franka_feature_specs()}
+    assert specs["native_state"].shape == (36,)
+    assert specs["policy_state"].shape == (32,)
+    for key in ("requested_action", "safe_action", "applied_action"):
+        assert specs[key].shape == (16,)
+    assert DUAL_JOINT8_ACTION.dimension == 16
+    assert DUAL_JOINT8_ACTION.names[:8] == tuple(f"left/{n}" for n in FRANKA_JOINT8_ACTION.names)
+    assert DUAL_JOINT8_ACTION.names[8:] == tuple(f"right/{n}" for n in FRANKA_JOINT8_ACTION.names)
+    assert specs["native_state"].names[0] == "left/joint_position/panda_joint1_rad"
+    assert specs["native_state"].names[18] == "right/joint_position/panda_joint1_rad"
+    assert specs["native_state"].names[17] == "left/joint_velocity/panda_finger_joint2_m_s"
+
+
+def test_dual_policy_adapters_split_left_then_right() -> None:
+    native_state = np.zeros(36, dtype=np.float32)
+    native_state[7] = 0.02
+    native_state[8] = 0.03
+    native_state[18 + 7] = 0.04
+    native_state[18 + 8] = 0.02
+    policy_state = dual_policy_state_from_native(native_state)
+    assert policy_state.shape == (32,)
+    assert policy_state[7] == pytest.approx(0.05)
+    assert policy_state[16 + 7] == pytest.approx(0.06)
+    assert policy_state[7] != policy_state[16 + 7]
+
+    native_action = np.zeros(18, dtype=np.float32)
+    native_action[7] = 0.02
+    native_action[8] = 0.03
+    native_action[9 + 7] = 0.01
+    native_action[9 + 8] = 0.01
+    policy_action = dual_policy_action_from_native(native_action)
+    assert policy_action.shape == (16,)
+    assert policy_action[7] == pytest.approx(0.05)
+    assert policy_action[8 + 7] == pytest.approx(0.02)
+
+    with np.testing.assert_raises_regex(ValueError, "36 finite"):
+        dual_policy_state_from_native(np.zeros(18, dtype=np.float32))
+    with np.testing.assert_raises_regex(ValueError, "18 finite"):
+        dual_policy_action_from_native(np.zeros(9, dtype=np.float32))
+    with np.testing.assert_raises_regex(ValueError, "18 finite values"):
+        policy_state_from_native(np.zeros(36, dtype=np.float32))
+
+
+def test_dual_franka_writer_emits_left_then_right_episode(tmp_path) -> None:
+    writer = DualFrankaEpisodeWriter(
+        tmp_path, fps=10, engine_id="genesis", engine_version="test",
+        scene_id="bimanual_cloth_unfold", control_source="gello_joint_targets",
+        operator_command_names=["left_gripper_closed", "right_gripper_closed"],
+        camera_names=[], run_metadata={"scene_geometry": None, "resolved_scene_spec": None},
+    )
+    writer.start("unfold the towel")
+    native_state = np.zeros(36, dtype=np.float32)
+    native_state[18] = 0.11
+    native_action = np.zeros(18, dtype=np.float32)
+    native_action[9] = -0.22
+    writer.add_frame(
+        images={}, state=native_state, action=native_action,
+        operator_command=np.asarray([0.0, 1.0], np.float32), sim_time=0.0,
+    )
+    episode = writer.finish(operator_success=True, episode_metrics={})
+
+    manifest = json.loads((episode / "manifest.json").read_text())
+    assert manifest["robot_id"] == DUAL_ROBOT_ID
+    assert manifest["action_profile"]["id"] == DUAL_JOINT8_ACTION.id
+    by_key = {feature["key"]: feature for feature in manifest["features"]}
+    assert by_key["native_state"]["shape"] == [36]
+    assert by_key["policy_state"]["shape"] == [32]
+    assert by_key["applied_action"]["shape"] == [16]
+    with np.load(episode / "trajectory.npz") as arrays:
+        assert arrays["native_state"].shape == (1, 36)
+        assert arrays["policy_state"].shape == (1, 32)
+        assert arrays["applied_action"].shape == (1, 16)
+        assert arrays["native_state"][0, 18] == pytest.approx(0.11)
+        assert arrays["applied_action"][0, 8] == pytest.approx(-0.22)
+
+
+def test_single_arm_contract_rejects_dual_shapes() -> None:
+    with np.testing.assert_raises_regex(ValueError, r"\(16,\) and \(8,\)"):
+        adapt_franka_joint8(np.zeros(32, np.float32), np.zeros(16, np.float32), "physical_joint8")
+    with np.testing.assert_raises_regex(ValueError, r"\(32,\) and \(16,\)"):
+        adapt_dual_franka_joint16(np.zeros(16, np.float32), np.zeros(8, np.float32), "physical_dual_joint16")
+
+
+def test_dual_training_profile_is_explicit() -> None:
+    state = np.zeros(32, dtype=np.float32)
+    action = np.zeros(16, dtype=np.float32)
+    adapted_state, adapted_action = adapt_dual_franka_joint16(state, action, "physical_dual_joint16")
+    assert adapted_state.shape == (32,)
+    assert adapted_action.shape == (16,)
+    profile = TRAINING_PROFILES["physical_dual_joint16"]
+    assert profile.state_dimension == 32 and profile.action_dimension == 16
+    assert profile.state_names[0] == "left/panda_joint1_rad"
+    assert profile.action_names[8] == "right/target_panda_joint1_rad"
+    with np.testing.assert_raises_regex(ValueError, "unknown dual training profile"):
+        adapt_dual_franka_joint16(state, action, "physical_joint8")

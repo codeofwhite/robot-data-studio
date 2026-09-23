@@ -5,10 +5,10 @@ from .camera import CameraProfileV1, camera_profile_metadata, load_camera_profil
 from .rendering import RendererProfileV1, load_renderer_profile, renderer_profile_metadata
 from .episode import AugmentationLineageV1, EpisodeManifestV1, EvaluatorResultV1, SceneProvenanceV1, SoftwareProvenanceV1
 from .features import ActionProfileV1, FeatureRole, FeatureSpecV1
-from .franka_writer import FrankaEpisodeWriter
+from .franka_writer import DualFrankaEpisodeWriter, FrankaEpisodeWriter
 from .validation import EpisodeDescriptor, inspect_episode
 from .worker import WorkerDescriptorV1
-from .training import TRAINING_PROFILES, TrainingAdapterProfileV1, adapt_franka_joint8
+from .training import TRAINING_PROFILES, TrainingAdapterProfileV1, adapt_dual_franka_joint16, adapt_franka_joint8
 from .reader import CanonicalEpisode, iter_training_frames, open_canonical_episode
 from .writer import EpisodeWriter
 
@@ -29,7 +29,8 @@ __all__ = [
     "SceneRuntime",
     "ActionProfileV1", "AugmentationLineageV1", "CameraProfileV1", "RendererProfileV1", "EpisodeDescriptor",
     "EpisodeManifestV1", "EpisodeWriter", "EvaluatorResultV1", "FeatureRole", "FeatureSpecV1", "FrankaEpisodeWriter",
-    "CanonicalEpisode", "TRAINING_PROFILES", "TrainingAdapterProfileV1", "adapt_franka_joint8",
+    "DualFrankaEpisodeWriter",
+    "CanonicalEpisode", "TRAINING_PROFILES", "TrainingAdapterProfileV1", "adapt_dual_franka_joint16", "adapt_franka_joint8",
     "SceneProvenanceV1", "SoftwareProvenanceV1", "WorkerDescriptorV1",
     "camera_profile_metadata", "renderer_profile_metadata", "inspect_episode", "iter_training_frames", "load_camera_profile",
     "load_renderer_profile",

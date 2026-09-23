@@ -7,21 +7,40 @@ import numpy as np
 
 from .episode import AugmentationLineageV1, EvaluatorResultV1, SceneProvenanceV1
 from .profiles.franka import FRANKA_JOINT8_ACTION, franka_feature_specs, policy_action_from_native, policy_state_from_native
+from .profiles.franka_dual import (
+    DUAL_JOINT8_ACTION,
+    DUAL_ROBOT_ID,
+    dual_franka_feature_specs,
+    dual_policy_action_from_native,
+    dual_policy_state_from_native,
+)
 from .provenance import collect_software_provenance
 from .writer import EpisodeWriter
 
 
 class FrankaEpisodeWriter:
-    """Franka convenience facade over the engine-neutral EpisodeWriter."""
+    """Franka convenience facade over the engine-neutral EpisodeWriter.
+
+    ``robot_id`` / ``feature_builder`` / ``action_profile`` / ``state_adapter`` /
+    ``action_adapter`` default to the audited single-arm Franka contract. Dual-arm
+    call sites pass the ``franka_dual`` values instead of forking this logic.
+    """
 
     def __init__(self, root, *, fps: int, engine_id: str, engine_version: str, scene_id: str,
                  control_source: str, operator_command_names: list[str], camera_names: list[str],
                  run_metadata: dict[str, Any], seed: int = 0, worker_id: str = "unknown",
                  state_names=None, action_names=None,
                  generation_method: str | None = None,
-                 lineage: AugmentationLineageV1 | None = None) -> None:
+                 lineage: AugmentationLineageV1 | None = None,
+                 robot_id: str = "franka_panda",
+                 feature_builder=franka_feature_specs,
+                 action_profile=FRANKA_JOINT8_ACTION,
+                 state_adapter=policy_state_from_native,
+                 action_adapter=policy_action_from_native) -> None:
         if lineage is not None and generation_method is not None:
             raise ValueError("provide either lineage or generation_method, not both")
+        self._state_adapter = state_adapter
+        self._action_adapter = action_adapter
         camera_profile = run_metadata.get("camera_profile", {})
         camera_roles = run_metadata.get("camera_roles", {})
         intrinsics = run_metadata.get("camera_intrinsic_matrices", {})
@@ -69,8 +88,8 @@ class FrankaEpisodeWriter:
         if not assets and run_metadata.get("object_assets"):
             assets = [{"description": str(run_metadata["object_assets"])}]
         self._writer = EpisodeWriter(
-            root, fps=fps, robot_id="franka_panda", control_source=control_source,
-            features=franka_feature_specs(tuple(operator_command_names)), action_profile=FRANKA_JOINT8_ACTION,
+            root, fps=fps, robot_id=robot_id, control_source=control_source,
+            features=feature_builder(tuple(operator_command_names)), action_profile=action_profile,
             camera_names=tuple(camera_names), camera_calibration=calibration,
             scene=SceneProvenanceV1(scene_id=scene_id, seed=seed,
                                     parameters=scene_parameters,
@@ -116,11 +135,11 @@ class FrankaEpisodeWriter:
             if value is not None: auxiliary[key] = value
         values = {
             "native_state": np.asarray(state, np.float32),
-            "policy_state": policy_state_from_native(state),
+            "policy_state": self._state_adapter(state),
             "operator_action": np.asarray(operator_command, np.float32),
-            "requested_action": policy_action_from_native(requested_native),
-            "safe_action": policy_action_from_native(safe_native),
-            "applied_action": policy_action_from_native(applied_native),
+            "requested_action": self._action_adapter(requested_native),
+            "safe_action": self._action_adapter(safe_native),
+            "applied_action": self._action_adapter(applied_native),
             **auxiliary,
         }
         self._writer.add_frame(images=images, values=values, simulation_time_s=sim_time,
@@ -143,3 +162,15 @@ class FrankaEpisodeWriter:
             else ("automatic_criterion_not_met" if auto_success is False else None)
         )
         return self._writer.finish(operator_success=operator_success, evaluator=evaluator, failure_reason=failure)
+
+
+class DualFrankaEpisodeWriter(FrankaEpisodeWriter):
+    """Dual-Franka facade: left arm block then right arm block, robot_id franka_panda_dual."""
+
+    def __init__(self, root, **kwargs) -> None:
+        kwargs.setdefault("robot_id", DUAL_ROBOT_ID)
+        kwargs.setdefault("feature_builder", dual_franka_feature_specs)
+        kwargs.setdefault("action_profile", DUAL_JOINT8_ACTION)
+        kwargs.setdefault("state_adapter", dual_policy_state_from_native)
+        kwargs.setdefault("action_adapter", dual_policy_action_from_native)
+        super().__init__(root, **kwargs)
