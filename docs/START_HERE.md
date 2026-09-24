@@ -17,10 +17,11 @@ Canonical `robot_data_episode` v1 是不可变源数据；QA 接受的 consumer 
 | 你的状态 | 进这里 | 第一步 |
 |---|---|---|
 | 想看有哪些成功案例 | [`data/RUN_INDEX.md`](../data/RUN_INDEX.md) | `ls data/views/physics_passed` |
+| 想看 cuRobo 布料示范的视频与任务 | [`docs/CUROBO_DEMO_INVENTORY.md`](CUROBO_DEMO_INVENTORY.md) | 起 HTTP 服务，见该文第 1 节（`RUN_INDEX.md` **不覆盖**这些批次） |
 | 想跑一次采集 | [`README.md`](../README.md) | 起 backend :8010 + 前端 :3000 |
 | 想从数据训到评测 | [`docs/DATA_TO_TRAINING_GUIDE_ZH.md`](DATA_TO_TRAINING_GUIDE_ZH.md) | 35KB 全链路手册，**最该先读的一份** |
 | 想改代码 / 加引擎 | `backend/src/robot_data_studio/adapters/` + `packages/robot-data-contracts/` | 先看契约再看 adapter |
-| 想接着做布料 / expert | [`CLOTHFORGE_STATUS.md`](CLOTHFORGE_STATUS.md) · [`CUROBO_EXPERT_DEMOS.md`](CUROBO_EXPERT_DEMOS.md) | |
+| 想接着做布料 / expert | [`CLOTHFORGE_STATUS.md`](CLOTHFORGE_STATUS.md) · [`CUROBO_EXPERT_DEMOS.md`](CUROBO_EXPERT_DEMOS.md) · [`CUROBO_DEMO_INVENTORY.md`](CUROBO_DEMO_INVENTORY.md) | |
 
 ## 顶层目录
 
@@ -30,7 +31,6 @@ Canonical `robot_data_episode` v1 是不可变源数据；QA 接受的 consumer 
 |---|---|
 | `backend/` | FastAPI：8 个 routes（sessions / episodes / exports / datasets / cloth / assets / consumer_smokes / health）+ 14 个 services + 3 个引擎 adapter |
 | `packages/robot-data-contracts/` | 版本化数据契约 |
-| `packages/gello-control/` | GELLO 遥操作 |
 | `app/` `components/` `hooks/` `lib/` | vinext/React 前端（sessions / episodes / exports / cloth / assets 五页） |
 | `consumers/` | 下游适配：`openpi_franka_joint8`、`roboverse_state_bc` |
 | `expert_demos/` | ⚠️ **代码**（cuRobo 生成器），不是数据 —— 数据在 `data/expert_demos/` |
