@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ExternalLink,
+  Info,
   Play,
   RefreshCw,
   Square,
@@ -88,6 +89,7 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
   const active = running || worker?.status === 'stopping';
   const unhealthy = worker?.status === 'failed' || worker?.status === 'orphaned';
   const batchWorker = session?.engine_id === 'roboverse';
+  const readOnly = session?.config?.imported_read_only === true;
 
   return (
     <AppShell current="sessions">
@@ -104,6 +106,18 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
             <TriangleAlert />
             <AlertTitle>Worker {worker.status.toUpperCase()}</AlertTitle>
             <AlertDescription>{worker.error ?? '运行时状态异常，请查看 worker 日志。'}</AlertDescription>
+          </Alert>
+        )}
+        {readOnly && (
+          <Alert>
+            <Info />
+            <AlertTitle>只读证据</AlertTitle>
+            <AlertDescription>
+              这是导入的专家示范，源数据已落盘且不可变：能查看与 QA，不能启动 Worker，也不能移动或删除源文件。
+              <span className="mt-1 block break-all font-mono text-xs">
+                源目录：{String(session?.config?.episode_root ?? '—')}
+              </span>
+            </AlertDescription>
           </Alert>
         )}
 
@@ -131,7 +145,11 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
                 <Square />停止 Worker
               </Button>
             ) : (
-              <Button disabled={busy} onClick={() => action('start')}>
+              <Button
+                disabled={busy || readOnly}
+                title={readOnly ? '导入的只读证据没有可启动的采集进程' : undefined}
+                onClick={() => action('start')}
+              >
                 <Play />启动 Worker
               </Button>
             )}
@@ -178,18 +196,22 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
                     }`}
                   />
                   <h2 className="font-semibold">
-                    {batchWorker
-                      ? running ? 'Batch Worker 正在运行' : 'Batch Worker 尚未启动'
-                      : running ? 'Collector 已启动' : 'Collector 尚未启动'}
+                    {readOnly
+                      ? '导入的只读证据'
+                      : batchWorker
+                        ? running ? 'Batch Worker 正在运行' : 'Batch Worker 尚未启动'
+                        : running ? 'Collector 已启动' : 'Collector 尚未启动'}
                   </h2>
                   <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                    {running
-                      ? batchWorker
-                        ? 'RoboVerse 正在隔离环境中批量生成；完成后点击“扫描 Episodes”进入 QA。'
-                        : '在新标签页打开实时画面。GELLO 模式下，在该页面选择串口并连接。'
-                      : batchWorker
-                        ? `启动后运行 ${session?.scene_id ?? 'ManiSkill'} 原生 scripted rollout；每条 Episode 保留官方 demo 轨迹与真实 source seed，完成后扫描进入 QA。`
-                        : '启动前请确认 GPU 与端口空闲。启动不会自动打开串口或下发机器人动作。'}
+                    {readOnly
+                      ? '这批示范由外部规划器生成并已落盘，Studio 只做索引与 QA，没有可启动的仿真进程。用「扫描 Episodes」补索引，或进入 QA 队列。'
+                      : running
+                        ? batchWorker
+                          ? 'RoboVerse 正在隔离环境中批量生成；完成后点击“扫描 Episodes”进入 QA。'
+                          : '在新标签页打开实时画面。GELLO 模式下，在该页面选择串口并连接。'
+                        : batchWorker
+                          ? `启动后运行 ${session?.scene_id ?? 'ManiSkill'} 原生 scripted rollout；每条 Episode 保留官方 demo 轨迹与真实 source seed，完成后扫描进入 QA。`
+                          : '启动前请确认 GPU 与端口空闲。启动不会自动打开串口或下发机器人动作。'}
                   </p>
                   </div>
                 </div>
@@ -247,6 +269,7 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
                 <p>• 同一时间只运行一个 Studio 管理的仿真 Worker。</p>
                 <p>• GELLO 限位、slew 和 watchdog 保留在引擎运行时。</p>
                 {batchWorker && <p>• RoboVerse scripted batch 使用仿真 identity safety filter，不连接 GELLO 或真实硬件。</p>}
+                {readOnly && <p>• 导入的只读证据：源文件不可移动、不可删除，也不可启动采集。</p>}
                 {session?.engine_id === 'isaac_sim' && <p>• Isaac 空场景没有自动成功判据，保存为 unavailable。</p>}
                 {worker?.log_path && <p className="break-all">• Log: {worker.log_path}</p>}
               </CardContent>

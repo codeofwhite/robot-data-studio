@@ -5,7 +5,7 @@ export type Session = {
   adapter_id: string;
   engine_id: 'genesis' | 'isaac_sim' | 'roboverse';
   scene_id: string;
-  control_mode: 'keyboard' | 'gello' | 'scripted';
+  control_mode: 'keyboard' | 'gello' | 'scripted' | 'imported';
   status: string;
   target_episodes: number;
   collector_url: string | null;

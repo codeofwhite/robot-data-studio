@@ -121,6 +121,7 @@ export function SessionList() {
                 {visible.map((session) => {
                   const trashed = session.status === 'trashed';
                   const busy = busyId === session.id;
+                  const readOnly = session.config?.imported_read_only === true;
                   return (
                     <TableRow key={session.id}>
                       <TableCell className="max-w-md">
@@ -139,7 +140,8 @@ export function SessionList() {
                       <TableCell>
                         <div className="flex flex-wrap gap-2">
                           {!trashed && <Button size="sm" render={<a href={`/sessions/${session.id}`} />}>打开 <ArrowRight /></Button>}
-                          {!trashed && <Button size="sm" variant="outline" disabled={busy} onClick={() => mutate(session, 'trash')}><Trash2 />移入回收站</Button>}
+                          {!trashed && readOnly && <Badge variant="outline">只读证据</Badge>}
+                          {!trashed && !readOnly && <Button size="sm" variant="outline" disabled={busy} onClick={() => mutate(session, 'trash')}><Trash2 />移入回收站</Button>}
                           {trashed && <Button size="sm" variant="outline" disabled={busy} onClick={() => mutate(session, 'restore')}><RotateCcw />恢复</Button>}
                           {trashed && <Button size="sm" variant="destructive" disabled={busy} onClick={() => mutate(session, 'delete')}><Trash2 />永久删除</Button>}
                         </div>
