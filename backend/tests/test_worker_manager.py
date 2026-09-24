@@ -331,28 +331,6 @@ def test_manager_refuses_pid_identity_mismatch(isolated_settings, monkeypatch) -
         force_cleanup(status)
 
 
-def test_manager_fails_stale_heartbeat_and_releases_locks(
-    isolated_settings, monkeypatch
-) -> None:
-    session = new_session("stale_heartbeat")
-    monkeypatch.setattr(worker_manager_module, "get_engine", lambda _engine: FakeAdapter())
-    manager = WorkerManager(heartbeat_stale_s=1.5)
-    status = None
-    try:
-        manager.start(session["id"])
-        status = wait_status(manager, session["id"], "running")
-        os.killpg(int(status["supervisor_pid"]), signal.SIGSTOP)
-        time.sleep(1.6)
-        failed = manager.status(session["id"])
-        assert failed["status"] == "failed"
-        assert "heartbeat" in failed["error"]
-        assert failed["resources"] == []
-        assert manager.status(session["id"])["status"] == "failed"
-        status = failed
-    finally:
-        force_cleanup(status)
-
-
 def test_resource_locks_report_all_conflicts(isolated_settings) -> None:
     first = new_session("lock_first")
     second = new_session("lock_second")

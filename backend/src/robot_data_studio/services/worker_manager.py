@@ -8,7 +8,6 @@ import sys
 import threading
 import time
 import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -41,12 +40,10 @@ class WorkerManager:
         self,
         *,
         monitor_interval_s: float = 1.0,
-        heartbeat_stale_s: float = 6.0,
         stop_timeout_s: float = 8.0,
         kill_timeout_s: float = 3.0,
     ) -> None:
         self.monitor_interval_s = monitor_interval_s
-        self.heartbeat_stale_s = heartbeat_stale_s
         self.stop_timeout_s = stop_timeout_s
         self.kill_timeout_s = kill_timeout_s
         self._lock = threading.Lock()
@@ -77,12 +74,6 @@ class WorkerManager:
             "command": run.get("command"),
         }
 
-    def _heartbeat_stale(self, heartbeat_at: str | None) -> bool:
-        if not heartbeat_at:
-            return False
-        timestamp = datetime.fromisoformat(heartbeat_at)
-        return (datetime.now(timezone.utc) - timestamp).total_seconds() > self.heartbeat_stale_s
-
     def _signal_verified(self, run: dict[str, Any], sig: signal.Signals) -> bool:
         pid = run.get("supervisor_pid")
         if not identity_matches(
@@ -94,31 +85,6 @@ class WorkerManager:
         except ProcessLookupError:
             return False
         return True
-
-    def _terminate_unresponsive(self, run: dict[str, Any]) -> None:
-        self._signal_verified(run, signal.SIGTERM)
-        deadline = time.monotonic() + min(1.0, self.stop_timeout_s)
-        while time.monotonic() < deadline:
-            if not identity_matches(
-                run.get("supervisor_pid"),
-                run.get("supervisor_boot_id"),
-                run.get("supervisor_start_ticks"),
-            ):
-                return
-            time.sleep(0.05)
-        self._signal_verified(run, signal.SIGKILL)
-        deadline = time.monotonic() + self.kill_timeout_s
-        while time.monotonic() < deadline:
-            if not identity_matches(
-                run.get("supervisor_pid"),
-                run.get("supervisor_boot_id"),
-                run.get("supervisor_start_ticks"),
-            ):
-                return
-            time.sleep(0.05)
-        raise RuntimeError(
-            f"unable to terminate unresponsive worker run {run['run_id']}; resources remain locked"
-        )
 
     def _sync_run(self, run: dict[str, Any]) -> dict[str, Any]:
         # Terminal database state is authoritative. A supervisor that was killed
@@ -150,14 +116,6 @@ class WorkerManager:
                 run["run_id"],
                 status="orphaned",
                 error="supervisor process identity is missing or changed",
-                return_code=run.get("return_code"),
-            )
-        if self._heartbeat_stale(run.get("heartbeat_at")):
-            self._terminate_unresponsive(run)
-            return mark_run(
-                run["run_id"],
-                status="failed",
-                error=f"supervisor heartbeat exceeded {self.heartbeat_stale_s} seconds",
                 return_code=run.get("return_code"),
             )
         return run
