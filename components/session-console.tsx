@@ -35,7 +35,17 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
   const [session, setSession] = useState<Session>();
   const [worker, setWorker] = useState<WorkerRuntime>();
   const [error, setError] = useState<string>();
-  const [busy, setBusy] = useState(false);
+  // Which action is in flight. Stopping blocks the request for as long as the
+  // simulation takes to exit, so the button has to say what it is waiting on.
+  const [pending, setPending] = useState<'start' | 'stop' | 'scan'>();
+  const [stopSeconds, setStopSeconds] = useState(0);
+
+  useEffect(() => {
+    if (pending !== 'stop') return;
+    setStopSeconds(0);
+    const timer = window.setInterval(() => setStopSeconds((seconds) => seconds + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [pending]);
 
   const load = useCallback(async () => {
     try {
@@ -58,7 +68,7 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
   }, [load]);
 
   async function action(name: 'start' | 'stop' | 'scan') {
-    setBusy(true);
+    setPending(name);
     try {
       await api(
         `/sessions/${sessionId}/${name === 'scan' ? 'scan' : `workers/${name}`}`,
@@ -68,7 +78,7 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '操作失败');
     } finally {
-      setBusy(false);
+      setPending(undefined);
     }
   }
 
@@ -86,6 +96,7 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
   const count = session?.episode_count ?? 0;
   const target = session?.target_episodes ?? 1;
   const running = worker?.status === 'running' || worker?.status === 'starting';
+  const stopping = pending === 'stop' || worker?.status === 'stopping';
   const active = running || worker?.status === 'stopping';
   const unhealthy = worker?.status === 'failed' || worker?.status === 'orphaned';
   const batchWorker = session?.engine_id === 'roboverse';
@@ -135,27 +146,35 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
               PID {worker?.child_pid ?? '—'}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {active ? (
-              <Button
-                variant="destructive"
-                disabled={busy || worker?.status === 'stopping'}
-                onClick={() => action('stop')}
-              >
-                <Square />停止 Worker
+          <div className="flex flex-col items-start gap-2 md:items-end">
+            <div className="flex flex-wrap gap-2">
+              {active ? (
+                <Button
+                  variant="destructive"
+                  disabled={pending !== undefined || worker?.status === 'stopping'}
+                  onClick={() => action('stop')}
+                >
+                  <Square />
+                  {stopping ? (pending === 'stop' ? `正在关闭… 已等 ${stopSeconds} 秒` : '正在关闭…') : '停止 Worker'}
+                </Button>
+              ) : (
+                <Button
+                  disabled={pending !== undefined || readOnly}
+                  title={readOnly ? '导入的只读证据没有可启动的采集进程' : undefined}
+                  onClick={() => action('start')}
+                >
+                  <Play />{pending === 'start' ? '启动中…' : '启动 Worker'}
+                </Button>
+              )}
+              <Button variant="outline" disabled={pending !== undefined} onClick={() => action('scan')}>
+                <RefreshCw />{pending === 'scan' ? '扫描中…' : '扫描 Episodes'}
               </Button>
-            ) : (
-              <Button
-                disabled={busy || readOnly}
-                title={readOnly ? '导入的只读证据没有可启动的采集进程' : undefined}
-                onClick={() => action('start')}
-              >
-                <Play />启动 Worker
-              </Button>
+            </div>
+            {stopping && (
+              <p className="text-xs text-muted-foreground">
+                要等仿真进程退出并释放端口，最多约 10 秒。
+              </p>
             )}
-            <Button variant="outline" disabled={busy} onClick={() => action('scan')}>
-              <RefreshCw />扫描 Episodes
-            </Button>
           </div>
         </div>
 
