@@ -1,5 +1,7 @@
 # cuRobo 布料专家数据 v1
 
+> 本文是**单批次的纵向设计说明**（模型边界、文件变更、复现命令）。要看**所有批次的横向台账**——哪些任务、多少成功、视频在哪、怎么打开——见 [`CUROBO_DEMO_INVENTORY.md`](CUROBO_DEMO_INVENTORY.md)。本文只覆盖 `curobo_cloth_v1` 那套 8 类候选矩阵，不含 `fixtures_v4` 等后续批次。
+
 本模块把 cuRobo 规划、真实布料物理、独立评价、逐帧回放与 Studio 资产证据连接起来。材料均为合成参数，尚不是实测布料标定；所有结果标记 SELF_REVIEWED_PROVISIONAL。历史成功示范只提供动作设计参考，新运行不会继承其成功标签。
 
 ## 能力与实验门槛
