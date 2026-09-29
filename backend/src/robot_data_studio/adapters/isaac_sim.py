@@ -52,6 +52,12 @@ SCENES = {
             }
         ],
     },
+    "l_table_basket": {
+        "label": "L 形桌放篮子（场景资产）",
+        "description": "Isaac Lab 加载 fixtures_v4 的 place_in_basket 场景资产：L 形桌与篮子有碰撞体，机器人按资产位姿放置。",
+        "family": "fixtures",
+        "parameters": [],
+    },
 }
 
 
@@ -91,6 +97,10 @@ class IsaacSimAdapter(CollectionAdapter):
         if renderer_profile_id not in self.renderer_profile_ids:
             raise ValueError(f"unsupported Isaac renderer profile: {renderer_profile_id}")
         validate_session_renderer_profile(renderer_profile_id)
+        if config["scene_id"] == "l_table_basket" and not settings.isaac_l_table_basket_scene_usd.is_file():
+            raise ValueError(
+                f"l_table_basket scene asset is missing: {settings.isaac_l_table_basket_scene_usd}"
+            )
 
     def build_collect_command(self, config: dict[str, Any], output_dir: Path) -> list[str]:
         self.validate_config(config)
@@ -150,6 +160,8 @@ class IsaacSimAdapter(CollectionAdapter):
         if config["scene_id"] in {"rigid_pick_place", "rigid_cube_lift"}:
             height = config.get("scene_params", {}).get("work_surface_height_m", 0.25)
             command += ["--work-surface-height-m", str(height)]
+        if config["scene_id"] == "l_table_basket":
+            command += ["--scene-usd", str(settings.isaac_l_table_basket_scene_usd)]
         return command
 
     def build_worker_launch(self, config: dict[str, Any], output_dir: Path) -> WorkerLaunch:

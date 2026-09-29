@@ -73,6 +73,20 @@ class Settings:
         "ROBOT_DATA_STUDIO_ISAAC_FRANKA_USD",
         "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.1/Isaac/IsaacLab/Robots/FrankaEmika/panda_instanceable.usd",
     )
+    isaac_l_table_basket_scene_usd: Path = Path(
+        os.getenv(
+            "ROBOT_DATA_STUDIO_ISAAC_L_TABLE_BASKET_SCENE_USD",
+            PROJECT_ROOT
+            / "assets"
+            / "sources"
+            / "robot-cloth-scenes-v1"
+            / "scenes"
+            / "fixtures_v4"
+            / "place_in_basket"
+            / "v001"
+            / "scene.usda",
+        )
+    )
     lerobot_python: str = os.getenv("ROBOT_DATA_STUDIO_LEROBOT_PYTHON", "python")
     openpi_root: Path = Path(os.getenv("ROBOT_DATA_STUDIO_OPENPI_ROOT", "/data/zhanghejun/openpi"))
     openpi_python: str = os.getenv(
