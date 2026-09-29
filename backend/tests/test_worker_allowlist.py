@@ -56,6 +56,36 @@ def test_rejects_unallowlisted_scene_parameter():
         }, Path("/tmp/data"))
 
 
+def test_rejects_out_of_range_scene_parameter():
+    """Values, not just names, are rejected before a worker is ever launched.
+
+    The worker runs the same check inside `parse_args`, so without this the
+    rejection would surface only as `exit code 2` in the collector log. The
+    message must name the parameter: the session form pins it to that field.
+    """
+    adapter = ClothTwinAdapter()
+    with pytest.raises(ValueError, match=r"^cloth_stretch_compliance=1\.2 is outside"):
+        adapter.build_collect_command({
+            "scene_id": "cloth_corner_lift", "control_mode": "keyboard", "port": 8080,
+            "control_fps": 10, "sim_dt": 0.01, "physics_steps_per_control": 10,
+            "width": 640, "height": 480,
+            "scene_params": {"cloth_stretch_compliance": 1.2},
+            "camera_profile_id": "lab_d435i_dual_v1",
+        }, Path("/tmp/data"))
+
+
+def test_rejects_unknown_garment_before_launch():
+    adapter = ClothTwinAdapter()
+    with pytest.raises(ValueError, match="is not one of"):
+        adapter.build_collect_command({
+            "scene_id": "cloth_corner_lift", "control_mode": "keyboard", "port": 8080,
+            "control_fps": 10, "sim_dt": 0.01, "physics_steps_per_control": 10,
+            "width": 640, "height": 480,
+            "scene_params": {"garment": "no_such_garment"},
+            "camera_profile_id": "lab_d435i_dual_v1",
+        }, Path("/tmp/data"))
+
+
 def test_genesis_rigid_scene_passes_work_surface_height() -> None:
     adapter = ClothTwinAdapter()
     config = {

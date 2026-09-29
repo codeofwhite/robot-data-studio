@@ -18,11 +18,12 @@ type SceneParameter = {
   key: string;
   label: string;
   unit: string;
-  minimum: number;
-  maximum: number;
-  default: number;
+  minimum: number | null;
+  maximum: number | null;
+  default: number | string;
   step: number | null;
   scale: 'linear' | 'log';
+  choices: string[];
 };
 
 type Engine = {
@@ -65,9 +66,11 @@ export default function NewSessionPage() {
   const [cameraProfile, setCameraProfile] = useState('');
   const [rendererProfile, setRendererProfile] = useState('');
   const [advanced, setAdvanced] = useState(false);
-  const [sceneParams, setSceneParams] = useState<Record<string, number>>({});
+  const [sceneParams, setSceneParams] = useState<Record<string, number | string>>({});
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  // `key` is set when the backend named a scene parameter as the reason, so the
+  // message can sit against that field instead of only in the page banner.
+  const [error, setError] = useState<{ message: string; key?: string }>();
 
   const selectedEngine = useMemo(
     () => engines.find((item) => item.id === engine),
@@ -78,6 +81,17 @@ export default function NewSessionPage() {
     [selectedEngine],
   );
   const selected = useMemo(() => scenes.find((item) => item.id === scene), [scene, scenes]);
+  // Categorical parameters (which garment the task wears) are part of choosing
+  // the task, so they sit beside the scene picker rather than in the advanced
+  // numeric block.
+  const choiceParameters = useMemo(
+    () => (selected?.parameters ?? []).filter((parameter) => parameter.choices.length > 0),
+    [selected],
+  );
+  const numericParameters = useMemo(
+    () => (selected?.parameters ?? []).filter((parameter) => parameter.choices.length === 0),
+    [selected],
+  );
   const episodeLimits = selectedEngine?.session_limits?.target_episodes ?? {
     minimum: 1,
     maximum: 10000,
@@ -107,7 +121,7 @@ export default function NewSessionPage() {
         setEngines(descriptors);
         selectDescriptor(descriptors[0]);
       })
-      .catch((caught) => setError(caught instanceof Error ? caught.message : '加载引擎失败'));
+      .catch((caught) => setError({ message: caught instanceof Error ? caught.message : '加载引擎失败' }));
   }, []);
 
   useEffect(() => {
@@ -115,14 +129,21 @@ export default function NewSessionPage() {
       (selected?.parameters ?? []).map((parameter) => [parameter.key, parameter.default]),
     ));
     setAdvanced(false);
+    setError(undefined);
   }, [selected]);
+
+  function updateSceneParam(key: string, value: number | string) {
+    setSceneParams((current) => ({ ...current, [key]: value }));
+    // A rejection no longer applies once the value it named is edited.
+    setError((current) => (current?.key === key ? undefined : current));
+  }
 
   async function submit() {
     if (!selectedEngine || !selected) return;
     if (!targetValid) {
-      setError(
-        `目标 Episode 数必须在 ${episodeLimits.minimum}～${episodeLimits.maximum} 之间`,
-      );
+      setError({
+        message: `目标 Episode 数必须在 ${episodeLimits.minimum}～${episodeLimits.maximum} 之间`,
+      });
       return;
     }
     setBusy(true);
@@ -150,7 +171,15 @@ export default function NewSessionPage() {
       });
       window.location.href = `/sessions/${session.id}`;
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '创建会话失败');
+      const message = caught instanceof Error ? caught.message : '创建会话失败';
+      // The scene plugin reports a rejected parameter as `key=value ...`, so the
+      // reason can be pinned to the field that caused it.
+      const named = message.match(/^([a-z][a-z0-9_]*)=/)?.[1];
+      const key = selected.parameters.some((parameter) => parameter.key === named) ? named : undefined;
+      setError({ message, key });
+      // Numeric parameters sit in the collapsed block; open it, or the field the
+      // message points at is off screen.
+      if (key) setAdvanced(true);
       setBusy(false);
     }
   }
@@ -163,10 +192,10 @@ export default function NewSessionPage() {
           <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">新建采集会话</h1>
           <p className="mt-2 text-sm text-muted-foreground">一次确定数据去向、场景插件、控制器与运行参数。创建后再显式启动 worker。</p>
         </div>
-        {error && (
+        {error && !error.key && (
           <Alert variant="destructive">
             <AlertTitle>会话配置不可用</AlertTitle>
-            <AlertDescription>{error}。场景列表只从后端 ScenePlugin 描述加载。</AlertDescription>
+            <AlertDescription>{error.message}</AlertDescription>
           </Alert>
         )}
         <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
@@ -210,6 +239,22 @@ export default function NewSessionPage() {
                   </NativeSelect>
                   {selected?.description && <p className="mt-2 text-xs text-muted-foreground">{selected.description}</p>}
                 </div>
+                {choiceParameters.map((parameter) => (
+                  <div className="sm:col-span-2" key={parameter.key}>
+                    <Label className="mb-2">{parameter.label}</Label>
+                    <NativeSelect
+                      className="w-full"
+                      aria-invalid={error?.key === parameter.key || undefined}
+                      value={String(sceneParams[parameter.key] ?? parameter.default)}
+                      onChange={(event) => updateSceneParam(parameter.key, event.target.value)}
+                    >
+                      {parameter.choices.map((choice) => <NativeSelectOption key={choice} value={choice}>{choice}</NativeSelectOption>)}
+                    </NativeSelect>
+                    {error?.key === parameter.key
+                      ? <p className="mt-2 text-xs text-destructive">{error.message}</p>
+                      : <p className="mt-2 text-xs text-muted-foreground">该任务使用的物件，由场景插件提供可选值。</p>}
+                  </div>
+                ))}
               </CardContent>
             </Card>
 
@@ -245,23 +290,29 @@ export default function NewSessionPage() {
                   {usesCollectorPort && <Field label="Collector 端口"><Input type="number" min={1024} value={port} onChange={(event) => setPort(Number(event.target.value))} /></Field>}
                   <Field label="控制频率 (Hz)"><Input type="number" min={1} max={120} value={fps} onChange={(event) => setFps(Number(event.target.value))} /></Field>
                 </div>
-                {Boolean(selected?.parameters.length) && (
+                {Boolean(numericParameters.length) && (
                   <>
                     <Button type="button" variant="outline" onClick={() => setAdvanced(!advanced)}>
                       <SlidersHorizontal />场景参数<ChevronDown className={advanced ? 'rotate-180 transition-transform' : 'transition-transform'} />
                     </Button>
                     {advanced && (
                       <div className="grid gap-4 rounded-lg border border-border/70 bg-background/40 p-4 sm:grid-cols-2">
-                        {selected?.parameters.map((parameter) => (
+                        {numericParameters.map((parameter) => (
                           <Field key={parameter.key} label={`${parameter.label}${parameter.unit ? ` (${parameter.unit})` : ''}`}>
                             <Input
                               type="number"
-                              min={parameter.minimum}
-                              max={parameter.maximum}
+                              min={parameter.minimum ?? undefined}
+                              max={parameter.maximum ?? undefined}
                               step={parameter.step ?? 'any'}
+                              aria-invalid={error?.key === parameter.key || undefined}
                               value={sceneParams[parameter.key] ?? parameter.default}
-                              onChange={(event) => setSceneParams({ ...sceneParams, [parameter.key]: Number(event.target.value) })}
+                              onChange={(event) => updateSceneParam(parameter.key, Number(event.target.value))}
                             />
+                            {error?.key === parameter.key
+                              ? <p className="text-xs text-destructive">{error.message}</p>
+                              : parameter.scale === 'log' && parameter.minimum !== null && parameter.maximum !== null
+                                ? <p className="text-xs text-muted-foreground">允许 {parameter.minimum} ～ {parameter.maximum}</p>
+                                : null}
                           </Field>
                         ))}
                       </div>

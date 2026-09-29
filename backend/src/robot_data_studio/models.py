@@ -26,7 +26,9 @@ class SessionCreate(BaseModel):
     height: int = Field(default=480, ge=64, le=4096)
     camera_profile_id: str = Field(default="lab_d435i_dual_v1", pattern=r"^[a-z][a-z0-9_]*$")
     renderer_profile_id: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]*$")
-    scene_params: dict[str, float | int] = Field(default_factory=dict)
+    # Categorical scene parameters (a garment id, say) arrive as strings; numeric
+    # ones as numbers. The scene plugin decides which keys accept what.
+    scene_params: dict[str, float | int | str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def resolve_renderer_profile(self):

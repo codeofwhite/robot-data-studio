@@ -36,8 +36,13 @@ class ClothTwinAdapter(CollectionAdapter):
         # redirect data roots, but that must not silently redirect plugin code.
         self.plugin_root = Path(settings.clothtwin_root)
 
-    @cached_property
-    def plugin_descriptor(self) -> dict[str, Any]:
+    def _plugin_env(self) -> dict[str, str]:
+        """Environment for the plugin subprocess.
+
+        The plugin runs out-of-process: the adapter passes a location, never an
+        imported module. Both `describe` and `validate` must see the same
+        PYTHONPATH, so it is built in one place.
+        """
         env = dict(os.environ)
         python_paths = [
             str(CONTRACTS_SRC),
@@ -46,10 +51,14 @@ class ClothTwinAdapter(CollectionAdapter):
         if env.get("PYTHONPATH"):
             python_paths.append(env["PYTHONPATH"])
         env["PYTHONPATH"] = os.pathsep.join(python_paths)
+        return env
+
+    @cached_property
+    def plugin_descriptor(self) -> dict[str, Any]:
         result = subprocess.run(
             [settings.collector_python, "-m", "franka_only.scene_plugin", "describe"],
             cwd=self.plugin_root,
-            env=env,
+            env=self._plugin_env(),
             capture_output=True,
             text=True,
             timeout=5,
@@ -59,6 +68,34 @@ class ClothTwinAdapter(CollectionAdapter):
         if descriptor.get("contract") != "robot_data_scene_plugin" or descriptor.get("contract_version") != 1:
             raise ValueError("unsupported Cloth scene-plugin descriptor")
         return descriptor
+
+    def validate_scene_parameters(
+        self, scene: str, scene_params: dict[str, Any]
+    ) -> dict[str, float | int | str]:
+        """Resolve scene parameters through the plugin, as the worker will.
+
+        The worker validates the same values again inside its own `parse_args`, so
+        a rejection there used to surface only as `worker exited with return code 2`
+        in the collector log. Asking the plugin here instead reports the reason
+        when the session is created.
+        """
+        command = [
+            settings.collector_python, "-m", "franka_only.scene_plugin", "validate",
+            "--scene", scene,
+        ]
+        for key, value in sorted(scene_params.items()):
+            command += ["--param", f"{key}={value}"]
+        result = subprocess.run(
+            command,
+            cwd=self.plugin_root,
+            env=self._plugin_env(),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            raise ValueError(result.stderr.strip() or "scene parameters were rejected")
+        return json.loads(result.stdout)
 
     def scene_descriptors(self) -> dict[str, dict[str, Any]]:
         return {
@@ -77,10 +114,13 @@ class ClothTwinAdapter(CollectionAdapter):
         scenes = self.scene_descriptors()
         if mode not in self.allowed_modules or scene not in scenes:
             raise ValueError("unsupported Cloth scene collection mode or scene")
+        scene_params = config.get("scene_params", {})
         allowed_params = {item["key"] for item in scenes[scene]["parameters"]}
-        for key in config.get("scene_params", {}):
+        for key in scene_params:
             if key not in allowed_params:
                 raise ValueError(f"scene parameter is not allowlisted: {key}")
+        if scene_params:
+            self.validate_scene_parameters(scene, scene_params)
         profile_id = str(config.get("camera_profile_id", "lab_d435i_dual_v1"))
         if profile_id not in self.camera_profile_ids:
             raise ValueError(f"unsupported Genesis camera profile: {profile_id}")

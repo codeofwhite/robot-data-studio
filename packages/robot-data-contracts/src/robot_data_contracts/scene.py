@@ -12,11 +12,14 @@ class SceneParameter(BaseModel):
     key: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
     label: str
     unit: str = ""
-    minimum: float
-    maximum: float
-    default: float | int
+    # Numeric parameters bound the range; a parameter that carries `choices` is
+    # categorical instead and leaves both bounds unset.
+    minimum: float | None = None
+    maximum: float | None = None
+    default: float | int | str
     step: float | None = None
     scale: Literal["linear", "log"] = "linear"
+    choices: list[str] = Field(default_factory=list)
 
 
 class SceneDescriptor(BaseModel):
@@ -71,6 +74,10 @@ class ScenePlugin(Protocol):
 
     def describe(self) -> ScenePluginDescriptor: ...
 
-    def validate(self, scene_id: str, parameters: Mapping[str, float | int]) -> dict[str, float | int]: ...
+    def validate(
+        self, scene_id: str, parameters: Mapping[str, float | int | str]
+    ) -> dict[str, float | int | str]: ...
 
-    def create(self, runtime_config: Any, scene_id: str, parameters: Mapping[str, float | int]) -> SceneRuntime: ...
+    def create(
+        self, runtime_config: Any, scene_id: str, parameters: Mapping[str, float | int | str]
+    ) -> SceneRuntime: ...
