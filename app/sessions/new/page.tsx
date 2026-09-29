@@ -39,6 +39,7 @@ type Engine = {
   }>;
   camera_profiles: Array<{ id: string; label: string; match_level: string; roles: string[] }>;
   renderer_profiles: Array<{ id: string; label: string; description: string; profile_version: number; rendering_mode: 'performance' | 'balanced' | 'quality' }>;
+  physics_backends: Array<{ id: string; label: string; description: string }>;
   session_limits?: {
     target_episodes?: {
       minimum: number;
@@ -65,6 +66,7 @@ export default function NewSessionPage() {
   const [fps, setFps] = useState(10);
   const [cameraProfile, setCameraProfile] = useState('');
   const [rendererProfile, setRendererProfile] = useState('');
+  const [physicsBackend, setPhysicsBackend] = useState('');
   const [advanced, setAdvanced] = useState(false);
   const [sceneParams, setSceneParams] = useState<Record<string, number | string>>({});
   const [busy, setBusy] = useState(false);
@@ -106,6 +108,7 @@ export default function NewSessionPage() {
     setMode(descriptor.control_modes.includes('gello') ? 'gello' : descriptor.control_modes[0]);
     setCameraProfile(descriptor.camera_profiles[0]?.id ?? '');
     setRendererProfile(descriptor.renderer_profiles.find((profile) => profile.rendering_mode === 'balanced')?.id ?? descriptor.renderer_profiles[0]?.id ?? '');
+    setPhysicsBackend(descriptor.physics_backends.find((backend) => backend.id === 'physx')?.id ?? descriptor.physics_backends[0]?.id ?? '');
     setTarget(
       descriptor.session_limits?.target_episodes?.default ??
         (descriptor.capabilities.batch_generation ? 1 : 50),
@@ -166,6 +169,7 @@ export default function NewSessionPage() {
           height: 480,
           camera_profile_id: cameraProfile,
           ...(rendererProfile ? { renderer_profile_id: rendererProfile } : {}),
+          ...(physicsBackend ? { physics_backend: physicsBackend } : {}),
           scene_params: sceneParams,
         }),
       });
@@ -279,6 +283,13 @@ export default function NewSessionPage() {
                   </NativeSelect>
                   <p className="mt-2 text-xs text-muted-foreground">{selectedEngine?.renderer_profiles.find((profile) => profile.id === rendererProfile)?.description}</p>
                 </div>}
+                {Boolean(selectedEngine?.physics_backends.length) && <div>
+                  <Label className="mb-2">Physics Backend</Label>
+                  <NativeSelect className="w-full" value={physicsBackend} onChange={(event) => setPhysicsBackend(event.target.value)}>
+                    {selectedEngine?.physics_backends.map((backend) => <NativeSelectOption key={backend.id} value={backend.id}>{backend.label}</NativeSelectOption>)}
+                  </NativeSelect>
+                  <p className="mt-2 text-xs text-muted-foreground">{selectedEngine?.physics_backends.find((backend) => backend.id === physicsBackend)?.description}</p>
+                </div>}
               </CardContent>
             </Card>
 
@@ -332,6 +343,7 @@ export default function NewSessionPage() {
                 <Summary label="Control" value={mode.toUpperCase()} />
                 <Summary label="Camera" value={selectedEngine?.camera_profiles.find((item) => item.id === cameraProfile)?.label ?? '—'} />
                 <Summary label="Renderer" value={selectedEngine?.renderer_profiles.find((item) => item.id === rendererProfile)?.label ?? '引擎默认'} />
+                <Summary label="Physics" value={selectedEngine?.physics_backends.find((item) => item.id === physicsBackend)?.label ?? '引擎默认'} />
                 <Summary label="Quota" value={`${target} episodes`} />
                 <Summary label="Worker" value={usesCollectorPort ? `GPU ${gpu} · :${port}` : `GPU ${gpu} · headless batch`} />
                 <div className="rounded-lg border border-primary/25 bg-primary/5 p-3 text-xs leading-5 text-muted-foreground"><Check className="mr-1 inline size-3.5 text-primary" />状态、动作、图像、时间戳和引擎 provenance 会进入统一 Episode 索引。</div>

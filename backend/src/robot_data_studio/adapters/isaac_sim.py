@@ -68,6 +68,7 @@ class IsaacSimAdapter(CollectionAdapter):
     control_modes = ("keyboard", "gello")
     camera_profile_ids = ("lab_d435i_dual_v1",)
     renderer_profile_ids = ("isaac_performance_v1", "isaac_balanced_v1", "isaac_quality_v1")
+    physics_backends = ("physx", "newton")
     capabilities = {
         "webrtc": True,
         "recording": True,
@@ -97,6 +98,9 @@ class IsaacSimAdapter(CollectionAdapter):
         if renderer_profile_id not in self.renderer_profile_ids:
             raise ValueError(f"unsupported Isaac renderer profile: {renderer_profile_id}")
         validate_session_renderer_profile(renderer_profile_id)
+        physics_backend = str(config.get("physics_backend") or settings.isaac_physics_backend)
+        if physics_backend not in self.physics_backends:
+            raise ValueError(f"unsupported Isaac physics backend: {physics_backend}")
         if config["scene_id"] == "l_table_basket" and not settings.isaac_l_table_basket_scene_usd.is_file():
             raise ValueError(
                 f"l_table_basket scene asset is missing: {settings.isaac_l_table_basket_scene_usd}"
@@ -124,6 +128,8 @@ class IsaacSimAdapter(CollectionAdapter):
             "1",
             "--rendering_mode",
             renderer_profile["rendering_mode"],
+            "--physics-backend",
+            str(config.get("physics_backend") or settings.isaac_physics_backend),
             "--host",
             "127.0.0.1",
             "--port",

@@ -66,3 +66,17 @@ def test_every_registered_scene_parameter_carries_choices() -> None:
                 assert isinstance(parameter.get("choices"), list), (
                     f"{engine['id']}/{scene_id}/{parameter['key']} has no choices"
                 )
+
+
+def test_every_adapter_ships_a_physics_backend_list() -> None:
+    """The session form guards on `.length`, so the key must always be present."""
+    for engine in engine_descriptors():
+        backends = engine["physics_backends"]
+        assert isinstance(backends, list), f"{engine['id']} has no physics_backends key"
+        for backend in backends:
+            assert backend["id"] and backend["label"], f"{engine['id']}/{backend} is unlabelled"
+
+
+def test_isaac_advertises_physx_and_newton() -> None:
+    isaac = next(engine for engine in engine_descriptors() if engine["id"] == "isaac_sim")
+    assert [backend["id"] for backend in isaac["physics_backends"]] == ["physx", "newton"]

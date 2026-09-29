@@ -69,6 +69,7 @@ class Settings:
     public_ip: str = os.getenv("ROBOT_DATA_STUDIO_PUBLIC_IP", "219.223.200.145")
     isaac_signaling_port: int = int(os.getenv("ROBOT_DATA_STUDIO_ISAAC_SIGNALING_PORT", "49100"))
     isaac_media_port: int = int(os.getenv("ROBOT_DATA_STUDIO_ISAAC_MEDIA_PORT", "47998"))
+    isaac_physics_backend: str = os.getenv("ROBOT_DATA_STUDIO_ISAAC_PHYSICS_BACKEND", "physx")
     isaac_franka_usd: str = os.getenv(
         "ROBOT_DATA_STUDIO_ISAAC_FRANKA_USD",
         "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.1/Isaac/IsaacLab/Robots/FrankaEmika/panda_instanceable.usd",

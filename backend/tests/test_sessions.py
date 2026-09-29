@@ -94,6 +94,44 @@ def test_renderer_profile_is_rejected_for_non_isaac_engine() -> None:
         )
 
 
+def test_physics_backend_is_rejected_for_non_isaac_engine() -> None:
+    with pytest.raises(ValueError, match="only by Isaac Sim"):
+        SessionCreate(
+            dataset_name="pilot", scene_id="rigid_pick_place", control_mode="keyboard",
+            physics_backend="newton",
+        )
+
+
+def test_isaac_session_keeps_the_requested_physics_backend(isolated_settings):
+    """A POSTed physics_backend must survive into the stored config.
+
+    SessionCreate has no `model_config`, so pydantic's default `extra="ignore"`
+    drops unknown keys without an error -- the session still creates and the
+    adapter quietly falls back to settings. This asserts the field is declared.
+    """
+    session = create_session(
+        SessionCreate(
+            engine_id="isaac_sim",
+            dataset_name="isaac_newton_pilot",
+            scene_id="franka_empty",
+            control_mode="gello",
+            physics_backend="newton",
+        )
+    )
+    assert session["config"]["physics_backend"] == "newton"
+
+    default_session = create_session(
+        SessionCreate(
+            engine_id="isaac_sim",
+            dataset_name="isaac_default_pilot",
+            scene_id="franka_empty",
+            control_mode="gello",
+        )
+    )
+    # None means "adapter fills it from settings", not "physx".
+    assert default_session["config"]["physics_backend"] is None
+
+
 def test_roboverse_session_is_noninteractive_batch_worker(isolated_settings):
     session = create_session(
         SessionCreate(

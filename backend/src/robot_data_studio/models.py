@@ -26,6 +26,7 @@ class SessionCreate(BaseModel):
     height: int = Field(default=480, ge=64, le=4096)
     camera_profile_id: str = Field(default="lab_d435i_dual_v1", pattern=r"^[a-z][a-z0-9_]*$")
     renderer_profile_id: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]*$")
+    physics_backend: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]*$")
     # Categorical scene parameters (a garment id, say) arrive as strings; numeric
     # ones as numbers. The scene plugin decides which keys accept what.
     scene_params: dict[str, float | int | str] = Field(default_factory=dict)
@@ -36,6 +37,14 @@ class SessionCreate(BaseModel):
             self.renderer_profile_id = "isaac_balanced_v1"
         if self.engine_id != "isaac_sim" and self.renderer_profile_id is not None:
             raise ValueError("renderer profiles are currently supported only by Isaac Sim")
+        return self
+
+    @model_validator(mode="after")
+    def resolve_physics_backend(self):
+        # Left None for the adapter to fill from settings, so the deployment-wide
+        # default stays in one place (`settings.isaac_physics_backend`).
+        if self.engine_id != "isaac_sim" and self.physics_backend is not None:
+            raise ValueError("physics backends are currently supported only by Isaac Sim")
         return self
 
     @field_validator("dataset_name")

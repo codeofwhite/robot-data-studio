@@ -9,6 +9,7 @@ from robot_data_contracts import WorkerDescriptorV1
 from robot_data_contracts.scene import SceneParameter
 
 from ..camera_profiles import camera_profile_descriptors
+from ..physics_backends import physics_backend_descriptors
 from ..render_profiles import renderer_profile_descriptors
 
 
@@ -48,6 +49,7 @@ class CollectionAdapter(ABC):
     control_modes: tuple[str, ...]
     camera_profile_ids: tuple[str, ...]
     renderer_profile_ids: tuple[str, ...] = ()
+    physics_backends: tuple[str, ...] = ()
 
     def descriptor(self) -> dict[str, Any]:
         worker = WorkerDescriptorV1(
@@ -63,6 +65,7 @@ class CollectionAdapter(ABC):
             "scenes": self._contract_scenes(),
             "camera_profiles": camera_profile_descriptors(self.camera_profile_ids),
             "renderer_profiles": renderer_profile_descriptors(self.renderer_profile_ids),
+            "physics_backends": physics_backend_descriptors(self.physics_backends),
             "worker": worker.model_dump(mode="json"),
         }
 
