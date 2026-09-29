@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from robot_data_contracts import WorkerDescriptorV1
+from robot_data_contracts.scene import SceneParameter
 
 from ..camera_profiles import camera_profile_descriptors
 from ..render_profiles import renderer_profile_descriptors
@@ -59,10 +60,30 @@ class CollectionAdapter(ABC):
             "label": self.label,
             "capabilities": self.capabilities,
             "control_modes": list(self.control_modes),
-            "scenes": self.scene_descriptors(),
+            "scenes": self._contract_scenes(),
             "camera_profiles": camera_profile_descriptors(self.camera_profile_ids),
             "renderer_profiles": renderer_profile_descriptors(self.renderer_profile_ids),
             "worker": worker.model_dump(mode="json"),
+        }
+
+    def _contract_scenes(self) -> dict[str, dict[str, Any]]:
+        # Adapters declare their scenes as plain dicts, and the session form reads
+        # `parameter.choices.length` without a guard because SceneParameter gives
+        # `choices` a default. Genesis resolves its parameters through the scene
+        # plugin and so always carried it; the Isaac and RoboVerse adapters built
+        # theirs by hand and omitted it, which crashed the page on selecting any
+        # of their scenes. Resolve every parameter through the contract here, at
+        # the single point where all adapters are serialized: a parameter that
+        # cannot satisfy the contract now fails loudly in the backend.
+        return {
+            scene_id: {
+                **scene,
+                "parameters": [
+                    SceneParameter.model_validate(parameter).model_dump(mode="json")
+                    for parameter in scene.get("parameters", [])
+                ],
+            }
+            for scene_id, scene in self.scene_descriptors().items()
         }
 
     @property
