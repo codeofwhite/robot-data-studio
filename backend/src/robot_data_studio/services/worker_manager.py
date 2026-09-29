@@ -164,7 +164,13 @@ class WorkerManager:
             port = int(raw_port)
             sock_type = socket.SOCK_STREAM if protocol == "tcp" else socket.SOCK_DGRAM
             with socket.socket(socket.AF_INET, sock_type) as probe:
-                probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 0)
+                # For a while after a stop, this port looks taken: the collector's
+                # own client sockets linger on it, in FIN_WAIT_2 if the browser is
+                # still connected and TIME_WAIT once it is not. The worker binds
+                # with SO_REUSEADDR (asyncio does by default), so it starts fine;
+                # probing with reuse disabled reported a conflict that was not
+                # there and refused the launch. A live listener still fails.
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 try:
                     probe.bind(("0.0.0.0", port))
                 except OSError as error:

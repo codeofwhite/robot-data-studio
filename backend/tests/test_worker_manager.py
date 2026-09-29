@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -47,6 +48,23 @@ class FakeAdapter:
                 f"gpu:{config['gpu']}",
                 f"output:{output_dir.resolve()}",
             ),
+        )
+
+
+class PortAdapter(FakeAdapter):
+    """A launch that claims a collector port, as the Genesis adapter does."""
+
+    def __init__(self, port: int, *args: str):
+        super().__init__(*args)
+        self.port = port
+
+    def build_worker_launch(self, config, output_dir: Path) -> WorkerLaunch:
+        launch = super().build_worker_launch(config, output_dir)
+        return WorkerLaunch(
+            command=launch.command,
+            cwd=launch.cwd,
+            readiness=launch.readiness,
+            resources=(*launch.resources, f"tcp:{self.port}"),
         )
 
 
@@ -361,6 +379,75 @@ def test_resource_locks_report_all_conflicts(isolated_settings) -> None:
     assert {item["resource_key"] for item in caught.value.conflicts} == set(resources)
     mark_run("first-run", status="failed", error="test cleanup")
     assert run_resources("first-run") == []
+
+
+def test_preflight_ignores_sockets_left_over_from_a_stopped_worker() -> None:
+    """A stopped worker leaves its client sockets lingering on its own port.
+
+    Killing the collector closes the server side of every browser connection, so
+    that port holds a FIN_WAIT_2 (browser still connected) or TIME_WAIT socket for
+    up to a minute. The worker binds with SO_REUSEADDR, so the next launch would
+    succeed; probing with reuse disabled refused it instead, and the database
+    recorded `host TCP port ... is unavailable` for a port that was in fact free.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind(("127.0.0.1", 0))
+        port = listener.getsockname()[1]
+        listener.listen(1)
+        with socket.create_connection(("127.0.0.1", port)) as browser:
+            connection, _ = listener.accept()
+            # The worker dies with the browser still attached, which is when an
+            # operator stops and immediately restarts the collector.
+            connection.close()
+            listener.close()
+            WorkerManager()._preflight_ports((f"tcp:{port}",))
+
+
+def test_preflight_still_rejects_a_port_a_live_listener_holds() -> None:
+    """Reuse tolerance must not blind the check to a genuinely occupied port."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind(("0.0.0.0", 0))
+        port = listener.getsockname()[1]
+        listener.listen(1)
+        with pytest.raises(RuntimeError, match="is unavailable"):
+            WorkerManager()._preflight_ports((f"tcp:{port}",))
+
+
+def test_start_succeeds_right_after_a_stop_lingered_on_the_port(
+    isolated_settings, monkeypatch
+) -> None:
+    """The operator's stop-then-start flow, on a port the last worker left behind."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        # The collector serves through `websockets.serve`, whose listening socket
+        # sets SO_REUSEADDR; accepted connections inherit it. That inherited flag
+        # is what makes the leftover socket bindable again, so a listener without
+        # it would not model the collector.
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind(("127.0.0.1", 0))
+        port = listener.getsockname()[1]
+        listener.listen(1)
+        browser = socket.create_connection(("127.0.0.1", port))
+        connection, _ = listener.accept()
+        session = new_session("port_lingering")
+        monkeypatch.setattr(
+            worker_manager_module, "get_engine", lambda _engine: PortAdapter(port)
+        )
+        manager = WorkerManager()
+        status = None
+        try:
+            connection.close()
+            listener.close()
+            manager.start(session["id"])
+            status = wait_status(manager, session["id"], "running")
+            status = manager.stop(session["id"])
+            assert status["status"] == "stopped"
+            manager.start(session["id"])
+            status = wait_status(manager, session["id"], "running")
+        finally:
+            browser.close()
+            force_cleanup(status)
 
 
 def test_legacy_running_session_becomes_orphaned(isolated_settings) -> None:
