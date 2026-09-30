@@ -21,6 +21,7 @@ export function AssetLibrary() {
   const [outcome, setOutcome] = useState('');
   const [integrity, setIntegrity] = useState('');
   const [offset, setOffset] = useState(0);
+  const [showScanRecords, setShowScanRecords] = useState(false);
   const [tick, setTick] = useState(0);
   const [data, setData] = useState<AssetList>();
   const [loading, setLoading] = useState(true);
@@ -32,7 +33,9 @@ export function AssetLibrary() {
     const controller = new AbortController();
     const timer = setTimeout(() => {
       setLoading(true);
-      const query = new URLSearchParams({ q, kind, engine, outcome, integrity, offset: String(offset), limit: String(limit) });
+      // config/validation 是 ClothForge 扫描的日志，属于「验证概览」；默认不混进资产索引
+      const kindQuery = kind || (showScanRecords ? '' : 'model,scene,material');
+      const query = new URLSearchParams({ q, kind: kindQuery, engine, outcome, integrity, offset: String(offset), limit: String(limit) });
       void api<AssetList>('/assets?' + query, { signal: controller.signal }).then(result => {
         if (!controller.signal.aborted) { setData(result); setError(''); }
       }).catch(caught => {
@@ -40,7 +43,7 @@ export function AssetLibrary() {
       }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     }, 200);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [q, kind, engine, outcome, integrity, offset, tick]);
+  }, [q, kind, engine, outcome, integrity, offset, tick, showScanRecords]);
 
   return <div className="space-y-5">
     <div className="flex flex-wrap items-end justify-between gap-3">
@@ -64,7 +67,10 @@ export function AssetLibrary() {
           <NativeSelect aria-label="证据完整性" value={integrity} onChange={e => { setIntegrity(e.target.value); setOffset(0); }}><NativeSelectOption value="">全部证据状态</NativeSelectOption><NativeSelectOption value="current">引用文件一致</NativeSelectOption><NativeSelectOption value="stale">证据过期 / 缺失</NativeSelectOption></NativeSelect>
         </div>
       </CardHeader>
-      <CardContent><p className="mb-3 text-xs text-muted-foreground">{loading ? '正在核对版本与文件…' : '匹配 ' + (data?.total ?? 0) + ' 项'} · 默认显示各资产最新版本，历史版本在详情中查看。文件一致不等于物理验证通过。</p>
+      <CardContent><div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground">{loading ? '正在核对版本与文件…' : '匹配 ' + (data?.total ?? 0) + ' 项'} · 默认显示各资产最新版本，历史版本在详情中查看。文件一致不等于物理验证通过。</p>
+          <Button size="sm" variant={showScanRecords ? 'default' : 'outline'} aria-pressed={showScanRecords} onClick={() => { setShowScanRecords(!showScanRecords); setOffset(0); }}>{showScanRecords ? '隐藏扫描记录' : '显示扫描记录'}</Button>
+        </div>
         <Table><TableHeader><TableRow><TableHead>资产 / 固定编号</TableHead><TableHead>类型</TableHead><TableHead>版本</TableHead><TableHead>引擎</TableHead><TableHead>记录结果</TableHead><TableHead>证据</TableHead></TableRow></TableHeader><TableBody>
           {!loading && !data?.items.length && <TableRow><TableCell colSpan={6} className="py-12 text-center text-muted-foreground">没有匹配资产，可调整筛选或登记新资产。</TableCell></TableRow>}
           {data?.items.map(record => <TableRow key={record.asset_id}><TableCell><a className="font-medium text-primary hover:underline" href={assetHref(record.asset_id)}>{record.name}</a><p className="mt-1 break-all font-mono text-xs text-muted-foreground">{record.asset_id}</p></TableCell><TableCell>{kindLabels[record.kind]}</TableCell><TableCell className="font-mono">v{record.version}</TableCell><TableCell className="text-xs">{record.engines.join(' · ') || '通用'}</TableCell><TableCell><Badge variant={record.data.outcome === 'failed' ? 'destructive' : 'outline'}>{outcomeLabel(record.data.outcome)}</Badge></TableCell><TableCell><Badge variant={record.integrity.status === 'stale' ? 'destructive' : 'outline'}>{record.integrity.status === 'current' ? '文件一致' : '证据过期'}</Badge></TableCell></TableRow>)}

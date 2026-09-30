@@ -190,8 +190,9 @@ class AssetRegistry:
         for record in records:
             latest[record.asset_id] = record
         items = []
+        wanted_kinds = {value for value in kind.split(",") if value}
         for record in latest.values():
-            if kind and record.kind != kind:
+            if wanted_kinds and record.kind not in wanted_kinds:
                 continue
             if engine and engine not in record.engines:
                 continue

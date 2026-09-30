@@ -33,7 +33,7 @@ def failure(error):
 
 
 @router.get("/assets")
-def index(q: str = Query("", max_length=200), kind: str = "", engine: str = "", outcome: str = "", integrity: str = "",
+def index(q: str = Query("", max_length=200), kind: str = Query("", max_length=200), engine: str = "", outcome: str = "", integrity: str = "",
           offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=250)):
     try:
         return AssetRegistry().catalog(q, kind, engine, outcome, integrity, offset, limit)
