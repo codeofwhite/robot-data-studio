@@ -21,6 +21,9 @@ export function SessionList() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [filter, setFilter] = useState<Filter>('active');
   const [engineFilter, setEngineFilter] = useState<EngineFilter>('all');
+  const [page, setPage] = useState(1);
+  // 0 表示不分页，列表本来就不长，留着这个选项更省事
+  const [pageSize, setPageSize] = useState(12);
   const [busyId, setBusyId] = useState<string>();
   const [error, setError] = useState<string>();
 
@@ -41,6 +44,16 @@ export function SessionList() {
     if (filter === 'active') return session.status !== 'trashed';
     return true;
   }), [engineFilter, filter, sessions]);
+
+  // 过滤后的列表会随着「移入回收站」变短，所以在渲染时夹住页码而不是用 effect：
+  // 页码越界会先渲出一帧空表
+  const effectivePageSize = pageSize > 0 ? pageSize : Math.max(visible.length, 1);
+  const pageCount = Math.max(1, Math.ceil(visible.length / effectivePageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pageRows = visible.slice(
+    (currentPage - 1) * effectivePageSize,
+    currentPage * effectivePageSize,
+  );
 
   async function mutate(session: Session, action: 'trash' | 'restore' | 'delete') {
     if (action === 'trash' && !window.confirm(
@@ -101,12 +114,18 @@ export function SessionList() {
             <CardTitle>Session 列表</CardTitle>
             <CardDescription>{visible.length} / {sessions.length} 条</CardDescription>
             <div className="grid max-w-md grid-cols-2 gap-2 pt-2">
-              <NativeSelect value={filter} onChange={(event) => setFilter(event.target.value as Filter)}>
+              <NativeSelect
+                value={filter}
+                onChange={(event) => { setFilter(event.target.value as Filter); setPage(1); }}
+              >
                 <NativeSelectOption value="active">当前会话</NativeSelectOption>
                 <NativeSelectOption value="all">全部</NativeSelectOption>
                 <NativeSelectOption value="trashed">回收站</NativeSelectOption>
               </NativeSelect>
-              <NativeSelect value={engineFilter} onChange={(event) => setEngineFilter(event.target.value as EngineFilter)}>
+              <NativeSelect
+                value={engineFilter}
+                onChange={(event) => { setEngineFilter(event.target.value as EngineFilter); setPage(1); }}
+              >
                 <NativeSelectOption value="all">全部 Simulator</NativeSelectOption>
                 <NativeSelectOption value="genesis">Genesis</NativeSelectOption>
                 <NativeSelectOption value="isaac_sim">Isaac Sim</NativeSelectOption>
@@ -118,7 +137,7 @@ export function SessionList() {
             <Table>
               <TableHeader><TableRow><TableHead>Session</TableHead><TableHead>配置</TableHead><TableHead>Episodes</TableHead><TableHead>状态</TableHead><TableHead>操作</TableHead></TableRow></TableHeader>
               <TableBody>
-                {visible.map((session) => {
+                {pageRows.map((session) => {
                   const trashed = session.status === 'trashed';
                   const busy = busyId === session.id;
                   const readOnly = session.config?.imported_read_only === true;
@@ -152,6 +171,28 @@ export function SessionList() {
               </TableBody>
             </Table>
             {!visible.length && <p className="py-12 text-center text-sm text-muted-foreground">当前筛选下没有 Session。</p>}
+            {visible.length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/70 px-2 py-3">
+                <p className="text-xs text-muted-foreground">
+                  第 {currentPage} / {pageCount} 页 · 本页 {pageRows.length} 条
+                </p>
+                <div className="flex items-center gap-2">
+                  <NativeSelect
+                    size="sm"
+                    className="w-28"
+                    value={String(pageSize)}
+                    onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }}
+                  >
+                    <NativeSelectOption value="12">每页 12 条</NativeSelectOption>
+                    <NativeSelectOption value="25">每页 25 条</NativeSelectOption>
+                    <NativeSelectOption value="50">每页 50 条</NativeSelectOption>
+                    <NativeSelectOption value="0">显示全部</NativeSelectOption>
+                  </NativeSelect>
+                  <Button size="sm" variant="outline" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>上一页</Button>
+                  <Button size="sm" variant="outline" disabled={currentPage >= pageCount} onClick={() => setPage(currentPage + 1)}>下一页</Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
