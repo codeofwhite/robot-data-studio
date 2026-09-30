@@ -122,7 +122,9 @@ def artifact(asset_id: str, version: int, index: int):
         registry.inspect_artifact(entry)
         path = registry.artifact_path(entry)
         suffix = path.suffix.lower()
-        if entry.role == "video" and suffix in (".mp4", ".webm"):
+        if suffix in (".mp4", ".webm") and (
+            entry.role == "video" or entry.role.startswith("video_")
+        ):
             return FileResponse(path, media_type="video/mp4" if suffix == ".mp4" else "video/webm",
                                 headers={"X-Content-Type-Options": "nosniff"})
         image_types = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
