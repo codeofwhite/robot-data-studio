@@ -3,7 +3,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from robot_data_contracts.asset import AssetArtifact, AssetDraft
-from ..services.asset_service import AssetRegistry, AssetConflict, AssetNotFound, AssetIntegrityError
+from ..services.asset_service import AssetRegistry, AssetConflict, AssetNotFound, AssetIntegrityError, is_video_artifact
 
 from ..services.validation_overview import validation_overview
 from ..services.cloth_run_service import cloth_run_manager, newton_cloth_run_manager
@@ -122,9 +122,7 @@ def artifact(asset_id: str, version: int, index: int):
         registry.inspect_artifact(entry)
         path = registry.artifact_path(entry)
         suffix = path.suffix.lower()
-        if suffix in (".mp4", ".webm") and (
-            entry.role == "video" or entry.role.startswith("video_")
-        ):
+        if is_video_artifact(entry.role, entry.path):
             return FileResponse(path, media_type="video/mp4" if suffix == ".mp4" else "video/webm",
                                 headers={"X-Content-Type-Options": "nosniff"})
         image_types = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}

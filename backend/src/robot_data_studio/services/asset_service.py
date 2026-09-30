@@ -6,7 +6,7 @@ from functools import lru_cache
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 from uuid import uuid4
 
@@ -42,6 +42,22 @@ def _digest(path: str, identity: tuple) -> str:
 def file_digest(path: Path) -> str:
     stat = path.stat()
     return _digest(str(path), (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns))
+
+
+VIDEO_SUFFIXES = (".mp4", ".webm")
+
+
+def is_video_artifact(role: str, path: str) -> bool:
+    """True for artifacts a browser can play, i.e. media rather than a record of one.
+
+    Roles are authored per artifact -- ``video``, ``video_front``, ``video_overview_4x``
+    and so on -- so match the family instead of one exact name, which is what let the
+    serving route and the cloth catalog disagree about the same records. The suffix
+    check keeps ``video_provenance``, which is JSON, out of the video.
+    """
+    return PurePosixPath(path).suffix.lower() in VIDEO_SUFFIXES and (
+        role == "video" or role.startswith("video_")
+    )
 
 
 class AssetRegistry:

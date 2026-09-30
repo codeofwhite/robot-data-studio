@@ -6,7 +6,7 @@ import json
 from urllib.parse import quote
 
 from robot_data_contracts.asset import AssetArtifact, AssetDraft
-from .asset_service import AssetRegistry, AssetIntegrityError
+from .asset_service import AssetRegistry, AssetIntegrityError, is_video_artifact
 
 # This threshold describes the existing repeated-run screen, not real-world reliability.
 MIN_REPEATS = 3
@@ -99,8 +99,7 @@ def validation_overview(registry: AssetRegistry):
             video = next(({"url": "/assets/" + quote(record.asset_id, safe="") +
                            f"/versions/{record.version}/artifacts/{index}", "path": artifact.path}
                           for index, artifact in enumerate(record.artifacts)
-                          if artifact.role == "video" and PurePosixPath(artifact.path).suffix.lower()
-                          in (".mp4", ".webm")), None)
+                          if is_video_artifact(artifact.role, artifact.path)), None)
             replay = next(({"url": "/assets/" + quote(record.asset_id, safe="") +
                             f"/versions/{record.version}/artifacts/{index}/viewer", "path": artifact.path}
                            for index, artifact in enumerate(record.artifacts)

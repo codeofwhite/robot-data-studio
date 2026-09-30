@@ -3,7 +3,7 @@ from pathlib import Path
 import json
 import sqlite3
 from ..config import settings
-from .asset_service import AssetRegistry
+from .asset_service import AssetRegistry, is_video_artifact
 
 BATCHES = ('tabletop_v2', 'folding_v3', 'fixtures_v4')
 
@@ -46,8 +46,9 @@ def catalog():
                     media = []
                     if record:
                         for i, a in enumerate(record.artifacts):
-                            if a.role in {'video','preview'} or a.role.startswith('video_'):
-                                media.append({'role':'video' if a.role.startswith('video') else a.role,'label':a.role,'path':a.path,'url':f'/assets/{record.asset_id}/versions/{record.version}/artifacts/{i}'})
+                            is_video = is_video_artifact(a.role, a.path)
+                            if is_video or a.role == 'preview':
+                                media.append({'role':'video' if is_video else a.role,'label':a.role,'path':a.path,'url':f'/assets/{record.asset_id}/versions/{record.version}/artifacts/{i}'})
                     attempts.append({**item, 'batch': batch, 'numeric_success': evaluation.get('success'),
                         'delivery_passed': delivery.get('passed') is True,
                         'failed_gates': evaluation.get('failed_gates', item.get('failed_gates', [])),
