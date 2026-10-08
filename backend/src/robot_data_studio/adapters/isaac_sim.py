@@ -4,13 +4,22 @@ import os
 from pathlib import Path
 from typing import Any
 
-from ..config import CONTRACTS_SRC, settings
+from ..config import CONTRACTS_SRC, PROJECT_ROOT, settings
 from ..camera_profiles import validate_session_camera_profile
 from ..render_profiles import load_renderer_profile, validate_session_renderer_profile
 from .base import CollectionAdapter, WorkerLaunch, WorkerReadiness
 
 
+BIMANUAL_ASSET_ROOT = PROJECT_ROOT / "assets/sources/visual-workstation-v1"
+BIMANUAL_FRANKA_USD = Path("/data/zhanghejun/simulation-demos/franka-dual-cloth-isaac/assets/franka/franka.usd")
+
 SCENES = {
+    "bimanual_tabletop_v17": {
+        "label": "双 Franka 实验台 v17（Tab 切换）",
+        "description": "复用 v17 实验台 USD、材质与灯光；Keyboard / PhysX，Tab 切换主力臂。选择实验台 v4 相机，960×720。",
+        "family": "bimanual",
+        "parameters": [],
+    },
     "franka_empty": {
         "label": "Franka 空场景遥操采集",
         "description": "Isaac Lab Franka 空场景采集。",
@@ -66,7 +75,7 @@ class IsaacSimAdapter(CollectionAdapter):
     label = "Isaac Sim / Isaac Lab"
     scenes = SCENES
     control_modes = ("keyboard", "gello")
-    camera_profile_ids = ("lab_d435i_dual_v1",)
+    camera_profile_ids = ("lab_d435i_dual_v1", "isaac_bimanual_tabletop_visual_v4")
     renderer_profile_ids = ("isaac_performance_v1", "isaac_balanced_v1", "isaac_quality_v1")
     physics_backends = ("physx", "newton")
     capabilities = {
@@ -82,6 +91,18 @@ class IsaacSimAdapter(CollectionAdapter):
             raise ValueError("Isaac Sim supports keyboard or GELLO control only")
         if config.get("scene_id") not in self.scenes:
             raise ValueError("unsupported Isaac Sim scene")
+        if config["scene_id"] == "bimanual_tabletop_v17":
+            if config["control_mode"] != "keyboard":
+                raise ValueError("双臂实验台 v17 当前仅支持 Keyboard（Tab 切换）")
+            if str(config.get("physics_backend") or settings.isaac_physics_backend) != "physx":
+                raise ValueError("双臂实验台 v17 当前仅支持 PhysX")
+            if config.get("camera_profile_id") != "isaac_bimanual_tabletop_visual_v4":
+                raise ValueError("双臂实验台 v17 请使用实验台四视角 v4 相机和 960×720")
+            for path in (BIMANUAL_ASSET_ROOT / "bimanual_tabletop_lab_v17.usda",
+                         BIMANUAL_ASSET_ROOT / "asset_manifest_bimanual_v17.json",
+                         BIMANUAL_ASSET_ROOT / "hdri/photo_studio_01_4k.hdr", BIMANUAL_FRANKA_USD):
+                if not path.is_file():
+                    raise ValueError(f"bimanual tabletop asset missing: {path}")
         allowed_params = {
             item["key"] for item in self.scenes[config["scene_id"]]["parameters"]
         }
@@ -168,6 +189,14 @@ class IsaacSimAdapter(CollectionAdapter):
             command += ["--work-surface-height-m", str(height)]
         if config["scene_id"] == "l_table_basket":
             command += ["--scene-usd", str(settings.isaac_l_table_basket_scene_usd)]
+        if config["scene_id"] == "bimanual_tabletop_v17":
+            command[command.index("--franka-usd") + 1] = str(BIMANUAL_FRANKA_USD)
+            command += [
+                "--visual-style", "dual_franka_tabletop",
+                "--workstation-usd", str(BIMANUAL_ASSET_ROOT / "bimanual_tabletop_lab_v17.usda"),
+                "--workstation-manifest-file", str(BIMANUAL_ASSET_ROOT / "asset_manifest_bimanual_v17.json"),
+                "--hdri-file", str(BIMANUAL_ASSET_ROOT / "hdri/photo_studio_01_4k.hdr"),
+            ]
         return command
 
     def build_worker_launch(self, config: dict[str, Any], output_dir: Path) -> WorkerLaunch:

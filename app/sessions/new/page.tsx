@@ -133,6 +133,13 @@ export default function NewSessionPage() {
     ));
     setAdvanced(false);
     setError(undefined);
+    if (engine === 'isaac_sim' && scene === 'bimanual_tabletop_v17') {
+      setMode('keyboard');
+      setPhysicsBackend('physx');
+      setCameraProfile('isaac_bimanual_tabletop_visual_v4');
+    } else if (cameraProfile === 'isaac_bimanual_tabletop_visual_v4') {
+      setCameraProfile(selectedEngine?.camera_profiles[0]?.id ?? '');
+    }
   }, [selected]);
 
   function updateSceneParam(key: string, value: number | string) {
@@ -165,8 +172,8 @@ export default function NewSessionPage() {
           control_fps: fps,
           sim_dt: 0.01,
           physics_steps_per_control: Math.round(1 / (fps * 0.01)),
-          width: 640,
-          height: 480,
+          width: cameraProfile === 'isaac_bimanual_tabletop_visual_v4' ? 960 : 640,
+          height: cameraProfile === 'isaac_bimanual_tabletop_visual_v4' ? 720 : 480,
           camera_profile_id: cameraProfile,
           ...(rendererProfile ? { renderer_profile_id: rendererProfile } : {}),
           ...(physicsBackend ? { physics_backend: physicsBackend } : {}),
