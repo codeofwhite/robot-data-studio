@@ -12,6 +12,7 @@ ExportFormat = Literal["lerobot", "openpi_lerobot_v21", "rlds", "robomimic"]
 
 
 class SessionCreate(BaseModel):
+    cloth_generation_plan_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
     generation_plan_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
     engine_id: EngineId = "genesis"
     dataset_name: str = Field(min_length=1, max_length=80)
@@ -34,6 +35,8 @@ class SessionCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_generation_mode(self):
+        if self.cloth_generation_plan_id and (self.generation_plan_id or self.engine_id != "isaac_sim" or self.scene_id != "curobo_cloth_replay" or self.control_mode != "scripted"):
+            raise ValueError("cloth appearance plans require scripted Isaac curobo_cloth_replay")
         if self.generation_plan_id and (self.engine_id != "isaac_sim" or self.scene_id != "rigid_cube_lift" or self.control_mode != "scripted"):
             raise ValueError("generation plans require scripted Isaac rigid_cube_lift")
         return self

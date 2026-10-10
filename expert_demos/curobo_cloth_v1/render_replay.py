@@ -13,12 +13,15 @@ def exact_frames(ticks,last_command_tick,dt,fps):
         rows.append({'frame':len(rows),'tick':t,'sample':mapping[t],'simulation_time_s':t*dt,'video_time_s':len(rows)/fps,'applied_command_row_tick':t+1})
     return rows
 def main():
-    p=argparse.ArgumentParser();p.add_argument('run');p.add_argument('--fps',type=int,default=10);a=p.parse_args();run=Path(a.run)
+    p=argparse.ArgumentParser();p.add_argument('run');p.add_argument('--fps',type=int,default=10)
+    p.add_argument('--pbr-dir',type=Path);p.add_argument('--output-dir',type=Path);p.add_argument('--episode-root',type=Path);p.add_argument('--appearance-file',type=Path)
+    a=p.parse_args();run=Path(a.run).resolve();pbr=a.pbr_dir.resolve() if a.pbr_dir else run/'pbr_replay'
+    appearance_spec=json.loads(a.appearance_file.read_text()) if a.appearance_file else None
     cfg=json.loads((run/'config.json').read_text());evaluation=json.loads((run/'evaluation.json').read_text())
     with np.load(run/'trajectory.npz') as archive:data={k:archive[k] for k in archive.files}
     commands={r['tick']:r for r in map(json.loads,(run/'physics.jsonl').read_text().splitlines())}
     mapping=exact_frames(data['tick'],int(data['tick'][-1]),cfg['dt'],a.fps)
-    out=run/'replay';out.mkdir(exist_ok=False)
+    out=a.output_dir.resolve() if a.output_dir else run/'replay';out.mkdir(parents=True,exist_ok=False)
     (out/'renderer_source.py').write_bytes(Path(__file__).read_bytes())
     (out/'scene_adapter_source.py').write_bytes((ROOT/'scene_adapter.py').read_bytes())
     binding=cfg.get('scene_binding')
@@ -26,14 +29,14 @@ def main():
     if binding:
         from scene_adapter import verify_scene_sources
         verify_scene_sources(binding)
-        pv=json.loads((run/'pbr_replay/verification.json').read_text())
+        pv=json.loads((pbr/'verification.json').read_text())
         if pv.get('scene')!=binding['scene'] or pv.get('scene_binding_sha256')!=sha(run/'scene_binding.json'):
             raise ValueError('PBR replay belongs to a different scene binding')
         if pv['trajectory_sha256']!=sha(run/'trajectory.npz') or pv['preview_only'] or not pv.get('original_scene_loaded'):
             raise ValueError('Original-scene full trajectory replay required')
         if [r['tick'] for r in pv['frame_map']]!=[r['tick'] for r in mapping]:raise ValueError('PBR and Episode frame ticks differ')
         for row in pv['frame_map']:
-            if sha(run/'pbr_replay'/row['image_path'])!=row['image_sha256']:raise ValueError('PBR image changed')
+            if sha(pbr/row['image_path'])!=row['image_sha256']:raise ValueError('PBR image changed')
         camera_names=['front'];cfg['camera_resolution']=pv['resolution']
         calibration={'front':pv['camera']};calibration['front']['intrinsics']=np.asarray(pv['camera']['intrinsics']).reshape(-1).tolist()
         engine_version='recorded Genesis IPC state; Isaac RTX original-scene image replay'
@@ -61,11 +64,20 @@ def main():
        'action_semantics':f"primary applied_action is the first {cfg['dt']*1000:g}ms command; applied_action_substeps contains all commands until the next {a.fps:g}Hz observation. Use chunks and grasp_constraints.jsonl for assisted physical replay.",
        'assets':[{'source_manifest':str(run/'source_manifest.json'),'sha256':sha(run/'source_manifest.json')}],
        'dependency_packages':['genesis-world','numpy','torch']}
-    if binding:metadata.update(scene_binding=binding,scene_binding_sha256=sha(run/'scene_binding.json'),pbr_verification_sha256=sha(run/'pbr_replay/verification.json'))
-    writer=FrankaEpisodeWriter(run/'episodes',fps=a.fps,engine_id='genesis',engine_version=engine_version,
+    if binding:metadata.update(scene_binding=binding,scene_binding_sha256=sha(run/'scene_binding.json'),pbr_verification_sha256=sha(pbr/'verification.json'))
+    lineage=None
+    if appearance_spec:
+        from robot_data_contracts.episode import AugmentationLineageV1
+        if pv.get('appearance_spec')!=appearance_spec:raise ValueError('PBR appearance differs from export request')
+        lineage=AugmentationLineageV1(parent_episode_uuid=appearance_spec['parent_episode_uuid'],generation_method='visual_rerender',
+            randomization_spec_id=appearance_spec['plan_id'],resolved_parameters=appearance_spec,trajectory_modified=False)
+        metadata.update(appearance=appearance_spec['appearance'],source_physics_engine='genesis',image_renderer='Isaac RTX',
+            evaluator_scope='inherited from source physics; appearance rerender executes no physics',
+            appearance_spec_path=str(a.appearance_file.resolve()))
+    writer=FrankaEpisodeWriter(a.episode_root.resolve() if a.episode_root else run/'episodes',fps=a.fps,engine_id='genesis',engine_version=engine_version,
         scene_id=(binding['scene']['asset_id']+'@v'+str(binding['scene']['version'])) if binding else 'curobo_cloth_v1/'+cfg['task_id'],control_source='scripted_curobo_physics',
         operator_command_names=['target_'+str(i) for i in range(9)],camera_names=camera_names,
-        run_metadata=metadata,seed=cfg['seed'],generation_method='scripted',worker_id='gpu-5090-cloth-v1')
+        run_metadata=metadata,seed=int(hashlib.sha256(json.dumps(appearance_spec['appearance'],sort_keys=True).encode()).hexdigest()[:8],16) if appearance_spec else cfg['seed'],generation_method=None if lineage else 'scripted',lineage=lineage,worker_id='gpu-5090-cloth-v1')
     writer.start(cfg['task_id'])
     import av
     from PIL import Image
@@ -79,7 +91,7 @@ def main():
         images={};extras={'physics_tick':np.asarray([row['tick']],np.int64)}
         for name in camera_names:
             if binding:
-                rgb=np.asarray(Image.open(run/'pbr_replay'/pv['frame_map'][row['frame']]['image_path']).convert('RGB'));transform=np.asarray(calibration[name]['camera_to_world'])
+                rgb=np.asarray(Image.open(pbr/pv['frame_map'][row['frame']]['image_path']).convert('RGB'));transform=np.asarray(calibration[name]['camera_to_world'])
             else:
                 cam=cams.scene.cameras[name];rgb=scene.array(cam.render(force_render=True)[0]).astype('uint8');transform=scene.array(cam.transform)
             images[name]=rgb
@@ -119,7 +131,7 @@ def main():
         'episode_path':str(episode),'episode_sha256':{str(p.relative_to(episode)):sha(p) for p in sorted(episode.rglob('*')) if p.is_file()},
         'native_episode_valid':True,'replica_fk_verified':True,'display_physics_steps':0,
         'exact_frame_ticks':True,'renderer_sha256':sha(__file__),'review_status':'SELF_REVIEWED_PROVISIONAL'}
-    if binding:report.update(scene=binding['scene'],scene_binding_sha256=sha(run/'scene_binding.json'),original_scene_loaded=True,pbr_verification_sha256=sha(run/'pbr_replay/verification.json'))
+    if binding:report.update(scene=binding['scene'],scene_binding_sha256=sha(run/'scene_binding.json'),original_scene_loaded=True,pbr_verification_sha256=sha(pbr/'verification.json'))
     (out/'verification.json').write_text(json.dumps(report,indent=2))
     print('REPLAY_COMPLETE',json.dumps({'videos':videos,'episode':str(episode)}),flush=True)
 if __name__=='__main__':main()

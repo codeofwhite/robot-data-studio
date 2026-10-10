@@ -153,6 +153,10 @@ class IsaacSimAdapter(CollectionAdapter):
         return paths["provenance"].parent, {**resolved, "garment_id": manifest["id"]}
 
     def validate_config(self, config: dict[str, Any]) -> None:
+        if config.get("cloth_generation_plan_id"):
+            from ..services.cloth_generation_service import validate_session
+            validate_session(config)
+            return
         generation = None
         if config.get("generation_plan_id"):
             from ..services.generation_service import generation_session
@@ -302,6 +306,24 @@ class IsaacSimAdapter(CollectionAdapter):
         return command
 
     def build_worker_launch(self, config: dict[str, Any], output_dir: Path) -> WorkerLaunch:
+        if config.get("cloth_generation_plan_id"):
+            import sys
+            from ..services.cloth_generation_service import plan_directory, report_for, validate_session
+            validate_session(config)
+            report = report_for({"config": {**config, "episode_root": str(output_dir)}})
+            if report and report['status'] == 'completed':
+                raise ValueError('衣物外观批次已完成')
+            return WorkerLaunch(
+                command=[sys.executable, '-B', '-m', 'robot_data_generation.cloth_appearance_runner',
+                    '--plan', str(plan_directory(config['cloth_generation_plan_id']) / 'plan.json'),
+                    '--output', str(output_dir.resolve()), '--studio-root', str(PROJECT_ROOT),
+                    '--isaac-python', settings.cloth_render_python, '--export-python', settings.cloth_genesis_python],
+                cwd=PROJECT_ROOT,
+                env_updates={'PYTHONDONTWRITEBYTECODE': '1', 'CUDA_VISIBLE_DEVICES': str(config['gpu']),
+                    'PYTHONPATH': str(settings.generation_root / 'src') + ':' + str(CONTRACTS_SRC)},
+                readiness=WorkerReadiness(kind='marker', timeout_s=600.0),
+                resources=('simulator:global', f"gpu:{int(config['gpu'])}", f"output:{output_dir.resolve()}"),
+            )
         python_paths = [
             str(settings.gello_remote_root / "src"),
             str(CONTRACTS_SRC),

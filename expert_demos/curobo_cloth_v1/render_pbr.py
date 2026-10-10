@@ -4,15 +4,18 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parent
 ASSETS=ROOT.parents[1]/'assets/sources/robot-cloth-scenes-v1'
 p=argparse.ArgumentParser();p.add_argument('run');p.add_argument('--gpu',type=int,default=3);p.add_argument('--max-frames',type=int);p.add_argument('--output-name',default='pbr_replay')
-p.add_argument('--camera',choices=['hero','detail','overhead','grasp'],default='hero');a=p.parse_args()
-run=Path(a.run);out=run/a.output_name;out.mkdir(exist_ok=False);cache=out/'cache';cache.mkdir()
+p.add_argument('--camera',choices=['hero','detail','overhead','grasp'],default='hero')
+p.add_argument('--output-dir',type=Path);p.add_argument('--appearance-file',type=Path);p.add_argument('--cached-robot',action='store_true');a=p.parse_args()
+run=Path(a.run).resolve();out=a.output_dir.resolve() if a.output_dir else run/a.output_name;out.mkdir(parents=True,exist_ok=False);cache=out/'cache';cache.mkdir()
+appearance_spec=json.loads(a.appearance_file.read_text()) if a.appearance_file else None
 (out/'renderer_source.py').write_bytes(Path(__file__).read_bytes())
 (out/'scene_adapter_source.py').write_bytes((ROOT/'scene_adapter.py').read_bytes())
 (out/'frame_mapping_source.py').write_bytes((ROOT/'render_replay.py').read_bytes())
 from isaacsim import SimulationApp
-app=SimulationApp({'headless':True,'active_gpu':a.gpu,'physics_gpu':a.gpu,'multi_gpu':False,'renderer':'PathTracing','width':960,'height':960,
+app=SimulationApp({'headless':True,'active_gpu':a.gpu,'physics_gpu':0 if os.environ.get('CUDA_VISIBLE_DEVICES','').isdigit() else a.gpu,'multi_gpu':False,'renderer':'PathTracing','width':960,'height':960,
  'enable_crashreporter':False,'limit_cpu_threads':6,
  'extra_args':['--/app/useFabricSceneDelegate=false','--/rtx/hydra/supportMultiTickRate=false','--/app/settings/persistent=false',
+ '--/renderer/multiGpu/autoEnable=false','--/renderer/multiGpu/activeGpus='+str(a.gpu),'--/renderer/multiGpu/maxGpuCount=1',
  '--/app/userConfigPath='+str(cache/'user.config.json'),'--/app/cachePath='+str(cache/'kit'),'--/app/dataPath='+str(cache/'data'),'--/log/file='+str(cache/'kit.log')]})
 encoder=None
 try:
@@ -21,7 +24,16 @@ try:
  from pxr import Usd,UsdGeom,UsdShade,UsdLux,Gf,Sdf,Vt
  from scipy.spatial.transform import Rotation
  import omni.usd,omni.replicator.core as rep,carb
- cfg=json.loads((run/'config.json').read_text());data=np.load(run/'trajectory.npz');topology=json.loads((run/'physical_scene/assets/cloth_topology.json').read_text())
+ cfg=json.loads((run/'config.json').read_text())
+ # NpzFile is lazy: indexing it every frame would decompress the entire cloth
+ # array repeatedly. Cache measured states once, as the delivered renderer does.
+ loaded=np.load(run/'trajectory.npz',allow_pickle=False)
+ # folding_v3 supplies an already frozen dict through its recorded-state cache.
+ if isinstance(loaded,dict):data=loaded
+ else:
+  with loaded as archive:data={key:archive[key] for key in archive.files}
+ for array in data.values():array.setflags(write=False)
+ topology=json.loads((run/'physical_scene/assets/cloth_topology.json').read_text())
  binding=cfg.get('scene_binding')
  if binding:
   from scene_adapter import verify_scene_sources
@@ -82,10 +94,54 @@ try:
   rest=np.asarray(topology['rest_vertices']);uv=(rest[:,:2]-rest[:,:2].min(axis=0))/cfg['square']['width_m']
   cloth=b.mesh('PhysicalCloth',data['cloth_vertices'][0],topology['faces'],'cloth',uv)
   robot_name='Franka'
+ if appearance_spec:
+  appearance=appearance_spec['appearance']
+  if hashlib.sha256((run/'trajectory.npz').read_bytes()).hexdigest()!=appearance_spec['source_trajectory_sha256']:raise ValueError('Appearance source trajectory changed')
+  color=tuple(int(appearance['color'][i:i+2],16)/255 for i in (1,3,5))
+  material=UsdShade.Material.Define(stage,'/World/Materials/AppearanceOverride')
+  shader=UsdShade.Shader.Define(stage,str(material.GetPath())+'/Surface');shader.CreateIdAttr('UsdPreviewSurface')
+  shader.CreateInput('diffuseColor',Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(*color))
+  shader.CreateInput('roughness',Sdf.ValueTypeNames.Float).Set(appearance['roughness'])
+  shader.CreateInput('metallic',Sdf.ValueTypeNames.Float).Set(0.)
+  material.CreateSurfaceOutput().ConnectToSource(shader.ConnectableAPI(),'surface')
+  if appearance['texture_path']:
+   texture=Path(appearance['texture_path'])
+   if hashlib.sha256(texture.read_bytes()).hexdigest()!=appearance['texture_sha256']:raise ValueError('Appearance texture changed')
+   reader=UsdShade.Shader.Define(stage,str(material.GetPath())+'/UV');reader.CreateIdAttr('UsdPrimvarReader_float2');reader.CreateInput('varname',Sdf.ValueTypeNames.Token).Set('st')
+   tex=UsdShade.Shader.Define(stage,str(material.GetPath())+'/Color');tex.CreateIdAttr('UsdUVTexture')
+   tex.CreateInput('file',Sdf.ValueTypeNames.Asset).Set(Sdf.AssetPath(str(texture)))
+   tex.CreateInput('st',Sdf.ValueTypeNames.Float2).ConnectToSource(reader.ConnectableAPI(),'result')
+   tex.CreateInput('sourceColorSpace',Sdf.ValueTypeNames.Token).Set('sRGB')
+   tex.CreateInput('scale',Sdf.ValueTypeNames.Float4).Set(Gf.Vec4f(*color,1))
+   tex.CreateInput('wrapS',Sdf.ValueTypeNames.Token).Set('repeat');tex.CreateInput('wrapT',Sdf.ValueTypeNames.Token).Set('repeat')
+   shader.GetInput('diffuseColor').ConnectToSource(tex.ConnectableAPI(),'rgb')
+  uv=UsdGeom.PrimvarsAPI(cloth).GetPrimvar('st')
+  if not uv or not uv.HasValue():
+   rest=original_points if binding else np.asarray(topology['rest_vertices'])
+   span=np.ptp(rest[:,:2],axis=0);coords=(rest[:,:2]-rest[:,:2].min(axis=0))/np.maximum(span,1e-6)
+   UsdGeom.PrimvarsAPI(cloth).CreatePrimvar('st',Sdf.ValueTypeNames.TexCoord2fArray,'vertex').Set(Vt.Vec2fArray.FromNumpy(coords.astype(np.float32)))
+  UsdShade.MaterialBindingAPI.Apply(cloth.GetPrim()).Bind(material,bindingStrength=UsdShade.Tokens.strongerThanDescendants)
+  if binding:
+   for path,kind,ids,offset in secondary:
+    if kind=='mesh':
+     prim=stage.GetPrimAtPath(path)
+     UsdShade.MaterialBindingAPI.Apply(prim).Bind(material,bindingStrength=UsdShade.Tokens.strongerThanDescendants)
+     UsdGeom.PrimvarsAPI(prim).CreatePrimvar('st',Sdf.ValueTypeNames.TexCoord2fArray,'vertex').Set(uv.Get() if uv and uv.HasValue() else Vt.Vec2fArray.FromNumpy(coords.astype(np.float32)))
  qnames=['panda_joint'+str(i) for i in range(1,8)]+['panda_finger_joint1','panda_finger_joint2']
+ pose_cache={}
+ if a.cached_robot:
+  sys.path.insert(0,str(ROOT/'tabletop_v2'))
+  from cached_visual_robot import CachedFrankaPose
  def pose_robot(q):
   qs={n:float(v*180/np.pi if i<7 else v) for i,(n,v) in enumerate(zip(qnames,q))}
+  if a.cached_robot and pose_cache:
+   if pose_cache.get('stage')!=stage:pose_cache.update(stage=stage,pose=CachedFrankaPose(stage,robot_name))
+   pose_cache['pose'].apply(qs)
+   return
   b.robot(robot_name,ASSETS/'robots/franka/franka.usd',cfg['bases'][0],cfg['yaws'][0],qs)
+  if a.cached_robot:
+   pose_cache.update(stage=stage,pose=CachedFrankaPose(stage,robot_name))
+   pose_cache['pose'].apply(qs)
  pose_robot(data['qpos'][0,0])
  # Verify corresponding rigid-body transforms against recorded physical links.
  robot=stage.GetPrimAtPath('/World/'+robot_name)
@@ -169,8 +225,14 @@ try:
    for path,kind,ids,offset in secondary:
     obj=stage.GetPrimAtPath(path);attr=(UsdGeom.Mesh(obj) if kind=='mesh' else UsdGeom.BasisCurves(obj)).GetPointsAttr()
     attr.Set(Vt.Vec3fArray.FromNumpy((points[ids]+offset).astype(np.float32)))
-  for _ in range(2):app.update()
-  rep.orchestrator.step(delta_time=0,pause_timeline=False,rt_subframes=4)
+  # Appearance batches use the same two updates and 32 spp as the delivered
+  # folding_v3 fast renderer; exact poses are still checked on every frame.
+  if appearance_spec:
+   for _ in range(1):app.update()
+   rep.orchestrator.step(delta_time=0,pause_timeline=False,rt_subframes=1)
+  else:
+   for _ in range(2):app.update()
+   rep.orchestrator.step(delta_time=0,pause_timeline=False,rt_subframes=4)
   arr=np.asarray(rgb.get_data()).copy()[:,:,:3]
   if arr.shape!=(960,960,3) or arr.std()<2:raise RuntimeError('Empty PBR render')
   encoder.stdin.write(np.ascontiguousarray(arr).tobytes())
@@ -197,11 +259,13 @@ try:
  if binding:report.update(scene=binding['scene'],scene_binding_sha256=hashlib.sha256((run/'scene_binding.json').read_bytes()).hexdigest(),
   original_scene_loaded=True,source_camera=camera_source,cloth_mapping='barycentric physical surface; exact node correspondence; backing and sewn hem follow the same surface',
   cloth_topology_sha256=hashlib.sha256((run/'physical_scene/assets/cloth_topology.json').read_bytes()).hexdigest(),passive_robots=binding['passive_robots'])
+ if appearance_spec:report.update(appearance=appearance_spec['appearance'],appearance_spec=appearance_spec,render_updates_per_frame=2)
  (out/'verification.json').write_text(json.dumps(report,indent=2));print('PBR_COMPLETE',json.dumps({k:v for k,v in report.items() if k not in ['frame_map','link_mapping']}),flush=True)
  rgb.detach(product);product.destroy()
 except BaseException:
  import traceback
  error=traceback.format_exc();(out/'failure.txt').write_text(error);print(error,flush=True)
+ raise
 finally:
  if encoder is not None and encoder.poll() is None:encoder.terminate()
  app.close()

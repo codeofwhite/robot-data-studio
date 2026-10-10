@@ -99,7 +99,8 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
   const stopping = pending === 'stop' || worker?.status === 'stopping';
   const active = running || worker?.status === 'stopping';
   const unhealthy = worker?.status === 'failed' || worker?.status === 'orphaned';
-  const generationWorker = Boolean(session?.config?.generation_plan_id);
+  const clothGenerationWorker = Boolean(session?.config?.cloth_generation_plan_id);
+  const generationWorker = Boolean(session?.config?.generation_plan_id) || clothGenerationWorker;
   const batchWorker = session?.engine_id === 'roboverse' || generationWorker;
   const readOnly = session?.config?.imported_read_only === true;
 
@@ -190,7 +191,7 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              {generationWorker ? <div className="p-5"><a className="text-primary" href={`/generation?session=${encodeURIComponent(sessionId)}`}>打开生成计划、批次进度与结果</a><p className="mt-2 text-sm text-muted-foreground">该会话使用无头轨迹执行，不提供 Collector。</p></div> : running && session?.collector_url ? (
+              {generationWorker ? <div className="p-5"><a className="text-primary" href={`/generation?${clothGenerationWorker ? 'kind=cloth&' : ''}session=${encodeURIComponent(sessionId)}${clothGenerationWorker ? '#cloth-generation' : ''}`}>打开生成计划、批次进度与结果</a><p className="mt-2 text-sm text-muted-foreground">{clothGenerationWorker ? '该会话重渲染已记录的衣物状态。' : '该会话使用无头轨迹执行。'}不提供 Collector。</p></div> : running && session?.collector_url ? (
                 <div className="space-y-3 p-3">
                   <iframe
                     className="h-[680px] w-full rounded-lg border border-border bg-black"

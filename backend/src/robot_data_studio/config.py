@@ -12,6 +12,8 @@ CONTRACTS_SRC = PROJECT_ROOT / "packages" / "robot-data-contracts" / "src"
 
 @dataclass(frozen=True)
 class Settings:
+    cloth_expert_root: Path = Path(os.getenv("ROBOT_DATA_STUDIO_CLOTH_EXPERT_ROOT", PROJECT_ROOT / "data/expert_demos/curobo-cloth-v1"))
+    cloth_render_python: str = os.getenv("ROBOT_DATA_STUDIO_CLOTH_RENDER_PYTHON", "/data/zhanghejun/isaacsim_6.0.1/python.sh")
     generation_root: Path = Path(os.getenv("ROBOT_DATA_STUDIO_GENERATION_ROOT", "/data/zhanghejun/robot-data-generation"))
     asset_root: Path = Path(os.getenv("ROBOT_DATA_STUDIO_ASSET_ROOT", PROJECT_ROOT / "assets" / "registry"))
     asset_sources_file: Path = Path(os.getenv("ROBOT_DATA_STUDIO_ASSET_SOURCES", PROJECT_ROOT / "config" / "asset_sources.json"))
