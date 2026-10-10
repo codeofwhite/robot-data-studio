@@ -13,6 +13,11 @@ import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { api } from '@/lib/api';
 import type { Session } from '@/lib/types';
+import type { AssetList, AssetRecord, ClothOptions } from '@/lib/asset-types';
+
+const CLOTHFORGE_SCENE = 'bimanual_tabletop_v17_clothforge';
+const MATERIAL_KEYS = ['mass_per_area', 'friction', 'tri_ke', 'tri_ka', 'edge_ke'];
+const MATERIAL_LABELS: Record<string, string> = { light: '轻薄布料', medium: '中等布料', heavy: '厚重布料' };
 
 type SceneParameter = {
   key: string;
@@ -70,6 +75,9 @@ export default function NewSessionPage() {
   const [advanced, setAdvanced] = useState(false);
   const [sceneParams, setSceneParams] = useState<Record<string, number | string>>({});
   const [busy, setBusy] = useState(false);
+  const [garments, setGarments] = useState<AssetRecord[]>([]);
+  const [clothLoading, setClothLoading] = useState(false);
+  const isClothForge = engine === 'isaac_sim' && scene === CLOTHFORGE_SCENE;
   // `key` is set when the backend named a scene parameter as the reason, so the
   // message can sit against that field instead of only in the page banner.
   const [error, setError] = useState<{ message: string; key?: string }>();
@@ -91,7 +99,7 @@ export default function NewSessionPage() {
     [selected],
   );
   const numericParameters = useMemo(
-    () => (selected?.parameters ?? []).filter((parameter) => parameter.choices.length === 0),
+    () => (selected?.parameters ?? []).filter((parameter) => parameter.choices.length === 0 && parameter.key !== 'garment_version'),
     [selected],
   );
   const episodeLimits = selectedEngine?.session_limits?.target_episodes ?? {
@@ -131,9 +139,9 @@ export default function NewSessionPage() {
     setSceneParams(Object.fromEntries(
       (selected?.parameters ?? []).map((parameter) => [parameter.key, parameter.default]),
     ));
-    setAdvanced(false);
+    setAdvanced(scene === CLOTHFORGE_SCENE);
     setError(undefined);
-    if (engine === 'isaac_sim' && scene === 'bimanual_tabletop_v17') {
+    if (engine === 'isaac_sim' && ['bimanual_tabletop_v17', 'bimanual_tabletop_v17_cloth', CLOTHFORGE_SCENE].includes(scene)) {
       setMode('keyboard');
       setPhysicsBackend('physx');
       setCameraProfile('isaac_bimanual_tabletop_visual_v4');
@@ -142,14 +150,46 @@ export default function NewSessionPage() {
     }
   }, [selected]);
 
+  useEffect(() => {
+    if (!isClothForge) return;
+    let cancelled = false;
+    void api<AssetList>('/assets?q=clothforge&kind=model&limit=250')
+      .then((list) => { if (!cancelled) setGarments(list.items); })
+      .catch((caught) => { if (!cancelled) setError({ message: caught instanceof Error ? caught.message : '加载衣物失败' }); });
+    return () => { cancelled = true; };
+  }, [isClothForge]);
+
+  const garmentId = String(sceneParams.garment_asset_id ?? '');
+  const garmentVersion = Number(sceneParams.garment_version ?? 1);
+  const materialPreset = String(sceneParams.material_preset ?? 'medium');
+  useEffect(() => {
+    if (!isClothForge || !garmentId) return;
+    let cancelled = false;
+    setClothLoading(true);
+    void api<ClothOptions>(`/assets/${encodeURIComponent(garmentId)}/cloth-options?version=${garmentVersion}`)
+      .then((options) => {
+        if (cancelled) return;
+        const material = options.presets.find((preset) => preset.id === materialPreset);
+        if (!material) throw new Error('当前衣物没有所选材料预设');
+        setSceneParams((current) => ({ ...current, ...Object.fromEntries(
+          MATERIAL_KEYS.map((key) => [key, Number(material.parameters[key])]),
+        ) }));
+      })
+      .catch((caught) => { if (!cancelled) setError({ key: 'garment_asset_id', message: caught instanceof Error ? caught.message : '加载衣物材料失败' }); })
+      .finally(() => { if (!cancelled) setClothLoading(false); });
+    return () => { cancelled = true; };
+  }, [isClothForge, garmentId, garmentVersion, materialPreset]);
+
   function updateSceneParam(key: string, value: number | string) {
-    setSceneParams((current) => ({ ...current, [key]: value }));
+    setSceneParams((current) => ({ ...current, [key]: value,
+      ...(key === 'garment_asset_id' ? { garment_version: garments.find((item) => item.asset_id === value)?.version ?? 1 } : {}),
+    }));
     // A rejection no longer applies once the value it named is edited.
     setError((current) => (current?.key === key ? undefined : current));
   }
 
   async function submit() {
-    if (!selectedEngine || !selected) return;
+    if (!selectedEngine || !selected || (isClothForge && clothLoading)) return;
     if (!targetValid) {
       setError({
         message: `目标 Episode 数必须在 ${episodeLimits.minimum}～${episodeLimits.maximum} 之间`,
@@ -259,13 +299,16 @@ export default function NewSessionPage() {
                       value={String(sceneParams[parameter.key] ?? parameter.default)}
                       onChange={(event) => updateSceneParam(parameter.key, event.target.value)}
                     >
-                      {parameter.choices.map((choice) => <NativeSelectOption key={choice} value={choice}>{choice}</NativeSelectOption>)}
+                      {parameter.choices.map((choice) => <NativeSelectOption key={choice} value={choice}>{parameter.key === 'garment_asset_id'
+                        ? garments.find((item) => item.asset_id === choice)?.name ?? choice.replace('MDL-clothforge-', '')
+                        : parameter.key === 'material_preset' ? MATERIAL_LABELS[choice] : choice}</NativeSelectOption>)}
                     </NativeSelect>
                     {error?.key === parameter.key
                       ? <p className="mt-2 text-xs text-destructive">{error.message}</p>
                       : <p className="mt-2 text-xs text-muted-foreground">该任务使用的物件，由场景插件提供可选值。</p>}
                   </div>
                 ))}
+                {isClothForge && <p className="sm:col-span-2 text-xs text-muted-foreground">{clothLoading ? '正在加载衣物材料…' : '下方可调整材料与桌面摆放。修改参数后重新启动会话生效。'}</p>}
               </CardContent>
             </Card>
 
@@ -295,7 +338,9 @@ export default function NewSessionPage() {
                   <NativeSelect className="w-full" value={physicsBackend} onChange={(event) => setPhysicsBackend(event.target.value)}>
                     {selectedEngine?.physics_backends.map((backend) => <NativeSelectOption key={backend.id} value={backend.id}>{backend.label}</NativeSelectOption>)}
                   </NativeSelect>
-                  <p className="mt-2 text-xs text-muted-foreground">{selectedEngine?.physics_backends.find((backend) => backend.id === physicsBackend)?.description}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">{isClothForge && physicsBackend === 'newton'
+                    ? 'MJWarp＋VBD 双向耦合：双臂与衣物接触，沿用衣物和材料参数。Tab 切换主力臂。'
+                    : selectedEngine?.physics_backends.find((backend) => backend.id === physicsBackend)?.description}</p>
                 </div>}
               </CardContent>
             </Card>
@@ -319,6 +364,7 @@ export default function NewSessionPage() {
                           <Field key={parameter.key} label={`${parameter.label}${parameter.unit ? ` (${parameter.unit})` : ''}`}>
                             <Input
                               type="number"
+                              disabled={isClothForge && clothLoading}
                               min={parameter.minimum ?? undefined}
                               max={parameter.maximum ?? undefined}
                               step={parameter.step ?? 'any'}
@@ -354,7 +400,7 @@ export default function NewSessionPage() {
                 <Summary label="Quota" value={`${target} episodes`} />
                 <Summary label="Worker" value={usesCollectorPort ? `GPU ${gpu} · :${port}` : `GPU ${gpu} · headless batch`} />
                 <div className="rounded-lg border border-primary/25 bg-primary/5 p-3 text-xs leading-5 text-muted-foreground"><Check className="mr-1 inline size-3.5 text-primary" />状态、动作、图像、时间戳和引擎 provenance 会进入统一 Episode 索引。</div>
-                <Button className="w-full" size="lg" disabled={busy || !dataset.trim() || !selectedEngine || !selected || !targetValid} onClick={submit}>{busy ? '创建中…' : '创建会话'}<ArrowRight /></Button>
+                <Button className="w-full" size="lg" disabled={busy || (isClothForge && clothLoading) || !dataset.trim() || !selectedEngine || !selected || !targetValid} onClick={submit}>{busy ? '创建中…' : '创建会话'}<ArrowRight /></Button>
               </CardContent>
             </Card>
           </aside>

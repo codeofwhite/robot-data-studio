@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +15,43 @@ from .base import CollectionAdapter, WorkerLaunch, WorkerReadiness
 BIMANUAL_ASSET_ROOT = PROJECT_ROOT / "assets/sources/visual-workstation-v1"
 BIMANUAL_FRANKA_USD = Path("/data/zhanghejun/simulation-demos/franka-dual-cloth-isaac/assets/franka/franka.usd")
 
+BIMANUAL_CLOTH_USD = PROJECT_ROOT / "assets/sources/robot-cloth-scenes-v1/scenes/fixtures_v4/place_in_basket/v001/cloth.usda"
+
+CLOTHFORGE_SCENE = "bimanual_tabletop_v17_clothforge"
+BIMANUAL_SCENES = {"bimanual_tabletop_v17", "bimanual_tabletop_v17_cloth", CLOTHFORGE_SCENE}
+
+
+def _number(key, label, default, minimum, maximum, step, unit="", scale="linear"):
+    return dict(key=key, label=label, default=default, minimum=minimum, maximum=maximum, step=step, unit=unit, scale=scale)
+
+
 SCENES = {
+    CLOTHFORGE_SCENE: {
+        "label": "双 Franka 实验台 v17＋ClothForge 衣物",
+        "description": "选择 ClothForge 衣物与材料，在桌面上调参操作；Tab 切换主力臂。参数在启动时生效。",
+        "family": "bimanual",
+        "parameters": [
+            {"key": "garment_asset_id", "label": "衣物资产", "default": "MDL-clothforge-tshirt-000", "choices": ["MDL-clothforge-tshirt-000"]},
+            _number("garment_version", "衣物资产版本", 1, 1, 100000, 1),
+            {"key": "material_preset", "label": "材料预设", "default": "medium", "choices": ["light", "medium", "heavy"]},
+            _number("mass_per_area", "面密度", .22, .02, 2, .01, "kg/m²"),
+            _number("friction", "摩擦系数", .5, .01, 2, .05),
+            _number("tri_ke", "拉伸系数", 3000, 100, 30000, 100, "N/m", "log"),
+            _number("tri_ka", "面积约束系数", 3000, 100, 30000, 100, "N/m", "log"),
+            _number("edge_ke", "弯曲系数", .005, .00001, 1, .001, "", "log"),
+            _number("garment_scale", "衣物缩放", 1, .1, 2, .05),
+            _number("garment_rotation_deg", "桌面旋转", 0, -180, 180, 15, "°"),
+            _number("garment_offset_x_m", "桌面 X 偏移", 0, -.5, .5, .01, "m"),
+            _number("garment_offset_y_m", "桌面 Y 偏移", 0, -.3, .3, .01, "m"),
+            _number("cloth_iterations", "布料求解迭代数", 30, 4, 64, 1),
+        ],
+    },
+    "bimanual_tabletop_v17_cloth": {
+        "label": "双 Franka 实验台 v17＋布料（Tab 切换）",
+        "description": "现有布料 USD 接入 PhysX 可变形仿真；沿用 v17 桌面与四视角，Tab 切换主力臂。",
+        "family": "bimanual",
+        "parameters": [],
+    },
     "bimanual_tabletop_v17": {
         "label": "双 Franka 实验台 v17（Tab 切换）",
         "description": "复用 v17 实验台 USD、材质与灯光；Keyboard / PhysX，Tab 切换主力臂。选择实验台 v4 相机，960×720。",
@@ -86,15 +124,43 @@ class IsaacSimAdapter(CollectionAdapter):
     }
     worker_entrypoint = "gello_remote.isaaclab_gello"
 
+    def scene_descriptors(self):
+        from ..services.asset_service import AssetRegistry
+        scenes = {key: {**value, "parameters": [dict(p) for p in value["parameters"]]} for key, value in self.scenes.items()}
+        ids = sorted({record.asset_id for record in AssetRegistry().all()
+                      if record.kind == "model" and "clothforge" in record.tags})
+        field = scenes[CLOTHFORGE_SCENE]["parameters"][0]
+        field["choices"] = ids
+        if ids and field["default"] not in ids:
+            field["default"] = ids[0]
+        return scenes
+
+    def _clothforge_selection(self, params):
+        from ..services.asset_service import AssetRegistry
+        registry = AssetRegistry()
+        record = registry.get(str(params.get("garment_asset_id", "MDL-clothforge-tshirt-000")), int(params.get("garment_version", 1)))
+        if record.kind != "model" or "clothforge" not in record.tags:
+            raise ValueError("garment_asset_id=请选择 ClothForge 衣物模型")
+        paths = {a.role: registry.artifact_path(registry.inspect_artifact(a)) for a in record.artifacts if a.role in {"simulation_mesh", "provenance"}}
+        if not {"simulation_mesh", "provenance"}.issubset(paths):
+            raise ValueError("garment_asset_id=衣物资产缺少网格或清单")
+        manifest = json.loads(paths["provenance"].read_text())
+        if paths["simulation_mesh"] != paths["provenance"].parent / "mesh.npz":
+            raise ValueError("garment_asset_id=衣物网格和清单必须来自同一目录")
+        preset = str(params.get("material_preset", "medium"))
+        material = json.loads((paths["provenance"].parent / f"config-{preset}.json").read_text())["material"]
+        resolved = {p["key"]: params.get(p["key"], material.get(p["key"], p["default"])) for p in self.scenes[CLOTHFORGE_SCENE]["parameters"]}
+        return paths["provenance"].parent, {**resolved, "garment_id": manifest["id"]}
+
     def validate_config(self, config: dict[str, Any]) -> None:
         if config.get("control_mode") not in self.control_modes:
             raise ValueError("Isaac Sim supports keyboard or GELLO control only")
         if config.get("scene_id") not in self.scenes:
             raise ValueError("unsupported Isaac Sim scene")
-        if config["scene_id"] == "bimanual_tabletop_v17":
+        if config["scene_id"] in BIMANUAL_SCENES:
             if config["control_mode"] != "keyboard":
                 raise ValueError("双臂实验台 v17 当前仅支持 Keyboard（Tab 切换）")
-            if str(config.get("physics_backend") or settings.isaac_physics_backend) != "physx":
+            if config["scene_id"] != CLOTHFORGE_SCENE and str(config.get("physics_backend") or settings.isaac_physics_backend) != "physx":
                 raise ValueError("双臂实验台 v17 当前仅支持 PhysX")
             if config.get("camera_profile_id") != "isaac_bimanual_tabletop_visual_v4":
                 raise ValueError("双臂实验台 v17 请使用实验台四视角 v4 相机和 960×720")
@@ -111,6 +177,22 @@ class IsaacSimAdapter(CollectionAdapter):
             raise ValueError(
                 f"Isaac Sim scene parameter is not allowlisted: {', '.join(unknown_params)}"
             )
+        if config["scene_id"] == CLOTHFORGE_SCENE:
+            params = config.get("scene_params", {})
+            for field in self.scenes[CLOTHFORGE_SCENE]["parameters"]:
+                if field["key"] not in params:
+                    continue
+                value = params[field["key"]]
+                if field["key"] == "garment_asset_id":
+                    continue
+                if "choices" in field:
+                    if value not in field["choices"]:
+                        raise ValueError(f"{field['key']}=unsupported choice")
+                elif isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not field["minimum"] <= value <= field["maximum"]:
+                    raise ValueError(f"{field['key']}=参数超出范围")
+                elif field["key"] in {"garment_version", "cloth_iterations"} and int(value) != value:
+                    raise ValueError(f"{field['key']}=必须是整数")
+            self._clothforge_selection(params)
         profile_id = str(config.get("camera_profile_id", "lab_d435i_dual_v1"))
         if profile_id not in self.camera_profile_ids:
             raise ValueError(f"unsupported Isaac Sim camera profile: {profile_id}")
@@ -189,7 +271,7 @@ class IsaacSimAdapter(CollectionAdapter):
             command += ["--work-surface-height-m", str(height)]
         if config["scene_id"] == "l_table_basket":
             command += ["--scene-usd", str(settings.isaac_l_table_basket_scene_usd)]
-        if config["scene_id"] == "bimanual_tabletop_v17":
+        if config["scene_id"] in BIMANUAL_SCENES:
             command[command.index("--franka-usd") + 1] = str(BIMANUAL_FRANKA_USD)
             command += [
                 "--visual-style", "dual_franka_tabletop",
@@ -197,12 +279,18 @@ class IsaacSimAdapter(CollectionAdapter):
                 "--workstation-manifest-file", str(BIMANUAL_ASSET_ROOT / "asset_manifest_bimanual_v17.json"),
                 "--hdri-file", str(BIMANUAL_ASSET_ROOT / "hdri/photo_studio_01_4k.hdr"),
             ]
+        if config["scene_id"] == "bimanual_tabletop_v17_cloth":
+            command += ["--scene-usd", str(BIMANUAL_CLOTH_USD), "--cloth"]
+        if config["scene_id"] == CLOTHFORGE_SCENE:
+            directory, parameters = self._clothforge_selection(config.get("scene_params", {}))
+            command += ["--clothforge-dir", str(directory), "--clothforge-params", json.dumps(parameters, ensure_ascii=False, allow_nan=False)]
         return command
 
     def build_worker_launch(self, config: dict[str, Any], output_dir: Path) -> WorkerLaunch:
         python_paths = [
             str(settings.gello_remote_root / "src"),
             str(CONTRACTS_SRC),
+            str(settings.clothforge_root / "src"),
         ]
         if os.environ.get("PYTHONPATH"):
             python_paths.append(os.environ["PYTHONPATH"])
