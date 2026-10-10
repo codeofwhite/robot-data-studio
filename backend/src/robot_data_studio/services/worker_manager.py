@@ -46,7 +46,7 @@ class WorkerManager:
         self.monitor_interval_s = monitor_interval_s
         self.stop_timeout_s = stop_timeout_s
         self.kill_timeout_s = kill_timeout_s
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._monitor_stop = threading.Event()
         self._monitor_thread: threading.Thread | None = None
 
@@ -87,6 +87,16 @@ class WorkerManager:
         return True
 
     def _sync_run(self, run: dict[str, Any]) -> dict[str, Any]:
+        # start() holds this lock through PID identity registration. Monitoring
+        # may have read an earlier row before waiting, so refresh it under the
+        # same lock before testing identity or releasing any resources.
+        with self._lock:
+            current = get_run(run["run_id"])
+            if current is None:
+                raise RuntimeError("worker run record disappeared")
+            return self._sync_registered_run(current)
+
+    def _sync_registered_run(self, run: dict[str, Any]) -> dict[str, Any]:
         # Terminal database state is authoritative. A supervisor that was killed
         # may leave an older active state file behind; it must not resurrect a run.
         if run["status"] not in ACTIVE_STATUSES:

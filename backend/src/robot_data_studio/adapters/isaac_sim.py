@@ -153,7 +153,11 @@ class IsaacSimAdapter(CollectionAdapter):
         return paths["provenance"].parent, {**resolved, "garment_id": manifest["id"]}
 
     def validate_config(self, config: dict[str, Any]) -> None:
-        if config.get("control_mode") not in self.control_modes:
+        generation = None
+        if config.get("generation_plan_id"):
+            from ..services.generation_service import generation_session
+            generation = generation_session(config)
+        if not generation and config.get("control_mode") not in self.control_modes:
             raise ValueError("Isaac Sim supports keyboard or GELLO control only")
         if config.get("scene_id") not in self.scenes:
             raise ValueError("unsupported Isaac Sim scene")
@@ -284,6 +288,17 @@ class IsaacSimAdapter(CollectionAdapter):
         if config["scene_id"] == CLOTHFORGE_SCENE:
             directory, parameters = self._clothforge_selection(config.get("scene_params", {}))
             command += ["--clothforge-dir", str(directory), "--clothforge-params", json.dumps(parameters, ensure_ascii=False, allow_nan=False)]
+        if config.get("generation_plan_id"):
+            from ..services.generation_service import plan_directory, report_for
+            command[command.index("--control-source") + 1] = "trajectory"
+            command[command.index("--livestream") + 1] = "0"
+            command += ["--headless", "--dataset-fps", "10", "--generation-plan",
+                        str(plan_directory(config["generation_plan_id"]) / "plan.json")]
+            report = report_for({"config": {**config, "episode_root": str(output_dir)}})
+            if report:
+                if report["status"] == "completed":
+                    raise ValueError("generation batch already completed")
+                command.append("--resume-generation")
         return command
 
     def build_worker_launch(self, config: dict[str, Any], output_dir: Path) -> WorkerLaunch:
@@ -292,6 +307,8 @@ class IsaacSimAdapter(CollectionAdapter):
             str(CONTRACTS_SRC),
             str(settings.clothforge_root / "src"),
         ]
+        if config.get("generation_plan_id"):
+            python_paths.append(str(settings.generation_root / "src"))
         if os.environ.get("PYTHONPATH"):
             python_paths.append(os.environ["PYTHONPATH"])
         return WorkerLaunch(
@@ -302,15 +319,15 @@ class IsaacSimAdapter(CollectionAdapter):
                 "CUDA_VISIBLE_DEVICES": str(config["gpu"]),
                 "PYTHONPATH": ":".join(python_paths),
             },
-            readiness=WorkerReadiness(
+            readiness=(WorkerReadiness(kind="marker", timeout_s=600.0) if config.get("generation_plan_id") else WorkerReadiness(
                 kind="tcp", timeout_s=600.0, host="127.0.0.1", port=int(config["port"])
-            ),
-            resources=(
+            )),
+            resources=(("simulator:global", f"gpu:{int(config['gpu'])}", f"output:{output_dir.resolve()}") if config.get("generation_plan_id") else (
                 "simulator:global",
                 f"gpu:{int(config['gpu'])}",
                 f"tcp:{int(config['port'])}",
                 f"tcp:{settings.isaac_signaling_port}",
                 f"udp:{settings.isaac_media_port}",
                 f"output:{output_dir.resolve()}",
-            ),
+            )),
         )

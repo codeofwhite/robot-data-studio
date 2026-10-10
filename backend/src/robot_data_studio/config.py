@@ -12,6 +12,7 @@ CONTRACTS_SRC = PROJECT_ROOT / "packages" / "robot-data-contracts" / "src"
 
 @dataclass(frozen=True)
 class Settings:
+    generation_root: Path = Path(os.getenv("ROBOT_DATA_STUDIO_GENERATION_ROOT", "/data/zhanghejun/robot-data-generation"))
     asset_root: Path = Path(os.getenv("ROBOT_DATA_STUDIO_ASSET_ROOT", PROJECT_ROOT / "assets" / "registry"))
     asset_sources_file: Path = Path(os.getenv("ROBOT_DATA_STUDIO_ASSET_SOURCES", PROJECT_ROOT / "config" / "asset_sources.json"))
     cloth_run_root: Path = Path(os.getenv("ROBOT_DATA_STUDIO_CLOTH_RUN_ROOT", PROJECT_ROOT / "data" / "cloth_runs"))

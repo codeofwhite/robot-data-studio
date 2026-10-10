@@ -99,7 +99,8 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
   const stopping = pending === 'stop' || worker?.status === 'stopping';
   const active = running || worker?.status === 'stopping';
   const unhealthy = worker?.status === 'failed' || worker?.status === 'orphaned';
-  const batchWorker = session?.engine_id === 'roboverse';
+  const generationWorker = Boolean(session?.config?.generation_plan_id);
+  const batchWorker = session?.engine_id === 'roboverse' || generationWorker;
   const readOnly = session?.config?.imported_read_only === true;
 
   return (
@@ -184,12 +185,12 @@ export function SessionConsole({ sessionId }: { sessionId: string }) {
               <CardTitle>{batchWorker ? 'Batch Worker 控制台' : 'Collector 控制台'}</CardTitle>
               <CardDescription>
                 {batchWorker
-                  ? 'Studio 管理独立 RoboVerse 进程；生成结果保存后再进入统一扫描与 QA。'
+                  ? 'Studio 管理独立批次进程；生成结果保存后再进入统一扫描与 QA。'
                   : '统一入口内嵌当前引擎控制台；控制与视频仍直接连接对应 Worker。'}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              {running && session?.collector_url ? (
+              {generationWorker ? <div className="p-5"><a className="text-primary" href={`/generation?session=${encodeURIComponent(sessionId)}`}>打开生成计划、批次进度与结果</a><p className="mt-2 text-sm text-muted-foreground">该会话使用无头轨迹执行，不提供 Collector。</p></div> : running && session?.collector_url ? (
                 <div className="space-y-3 p-3">
                   <iframe
                     className="h-[680px] w-full rounded-lg border border-border bg-black"

@@ -4,6 +4,7 @@ const nav = [
   { id: 'cloth', label: '布料任务', href: '/cloth', icon: Boxes },
   { id: 'dashboard', label: 'Dashboard', href: '/', icon: LayoutDashboard },
   { id: 'sessions', label: '采集会话', href: '/sessions', icon: Radio },
+  { id: 'generation', label: '数据生成', href: '/generation', icon: Boxes },
   { id: 'episodes', label: 'Episodes', href: '/episodes', icon: Database },
   { id: 'exports', label: '导出中心', href: '/exports', icon: Download },
   { id: 'assets', label: '资产与材料', href: '/assets', icon: Boxes },
@@ -33,7 +34,7 @@ export function AppShell({ children, current }: { children: React.ReactNode; cur
         </aside>
         <main className="min-w-0 px-4 py-5 pb-20 md:px-6 md:py-7 lg:px-8">{children}</main>
       </div>
-      <nav className="fixed inset-x-3 bottom-3 z-40 grid grid-cols-6 rounded-xl border border-border/80 bg-background/92 p-1 shadow-2xl backdrop-blur-xl lg:hidden" aria-label="移动端导航">
+      <nav className="fixed inset-x-3 bottom-3 z-40 grid grid-cols-7 rounded-xl border border-border/80 bg-background/92 p-1 shadow-2xl backdrop-blur-xl lg:hidden" aria-label="移动端导航">
         {nav.map((item) => { const Icon = item.icon; const active = current === item.id; return <a key={item.id} href={item.href} className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg text-[10px] ${active ? 'bg-primary/10 text-primary' : 'text-muted-foreground'}`}><Icon className="size-4" />{item.label}</a>; })}
       </nav>
     </div>

@@ -12,6 +12,7 @@ ExportFormat = Literal["lerobot", "openpi_lerobot_v21", "rlds", "robomimic"]
 
 
 class SessionCreate(BaseModel):
+    generation_plan_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
     engine_id: EngineId = "genesis"
     dataset_name: str = Field(min_length=1, max_length=80)
     scene_id: str = Field(min_length=1, max_length=100)
@@ -30,6 +31,12 @@ class SessionCreate(BaseModel):
     # Categorical scene parameters (a garment id, say) arrive as strings; numeric
     # ones as numbers. The scene plugin decides which keys accept what.
     scene_params: dict[str, float | int | str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_generation_mode(self):
+        if self.generation_plan_id and (self.engine_id != "isaac_sim" or self.scene_id != "rigid_cube_lift" or self.control_mode != "scripted"):
+            raise ValueError("generation plans require scripted Isaac rigid_cube_lift")
+        return self
 
     @model_validator(mode="after")
     def resolve_renderer_profile(self):

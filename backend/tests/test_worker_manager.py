@@ -462,3 +462,42 @@ def test_legacy_running_session_becomes_orphaned(isolated_settings) -> None:
     reconciled = get_session(session["id"])
     assert reconciled["status"] == "orphaned"
     assert reconciled["worker_pid"] is None
+
+
+def test_monitor_waits_for_identity_registration_and_refreshes_early_snapshot(
+    isolated_settings,
+) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+    import threading
+    session = new_session("identity_registration_race")
+    output = Path(session["config"]["episode_root"])
+    manager = WorkerManager()
+    entered = threading.Event()
+    def sync(snapshot):
+        entered.set()
+        return manager._sync_run(snapshot)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        try:
+            # Model start(): create a run and register its PID while holding the
+            # manager lock. The monitor captures the pre-registration DB row.
+            with manager._lock:
+                create_run(run_id="registration-race",session_id=session["id"],engine_id="roboverse",
+                    command=[sys.executable],cwd=output,log_path=output/"worker.log",state_path=output/"state.json",
+                    readiness={"kind":"marker","timeout_s":2.},resources=("simulator:global","gpu:0"))
+                snapshot = get_run("registration-race")
+                assert snapshot["supervisor_pid"] is None
+                pending = executor.submit(sync, snapshot)
+                assert entered.wait(2)
+                time.sleep(.05)
+                assert not pending.done(), "monitor checked identity before launch registration finished"
+                boot, ticks = process_identity(os.getpid())
+                set_supervisor_identity("registration-race",pid=os.getpid(),process_boot_id=boot,start_ticks=ticks)
+            result = pending.result(timeout=2)
+            assert result["status"] == "starting"
+            assert result["supervisor_pid"] == os.getpid()
+            assert run_resources("registration-race") == ["gpu:0","simulator:global"]
+            # Reentrant calls made by start()/stop() must not deadlock.
+            with manager._lock:
+                assert manager._sync_run(snapshot)["status"] == "starting"
+        finally:
+            mark_run("registration-race",status="stopped")
