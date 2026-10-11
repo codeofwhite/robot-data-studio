@@ -69,8 +69,9 @@ def preview(payload):
     planner = modules()
     from .pbr_material_service import resolve
     from .surface_appearance import resolve_environment
-    appearances = [{**resolve({k: v for k, v in raw.items() if k != 'environment'}),
-                    'environment': resolve_environment(raw.get('environment'))} for raw in payload['appearances']]
+    appearances = [{**resolve({k: v for k, v in raw.items() if k not in {'environment', 'camera_lighting'}}),
+                    'environment': resolve_environment(raw.get('environment')),
+                    'camera_lighting': raw.get('camera_lighting')} for raw in payload['appearances']]
     plan = planner.build_plan(plan_id, [_source(i)[1] for i in ids], appearances,
                               PROJECT_ROOT / 'assets/sources/robot-cloth-scenes-v1/textures')
     root = plan_directory(plan_id)

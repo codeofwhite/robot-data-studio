@@ -37,8 +37,12 @@ class EnvironmentAppearance(BaseModel):
         return self
 
 
+from .camera_lighting import CameraLightingRequest
+
+
 class AppearanceVariant(Appearance):
     environment: EnvironmentAppearance | None = None
+    camera_lighting: CameraLightingRequest | None = None
 
 
 def verify_maps(appearance):

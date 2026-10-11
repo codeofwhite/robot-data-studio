@@ -116,7 +116,7 @@ class IsaacSimAdapter(CollectionAdapter):
     label = "Isaac Sim / Isaac Lab"
     scenes = SCENES
     control_modes = ("keyboard", "gello")
-    camera_profile_ids = ("lab_d435i_dual_v1", "isaac_bimanual_tabletop_visual_v4")
+    camera_profile_ids = ("lab_d435i_dual_v1", "isaac_bimanual_tabletop_visual_v4", "isaac_bimanual_tabletop_visual_v5")
     renderer_profile_ids = ("isaac_performance_v1", "isaac_balanced_v1", "isaac_quality_v1")
     physics_backends = ("physx", "newton")
     capabilities = {
@@ -175,12 +175,14 @@ class IsaacSimAdapter(CollectionAdapter):
         if config["scene_id"] in BIMANUAL_SCENES:
             from ..services.surface_appearance import resolve_environment
             resolve_environment(config.get('scene_params', {}).get('environment_appearance'))
+            from ..services.camera_lighting import resolve_camera_lighting
+            resolve_camera_lighting(config.get('scene_params', {}).get('camera_lighting'))
             if config["control_mode"] != "keyboard":
                 raise ValueError("双臂实验台 v17 当前仅支持 Keyboard（Tab 切换）")
             if config["scene_id"] != CLOTHFORGE_SCENE and str(config.get("physics_backend") or settings.isaac_physics_backend) != "physx":
                 raise ValueError("双臂实验台 v17 当前仅支持 PhysX")
-            if config.get("camera_profile_id") != "isaac_bimanual_tabletop_visual_v4":
-                raise ValueError("双臂实验台 v17 请使用实验台四视角 v4 相机和 960×720")
+            if config.get("camera_profile_id") not in {"isaac_bimanual_tabletop_visual_v4", "isaac_bimanual_tabletop_visual_v5"}:
+                raise ValueError("双臂实验台 v17 请使用实验台四视角 v4 / v5 相机和 960×720")
             for path in (BIMANUAL_ASSET_ROOT / "bimanual_tabletop_lab_v17.usda",
                          BIMANUAL_ASSET_ROOT / "asset_manifest_bimanual_v17.json",
                          BIMANUAL_ASSET_ROOT / "hdri/photo_studio_01_4k.hdr", BIMANUAL_FRANKA_USD):
@@ -190,7 +192,7 @@ class IsaacSimAdapter(CollectionAdapter):
             item["key"] for item in self.scenes[config["scene_id"]]["parameters"]
         }
         if config['scene_id'] in BIMANUAL_SCENES:
-            allowed_params.add('environment_appearance')
+            allowed_params.update({'environment_appearance', 'camera_lighting'})
         if config['scene_id'] == CLOTHFORGE_SCENE:
             from ..services.garment_appearance import PARAMETERS
             allowed_params.update(PARAMETERS)
@@ -296,9 +298,11 @@ class IsaacSimAdapter(CollectionAdapter):
         if config["scene_id"] in BIMANUAL_SCENES:
             command[command.index("--franka-usd") + 1] = str(BIMANUAL_FRANKA_USD)
             from ..services.surface_appearance import resolve_environment
+            from ..services.camera_lighting import resolve_camera_lighting
             environment = resolve_environment(config.get('scene_params', {}).get('environment_appearance'))
             command += [
                 '--environment-appearance', json.dumps(environment, ensure_ascii=False, allow_nan=False),
+                '--camera-lighting', json.dumps(resolve_camera_lighting(config.get('scene_params', {}).get('camera_lighting')), allow_nan=False),
                 "--visual-style", "dual_franka_tabletop",
                 "--workstation-usd", str(BIMANUAL_ASSET_ROOT / "bimanual_tabletop_lab_v17.usda"),
                 "--workstation-manifest-file", str(BIMANUAL_ASSET_ROOT / "asset_manifest_bimanual_v17.json"),

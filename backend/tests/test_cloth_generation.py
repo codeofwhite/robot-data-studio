@@ -186,3 +186,16 @@ def test_legacy_folding_renderer_transform_still_compiles(fps):
     compile(namespace['source'], '<legacy-renderer>', 'exec')
     assert 'rt_subframes=4' not in namespace['source']
     assert f"'video_time_s':frame/{fps}" in namespace['source']
+
+
+def test_api_camera_lighting_plan_resolves_uniform_values(source):
+    from robot_data_contracts.camera_lighting import sample
+    app = FastAPI(); app.include_router(router)
+    requested = {'mode':'uniform','seed':42,'ranges':{'exposure_ev':[-.25,.25],'white_balance_k':[4000,7000]}}
+    with TestClient(app) as client:
+        response = client.post('/cloth-generation/plans', json={'episode_ids':[148], 'appearances':[{'camera_lighting':requested}]})
+        assert response.status_code == 201, response.text
+        resolved = response.json()['plan']['attempts'][0]['camera_lighting']
+        assert resolved == sample(requested)
+        plan_id = response.json()['plan_id']
+        assert client.get('/cloth-generation/plans/'+plan_id).json()['plan']['attempts'][0]['camera_lighting'] == resolved

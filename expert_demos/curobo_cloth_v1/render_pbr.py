@@ -190,9 +190,22 @@ try:
   c=cfg['camera']['front'];cam=UsdGeom.Camera.Define(stage,'/World/Camera');cam.CreateHorizontalApertureAttr(36);cam.CreateVerticalApertureAttr(36)
   cam.CreateFocalLengthAttr(18/np.tan(np.deg2rad(c['fov']/2)));cam.CreateClippingRangeAttr(Gf.Vec2f(.01,50))
   cam.AddTransformOp().Set(Gf.Matrix4d().SetLookAt(Gf.Vec3d(*c['pos']),Gf.Vec3d(*c['lookat']),Gf.Vec3d(*c['up'])).GetInverse())
+ # TransformPrimCommand targets the active Kit stage, so open this replay
+ # stage before applying camera poses rather than editing the detached stage.
  stage.GetRootLayer().Save();omni.usd.get_context().open_stage(str(out/'scene.usda'))
  stage=omni.usd.get_context().get_stage();b.s=stage;cloth=UsdGeom.Mesh(stage.GetPrimAtPath(cloth.GetPath()));robot=stage.GetPrimAtPath('/World/'+robot_name);bodies=[x for x in Usd.PrimRange(robot) if x.HasAPI(UsdPhysics.RigidBodyAPI)]
+ camera_lighting=appearance_spec.get('camera_lighting') if appearance_spec else None
+ from robot_data_contracts.camera_lighting import validate_resolved
+ from robot_data_contracts.usd_camera_lighting import apply_camera,apply_lighting,apply_imaging
+ validate_resolved(camera_lighting)
+ visual_values=camera_lighting['values'] if camera_lighting else {}
+ camera_lighting_applied={'cameras':{'front':apply_camera(stage,'/World/Camera',visual_values,960,960)},
+                          'lights':apply_lighting(stage,visual_values)}
+ for module in ('camera_lighting','usd_camera_lighting'):
+  (out/(module+'_source.py')).write_bytes((ROOT.parents[1]/'packages/robot-data-contracts/src/robot_data_contracts'/(module+'.py')).read_bytes())
+ stage.GetRootLayer().Save()
  settings=carb.settings.get_settings();settings.set('/rtx/rendermode','PathTracing');settings.set('/rtx/pathtracing/spp',32);settings.set('/rtx/pathtracing/totalSpp',32);settings.set('/rtx/pathtracing/maxBounces',6);settings.set('/rtx/pathtracing/optixDenoiser/enabled',True);settings.set('/rtx/post/tonemap/op',6)
+ camera_lighting_applied['imaging']=apply_imaging(settings,visual_values)
  rep.orchestrator.set_capture_on_play(False)
  for _ in range(40):app.update()
  product=rep.create.render_product('/World/Camera',(960,960));rgb=rep.AnnotatorRegistry.get_annotator('rgb');rgb.attach(product)
@@ -238,10 +251,7 @@ try:
  if encoder.wait(timeout=60)!=0:raise RuntimeError('Video encoder failed')
  visual_files=list((ASSETS/'robots/franka').rglob('*'))+[ASSETS/'textures'/n for n in ['oak.png','cotton_color.png','cotton_normal.png']]
  visual_hashes=binding['source_sha256'] if binding else {str(p.relative_to(ASSETS)):hashlib.sha256(p.read_bytes()).hexdigest() for p in visual_files if p.is_file()}
- focal_pixels=960*focal/aperture if binding else 480/np.tan(np.deg2rad(c['fov']/2))
- camera_info={'intrinsics':[[float(focal_pixels),0,480],[0,float(focal_pixels),480],[0,0,1]],
- 'camera_to_world':np.asarray(UsdGeom.Xformable(stage.GetPrimAtPath('/World/Camera')).GetLocalTransformation()).T.tolist(),
- 'axes':'OpenGL: +X right, +Y up, -Z forward'}
+ camera_info=camera_lighting_applied['cameras']['front']
  report={'camera':camera_info,'visual_asset_sha256':visual_hashes,'renderer':'Isaac RTX PathTracing','spp':32,'resolution':[960,960],'physics_steps':0,'cloth_vertices_exact':True,
    'stage_meters_per_unit':float(UsdGeom.GetStageMetersPerUnit(stage)),'stage_up_axis':str(UsdGeom.GetStageUpAxis(stage)),
    'robot_body_max_position_error_m':maxp,'robot_body_max_rotation_error_rad':maxr,'link_mapping':mapping,'fixed_frame_offsets_xyzw':frame_offsets,'frame_map':frame_map,
@@ -251,7 +261,8 @@ try:
   original_scene_loaded=True,source_camera=camera_source,cloth_mapping='barycentric physical surface; exact node correspondence; backing and sewn hem follow the same surface',
   cloth_topology_sha256=hashlib.sha256((run/'physical_scene/assets/cloth_topology.json').read_bytes()).hexdigest(),passive_robots=binding['passive_robots'])
  if appearance_spec:report.update(appearance=appearance_spec['appearance'],appearance_spec=appearance_spec,render_updates_per_frame=2,
-                                  environment=environment,environment_surfaces=environment_surfaces)
+                                  environment=environment,environment_surfaces=environment_surfaces,
+                                  camera_lighting=camera_lighting,camera_lighting_applied=camera_lighting_applied)
  (out/'verification.json').write_text(json.dumps(report,indent=2));print('PBR_COMPLETE',json.dumps({k:v for k,v in report.items() if k not in ['frame_map','link_mapping']}),flush=True)
  rgb.detach(product);product.destroy()
 except BaseException:

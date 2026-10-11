@@ -128,3 +128,15 @@ def test_saved_garment_appearance_reaches_worker_and_can_be_overridden(clothforg
         candidate['scene_params']['visual_color'] = '#ffffff'
         command = IsaacSimAdapter().build_collect_command(candidate, Path('/tmp/appearance-test'))
         assert json.loads(command[command.index('--clothforge-params') + 1])['appearance']['color'] == '#ffffff'
+
+
+def test_v5_camera_lighting_reaches_worker():
+    import json
+    candidate = config()
+    candidate['camera_profile_id'] = 'isaac_bimanual_tabletop_visual_v5'
+    candidate['scene_params']['camera_lighting'] = json.dumps({'values': {'exposure_ev': .5, 'fov_offset_deg': 2}})
+    adapter = IsaacSimAdapter()
+    adapter.validate_config(candidate)
+    command = adapter.build_collect_command(candidate, Path('/tmp/camera-lighting-test'))
+    resolved = json.loads(command[command.index('--camera-lighting') + 1])
+    assert resolved['values']['exposure_ev'] == .5 and resolved['values']['fov_offset_deg'] == 2

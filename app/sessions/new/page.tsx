@@ -15,6 +15,8 @@ import { api } from '@/lib/api';
 import type { Session } from '@/lib/types';
 import type { AssetList, AssetRecord, ClothOptions } from '@/lib/asset-types';
 import { appearanceParams, originalEnvironment, type EnvironmentAppearance, type PbrMaterial } from '@/lib/pbr-material-types';
+import { CameraLightingControls } from '@/components/camera-lighting-controls';
+import { originalCameraLighting, type CameraLightingRequest } from '@/lib/camera-lighting-types';
 import { SurfaceAppearanceControls } from '@/components/surface-appearance-controls';
 import { AppearanceControls, type AppearanceOptions } from '@/components/garment-appearance-panel';
 
@@ -83,6 +85,7 @@ export default function NewSessionPage() {
   const [clothLoading, setClothLoading] = useState(false);
   const [appearanceOptions, setAppearanceOptions] = useState<AppearanceOptions>();
   const [appearanceLoading, setAppearanceLoading] = useState(false);
+  const [cameraLighting, setCameraLighting] = useState<CameraLightingRequest>(originalCameraLighting);
   const [environment, setEnvironment] = useState<EnvironmentAppearance>(originalEnvironment);
   const [surfaceMaterials, setSurfaceMaterials] = useState<PbrMaterial[]>([]);
   useEffect(() => { void api<{ items: PbrMaterial[] }>('/pbr-materials').then(result => setSurfaceMaterials(result.items)).catch(e => setError({ message: String(e) })); }, []);
@@ -160,8 +163,8 @@ export default function NewSessionPage() {
     if (engine === 'isaac_sim' && ['bimanual_tabletop_v17', 'bimanual_tabletop_v17_cloth', CLOTHFORGE_SCENE].includes(scene)) {
       setMode('keyboard');
       setPhysicsBackend('physx');
-      setCameraProfile('isaac_bimanual_tabletop_visual_v4');
-    } else if (cameraProfile === 'isaac_bimanual_tabletop_visual_v4') {
+      setCameraProfile('isaac_bimanual_tabletop_visual_v5');
+    } else if (cameraProfile.startsWith('isaac_bimanual_tabletop_visual_v')) {
       setCameraProfile(selectedEngine?.camera_profiles[0]?.id ?? '');
     }
   }, [selected]);
@@ -249,12 +252,12 @@ export default function NewSessionPage() {
           control_fps: fps,
           sim_dt: 0.01,
           physics_steps_per_control: Math.round(1 / (fps * 0.01)),
-          width: cameraProfile === 'isaac_bimanual_tabletop_visual_v4' ? 960 : 640,
-          height: cameraProfile === 'isaac_bimanual_tabletop_visual_v4' ? 720 : 480,
+          width: cameraProfile.startsWith('isaac_bimanual_tabletop_visual_v') ? 960 : 640,
+          height: cameraProfile.startsWith('isaac_bimanual_tabletop_visual_v') ? 720 : 480,
           camera_profile_id: cameraProfile,
           ...(rendererProfile ? { renderer_profile_id: rendererProfile } : {}),
           ...(physicsBackend ? { physics_backend: physicsBackend } : {}),
-          scene_params: { ...sceneParams, ...(engine === 'isaac_sim' && scene.startsWith('bimanual_tabletop_v17') ? { environment_appearance: JSON.stringify(environment) } : {}) },
+          scene_params: { ...sceneParams, ...(engine === 'isaac_sim' && scene.startsWith('bimanual_tabletop_v17') ? { environment_appearance: JSON.stringify(environment), camera_lighting: JSON.stringify(cameraLighting) } : {}) },
         }),
       });
       window.location.href = `/sessions/${session.id}`;
@@ -356,7 +359,7 @@ export default function NewSessionPage() {
                 : <p className="text-sm text-muted-foreground">正在加载衣物外观…</p>}
             </CardContent></Card>}
 
-            {engine === 'isaac_sim' && scene.startsWith('bimanual_tabletop_v17') && <Card><CardHeader><CardTitle>桌面与背景外观</CardTitle></CardHeader><CardContent><SurfaceAppearanceControls value={environment} materials={surfaceMaterials} onChange={setEnvironment} disabled={busy} /></CardContent></Card>}
+            {engine === 'isaac_sim' && scene.startsWith('bimanual_tabletop_v17') && <Card><CardHeader><CardTitle>桌面与背景外观</CardTitle></CardHeader><CardContent><SurfaceAppearanceControls value={environment} materials={surfaceMaterials} onChange={setEnvironment} disabled={busy} /><CameraLightingControls value={cameraLighting} onChange={setCameraLighting} disabled={busy} /></CardContent></Card>}
 
             <Card className="instrument-card">
               <CardHeader><CardTitle>3. 控制与相机</CardTitle><CardDescription>Studio 只选择控制方式；GELLO 串口与标定在 Collector 页面完成。</CardDescription></CardHeader>
