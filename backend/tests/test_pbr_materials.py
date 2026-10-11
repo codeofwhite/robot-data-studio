@@ -21,7 +21,8 @@ def png(value=128):
 @pytest.fixture
 def registry(tmp_path, monkeypatch):
     sources = tmp_path / 'sources.json'
-    sources.write_text(json.dumps({'schema_version': 1, 'sources': {'cc0-fabrics-v1': {'root': str(tmp_path / 'images')}}}))
+    sources.write_text(json.dumps({'schema_version': 1, 'sources': {'cc0-fabrics-v1': {'root': str(tmp_path / 'images')},
+                                                                  'cc0-surfaces-v1': {'root': str(tmp_path / 'surfaces')}}}))
     registry = AssetRegistry(tmp_path / 'registry', sources)
     monkeypatch.setattr(service, 'AssetRegistry', lambda: registry)
     monkeypatch.setattr('robot_data_studio.routes.pbr_materials.AssetRegistry', lambda: registry)
@@ -92,3 +93,18 @@ def test_garment_saved_material_and_override_clear(registry):
     assert resolved['uv_scale'] == 4 and resolved['material_version'] == 1
     legacy = resolve_appearance(registry, garment, {'visual_material_id': None, 'visual_material_version': None})
     assert legacy['texture'] == 'none' and 'maps' not in legacy
+
+
+def test_environment_upload_preserves_category_and_local_license(registry):
+    app = FastAPI(); app.include_router(router)
+    with TestClient(app) as client:
+        response = client.post('/pbr-materials', data={'name': 'wood', 'category': 'tabletop'},
+            files={role: (role+'.png', png(), 'image/png') for role in service.ROLES})
+        assert response.status_code == 201, response.text
+        result = response.json()
+        assert result['data']['category'] == 'tabletop'
+        assert result['data']['license'] == 'user-provided'
+        assert all(item['artifact']['source_id'] == 'cc0-surfaces-v1' for item in result['maps'].values())
+        response = client.post('/pbr-materials', data={'name': 'bad', 'category': 'unknown'},
+            files={role: (role+'.png', png(), 'image/png') for role in service.ROLES})
+        assert response.status_code == 422

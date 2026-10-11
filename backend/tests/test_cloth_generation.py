@@ -37,6 +37,17 @@ def preview():
     return service.preview({'episode_ids': [148], 'appearances': [{'texture': 'none', 'color': '#123456', 'roughness': .9}]})
 
 
+def test_api_environment_variant_round_trip(source):
+    app = FastAPI(); app.include_router(router)
+    with TestClient(app) as client:
+        response = client.post('/cloth-generation/plans', json={'episode_ids':[148], 'appearances':[
+            {'environment':{'tabletop':{'color':'#b87e42'},'background':{'color':'#eeeeee'}}}]})
+        assert response.status_code == 201, response.text
+        attempt = response.json()['plan']['attempts'][0]
+        assert attempt['environment']['tabletop']['color'] == '#b87e42'
+        assert attempt['environment']['background']['color'] == '#eeeeee'
+
+
 def test_pending_delivered_source_launch_and_report_resume(source, monkeypatch):
     monkeypatch.setattr(worker_manager, 'start', lambda sid: {})
     monkeypatch.setattr(worker_manager, 'status', lambda sid: {'status': 'stopped'})

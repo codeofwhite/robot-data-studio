@@ -21,8 +21,11 @@ def png_dimensions(content):
     return [width, height]
 
 
-def import_material(name, images, *, origin='', license_name='CC0-1.0', asset_id=None, registry=None):
+def import_material(name, images, *, origin='', license_name='CC0-1.0', asset_id=None, registry=None, category='fabric'):
     registry = registry or AssetRegistry()
+    if category not in ('fabric', 'tabletop', 'background'):
+        raise ValueError('未知材质分类')
+    source_id = SOURCE if category == 'fabric' else 'cc0-surfaces-v1'
     if set(images) != set(ROLES):
         raise ValueError('需要 BaseColor、OpenGL Normal 和 Roughness 三张贴图')
     dimensions = {role: png_dimensions(content) for role, content in images.items()}
@@ -30,22 +33,22 @@ def import_material(name, images, *, origin='', license_name='CC0-1.0', asset_id
         raise ValueError('三张贴图分辨率需要一致')
     if not name.strip() or len(name) > 200:
         raise ValueError('请填写材质名称（最多 200 字符）')
-    asset_id = asset_id or 'MAT-local-fabric-' + uuid4().hex[:12]
+    asset_id = asset_id or 'MAT-local-' + category + '-' + uuid4().hex[:12]
     # Each import owns a new immutable payload directory, including reimports.
-    root = Path(registry.sources()[SOURCE]['root'])
+    root = Path(registry.sources()[source_id]['root'])
     relative = Path(uuid4().hex)
     directory = root / relative
     directory.mkdir(parents=True)
     artifacts = []
     for role, content in images.items():
         (directory / (role + '.png')).write_bytes(content)
-        artifacts.append(AssetArtifact(source_id=SOURCE, path=(relative / (role + '.png')).as_posix(), role='pbr_' + role))
+        artifacts.append(AssetArtifact(source_id=source_id, path=(relative / (role + '.png')).as_posix(), role='pbr_' + role))
     draft = AssetDraft(asset_id=asset_id, kind='material', name=name,
-        description='织物表面 PBR 材质；物理材料参数另行配置。', tags=['pbr', 'fabric'], engines=['isaac_sim'],
-        data={'pbr_schema_version': 1, 'license': license_name, 'origin': origin,
+        description='表面 PBR 外观材质；物理材料参数另行配置。', tags=['pbr', category], engines=['isaac_sim'],
+        data={'pbr_schema_version': 1, 'category': category, 'license': license_name, 'origin': origin,
               'normal_convention': 'OpenGL', 'dimensions_px': dimensions['base_color'],
               'color_space': {'base_color': 'sRGB', 'normal': 'raw', 'roughness': 'raw'}},
-        artifacts=artifacts, change_note='导入三贴图织物 PBR 材质')
+        artifacts=artifacts, change_note='导入三贴图 PBR 材质')
     record, created = registry.publish(draft)
     return describe(record, registry)
 
@@ -59,7 +62,7 @@ def describe(record, registry):
     maps = {role: {'artifact': registry.inspect_artifact(a).model_dump(),
                    'url': f'/pbr-materials/{record.asset_id}/maps/{role}?version={record.version}'} for role, a in entries.items()}
     return {'asset_id': record.asset_id, 'version': record.version, 'name': record.name,
-            'data': record.data, 'maps': maps}
+            'data': {**record.data, 'category': record.data.get('category', 'fabric')}, 'maps': maps}
 
 
 def catalog():

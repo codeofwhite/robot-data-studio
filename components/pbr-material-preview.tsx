@@ -5,7 +5,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { API_BASE } from '@/lib/api';
 import type { Appearance, PbrMaterial } from '@/lib/pbr-material-types';
 
-export function PbrMaterialPreview({ material, appearance }: { material: PbrMaterial; appearance: Appearance }) {
+export function PbrMaterialPreview({ material, appearance, surface: isSurface = false }: { material: PbrMaterial; appearance: Appearance; surface?: boolean }) {
   const container = useRef<HTMLDivElement>(null);
   const [error, setError] = useState('');
   const [loaded, setLoaded] = useState(0);
@@ -32,7 +32,7 @@ export function PbrMaterialPreview({ material, appearance }: { material: PbrMate
     const points = geometry.attributes.position;
     for (let i = 0; i < points.count; i++) {
       const x = points.getX(i), y = points.getY(i);
-      points.setZ(i, .1 * Math.sin(x * 7) * Math.cos(y * 3));
+      points.setZ(i, isSurface ? 0 : .1 * Math.sin(x * 7) * Math.cos(y * 3));
     }
     geometry.computeVertexNormals();
     const surface = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, metalness: 0,
@@ -44,7 +44,7 @@ export function PbrMaterialPreview({ material, appearance }: { material: PbrMate
       loader.load(API_BASE + material.maps[role].url, texture => {
         if (disposed) { texture.dispose(); return; }
         textures.push(texture); texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.setScalar(appearance.uv_scale ?? 1);
+        texture.repeat.setScalar((appearance.uv_scale ?? 1) * (isSurface ? 1.6 : 1));
         texture.colorSpace = role === 'base_color' ? THREE.SRGBColorSpace : THREE.NoColorSpace;
         if (role === 'base_color') surface.map = texture;
         else if (role === 'normal') surface.normalMap = texture;
@@ -64,6 +64,6 @@ export function PbrMaterialPreview({ material, appearance }: { material: PbrMate
       textures.forEach(texture => texture.dispose()); geometry.dispose(); surface.dispose(); renderer.dispose();
       renderer.domElement.remove();
     };
-  }, [material, appearance.color, appearance.color_mode, appearance.roughness_multiplier, appearance.normal_strength, appearance.uv_scale]);
-  return <div><div ref={container} data-material-id={material.asset_id} data-pbr-loaded={loaded} className="min-h-80 overflow-hidden rounded border" aria-label="PBR 三维织物预览" />{error && <p role="alert" className="text-destructive">{error}</p>}{!error && loaded < 3 && <p className="text-xs">加载贴图 {loaded}/3…</p>}<p className="mt-2 text-xs text-muted-foreground">拖动旋转，滚轮缩放 · BaseColor / Normal / Roughness · 工位录制以 Isaac 渲染为准</p></div>;
+  }, [material, appearance.color, appearance.color_mode, appearance.roughness_multiplier, appearance.normal_strength, appearance.uv_scale, isSurface]);
+  return <div><div ref={container} data-material-id={material.asset_id} data-pbr-loaded={loaded} className="min-h-80 overflow-hidden rounded border" aria-label={isSurface ? 'PBR 三维表面预览' : 'PBR 三维织物预览'} />{error && <p role="alert" className="text-destructive">{error}</p>}{!error && loaded < 3 && <p className="text-xs">加载贴图 {loaded}/3…</p>}<p className="mt-2 text-xs text-muted-foreground">拖动旋转，滚轮缩放 · BaseColor / Normal / Roughness · 工位录制以 Isaac 渲染为准</p></div>;
 }

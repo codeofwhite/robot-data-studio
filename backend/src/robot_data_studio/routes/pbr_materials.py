@@ -17,13 +17,13 @@ def index():
 
 
 @router.post('', status_code=201)
-async def upload(name: str = Form(...), origin: str = Form(''), license_name: str = Form(''),
+async def upload(name: str = Form(...), origin: str = Form(''), license_name: str = Form(''), category: str = Form('fabric'),
                  base_color: UploadFile = File(...), normal: UploadFile = File(...), roughness: UploadFile = File(...)):
     try:
         images = {}
         for role, file in zip(service.ROLES, (base_color, normal, roughness)):
             images[role] = await file.read(32*1024*1024 + 1)
-        return service.import_material(name, images, origin=origin, license_name=license_name or 'user-provided')
+        return service.import_material(name, images, origin=origin, license_name=license_name or 'user-provided', category=category)
     except (OSError, ValueError) as error:
         raise failure(error) from error
     finally:

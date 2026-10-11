@@ -21,6 +21,16 @@ def test_live_bimanual_launch_reuses_v17_assets_without_visual_capture():
     assert command[command.index("--width") + 1] == "960"
 
 
+def test_environment_appearance_reaches_worker_without_physics_changes():
+    import json
+    candidate = config()
+    candidate['scene_params']['environment_appearance'] = json.dumps({'tabletop': {'color': '#b87e42', 'roughness': .2}, 'background': None})
+    command = IsaacSimAdapter().build_collect_command(candidate, Path('/tmp/surface-test'))
+    resolved = json.loads(command[command.index('--environment-appearance') + 1])
+    assert resolved['tabletop']['color'] == '#b87e42' and resolved['background'] is None
+    assert command[command.index('--physics-backend')+1] == 'physx'
+
+
 @pytest.mark.parametrize("key,value", [("control_mode", "gello"), ("physics_backend", "newton"),
                                        ("camera_profile_id", "lab_d435i_dual_v1"), ("width", 640)])
 def test_rejects_incompatible_bimanual_launch(key, value):

@@ -173,6 +173,8 @@ class IsaacSimAdapter(CollectionAdapter):
         if config.get("scene_id") not in self.scenes:
             raise ValueError("unsupported Isaac Sim scene")
         if config["scene_id"] in BIMANUAL_SCENES:
+            from ..services.surface_appearance import resolve_environment
+            resolve_environment(config.get('scene_params', {}).get('environment_appearance'))
             if config["control_mode"] != "keyboard":
                 raise ValueError("双臂实验台 v17 当前仅支持 Keyboard（Tab 切换）")
             if config["scene_id"] != CLOTHFORGE_SCENE and str(config.get("physics_backend") or settings.isaac_physics_backend) != "physx":
@@ -187,6 +189,11 @@ class IsaacSimAdapter(CollectionAdapter):
         allowed_params = {
             item["key"] for item in self.scenes[config["scene_id"]]["parameters"]
         }
+        if config['scene_id'] in BIMANUAL_SCENES:
+            allowed_params.add('environment_appearance')
+        if config['scene_id'] == CLOTHFORGE_SCENE:
+            from ..services.garment_appearance import PARAMETERS
+            allowed_params.update(PARAMETERS)
         unknown_params = sorted(set(config.get("scene_params", {})) - allowed_params)
         if unknown_params:
             raise ValueError(
@@ -288,7 +295,10 @@ class IsaacSimAdapter(CollectionAdapter):
             command += ["--scene-usd", str(settings.isaac_l_table_basket_scene_usd)]
         if config["scene_id"] in BIMANUAL_SCENES:
             command[command.index("--franka-usd") + 1] = str(BIMANUAL_FRANKA_USD)
+            from ..services.surface_appearance import resolve_environment
+            environment = resolve_environment(config.get('scene_params', {}).get('environment_appearance'))
             command += [
+                '--environment-appearance', json.dumps(environment, ensure_ascii=False, allow_nan=False),
                 "--visual-style", "dual_franka_tabletop",
                 "--workstation-usd", str(BIMANUAL_ASSET_ROOT / "bimanual_tabletop_lab_v17.usda"),
                 "--workstation-manifest-file", str(BIMANUAL_ASSET_ROOT / "asset_manifest_bimanual_v17.json"),

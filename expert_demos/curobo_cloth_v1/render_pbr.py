@@ -112,6 +112,12 @@ try:
      prim=stage.GetPrimAtPath(path)
      UsdShade.MaterialBindingAPI.Apply(prim).Bind(material,bindingStrength=UsdShade.Tokens.strongerThanDescendants)
      UsdGeom.PrimvarsAPI(prim).CreatePrimvar('st',Sdf.ValueTypeNames.TexCoord2fArray,'vertex').Set(uv.Get() if uv and uv.HasValue() else Vt.Vec2fArray.FromNumpy(coords.astype(np.float32)))
+ environment=appearance_spec.get('environment') if appearance_spec else None
+ sys.path.insert(0,str(ROOT.parents[1]/'packages/robot-data-contracts/src'))
+ from robot_data_contracts.usd_surface import apply_environment,replay_targets
+ environment_surfaces=apply_environment(stage,environment,replay_targets(stage,binding))
+ for module in ('usd_material','usd_surface'):
+  (out/(module+'_source.py')).write_bytes((ROOT.parents[1]/'packages/robot-data-contracts/src/robot_data_contracts'/(module+'.py')).read_bytes())
  qnames=['panda_joint'+str(i) for i in range(1,8)]+['panda_finger_joint1','panda_finger_joint2']
  pose_cache={}
  if a.cached_robot:
@@ -244,7 +250,8 @@ try:
  if binding:report.update(scene=binding['scene'],scene_binding_sha256=hashlib.sha256((run/'scene_binding.json').read_bytes()).hexdigest(),
   original_scene_loaded=True,source_camera=camera_source,cloth_mapping='barycentric physical surface; exact node correspondence; backing and sewn hem follow the same surface',
   cloth_topology_sha256=hashlib.sha256((run/'physical_scene/assets/cloth_topology.json').read_bytes()).hexdigest(),passive_robots=binding['passive_robots'])
- if appearance_spec:report.update(appearance=appearance_spec['appearance'],appearance_spec=appearance_spec,render_updates_per_frame=2)
+ if appearance_spec:report.update(appearance=appearance_spec['appearance'],appearance_spec=appearance_spec,render_updates_per_frame=2,
+                                  environment=environment,environment_surfaces=environment_surfaces)
  (out/'verification.json').write_text(json.dumps(report,indent=2));print('PBR_COMPLETE',json.dumps({k:v for k,v in report.items() if k not in ['frame_map','link_mapping']}),flush=True)
  rgb.detach(product);product.destroy()
 except BaseException:

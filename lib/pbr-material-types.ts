@@ -5,9 +5,12 @@ export type Appearance = {
 };
 export type PbrMaterial = {
   asset_id: string; version: number; name: string;
-  data: { license: string; origin: string; dimensions_px: number[] };
+  data: { license: string; origin: string; dimensions_px: number[]; category?: 'fabric' | 'tabletop' | 'background' };
   maps: Record<'base_color' | 'normal' | 'roughness', { url: string; artifact: { sha256: string } }>;
 };
+export type EnvironmentAppearance = { tabletop: Appearance | null; background: Appearance | null };
+export type AppearanceVariant = Appearance & { environment?: EnvironmentAppearance };
+export const originalEnvironment: EnvironmentAppearance = { tabletop: null, background: null };
 export const pbrDefaults = { color_mode: 'original' as const, roughness_multiplier: 1, normal_strength: 1, uv_scale: 1 };
 export function appearanceParams(value: Appearance) {
   return { visual_texture: value.texture, visual_color: value.color, visual_roughness: value.roughness,

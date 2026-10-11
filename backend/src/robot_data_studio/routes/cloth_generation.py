@@ -8,7 +8,7 @@ from .generation import StartRequest, call
 router = APIRouter(prefix='/cloth-generation', tags=['cloth-generation'])
 
 
-from robot_data_contracts.pbr_material import Appearance as AppearanceRequest
+from robot_data_contracts.pbr_material import AppearanceVariant as AppearanceRequest
 
 
 class PreviewRequest(BaseModel):

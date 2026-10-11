@@ -24,6 +24,23 @@ class Appearance(BaseModel):
         return self
 
 
+class EnvironmentAppearance(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    tabletop: Appearance | None = None
+    background: Appearance | None = None
+
+    @model_validator(mode='after')
+    def surface_textures(self):
+        for value in (self.tabletop, self.background):
+            if value is not None and value.texture != 'none':
+                raise ValueError('环境表面请选择 PBR 材质或纯色')
+        return self
+
+
+class AppearanceVariant(Appearance):
+    environment: EnvironmentAppearance | None = None
+
+
 def verify_maps(appearance):
     for entry in appearance.get('maps', {}).values():
         digest = hashlib.sha256(Path(entry['path']).read_bytes()).hexdigest()

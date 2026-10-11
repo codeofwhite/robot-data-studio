@@ -14,7 +14,8 @@ import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { api } from '@/lib/api';
 import type { Session } from '@/lib/types';
 import type { AssetList, AssetRecord, ClothOptions } from '@/lib/asset-types';
-import { appearanceParams } from '@/lib/pbr-material-types';
+import { appearanceParams, originalEnvironment, type EnvironmentAppearance, type PbrMaterial } from '@/lib/pbr-material-types';
+import { SurfaceAppearanceControls } from '@/components/surface-appearance-controls';
 import { AppearanceControls, type AppearanceOptions } from '@/components/garment-appearance-panel';
 
 const CLOTHFORGE_SCENE = 'bimanual_tabletop_v17_clothforge';
@@ -82,6 +83,9 @@ export default function NewSessionPage() {
   const [clothLoading, setClothLoading] = useState(false);
   const [appearanceOptions, setAppearanceOptions] = useState<AppearanceOptions>();
   const [appearanceLoading, setAppearanceLoading] = useState(false);
+  const [environment, setEnvironment] = useState<EnvironmentAppearance>(originalEnvironment);
+  const [surfaceMaterials, setSurfaceMaterials] = useState<PbrMaterial[]>([]);
+  useEffect(() => { void api<{ items: PbrMaterial[] }>('/pbr-materials').then(result => setSurfaceMaterials(result.items)).catch(e => setError({ message: String(e) })); }, []);
   const isClothForge = engine === 'isaac_sim' && scene === CLOTHFORGE_SCENE;
   // `key` is set when the backend named a scene parameter as the reason, so the
   // message can sit against that field instead of only in the page banner.
@@ -250,7 +254,7 @@ export default function NewSessionPage() {
           camera_profile_id: cameraProfile,
           ...(rendererProfile ? { renderer_profile_id: rendererProfile } : {}),
           ...(physicsBackend ? { physics_backend: physicsBackend } : {}),
-          scene_params: sceneParams,
+          scene_params: { ...sceneParams, ...(engine === 'isaac_sim' && scene.startsWith('bimanual_tabletop_v17') ? { environment_appearance: JSON.stringify(environment) } : {}) },
         }),
       });
       window.location.href = `/sessions/${session.id}`;
@@ -351,6 +355,8 @@ export default function NewSessionPage() {
                 onChange={next => setSceneParams(current => ({ ...current, ...appearanceParams(next) }))} />
                 : <p className="text-sm text-muted-foreground">正在加载衣物外观…</p>}
             </CardContent></Card>}
+
+            {engine === 'isaac_sim' && scene.startsWith('bimanual_tabletop_v17') && <Card><CardHeader><CardTitle>桌面与背景外观</CardTitle></CardHeader><CardContent><SurfaceAppearanceControls value={environment} materials={surfaceMaterials} onChange={setEnvironment} disabled={busy} /></CardContent></Card>}
 
             <Card className="instrument-card">
               <CardHeader><CardTitle>3. 控制与相机</CardTitle><CardDescription>Studio 只选择控制方式；GELLO 串口与标定在 Collector 页面完成。</CardDescription></CardHeader>

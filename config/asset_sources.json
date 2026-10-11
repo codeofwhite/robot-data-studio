@@ -36,6 +36,10 @@
     "cc0-fabrics-v1": {
       "root": "/data/zhanghejun/robot-data-studio/assets/sources/cc0-fabrics-v1",
       "label": "本地 CC0 织物 PBR 材质"
+    },
+    "cc0-surfaces-v1": {
+      "root": "/data/zhanghejun/robot-data-studio/assets/sources/cc0-surfaces-v1",
+      "label": "本地 CC0 桌面与背景 PBR 材质"
     }
   }
 }

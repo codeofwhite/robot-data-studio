@@ -72,12 +72,13 @@ def main():
         lineage=AugmentationLineageV1(parent_episode_uuid=appearance_spec['parent_episode_uuid'],generation_method='visual_rerender',
             randomization_spec_id=appearance_spec['plan_id'],resolved_parameters=appearance_spec,trajectory_modified=False)
         metadata.update(appearance=appearance_spec['appearance'],source_physics_engine='genesis',image_renderer='Isaac RTX',
+            environment_appearance=appearance_spec.get('environment'),environment_surfaces=pv.get('environment_surfaces',[]),
             evaluator_scope='inherited from source physics; appearance rerender executes no physics',
             appearance_spec_path=str(a.appearance_file.resolve()))
     writer=FrankaEpisodeWriter(a.episode_root.resolve() if a.episode_root else run/'episodes',fps=a.fps,engine_id='genesis',engine_version=engine_version,
         scene_id=(binding['scene']['asset_id']+'@v'+str(binding['scene']['version'])) if binding else 'curobo_cloth_v1/'+cfg['task_id'],control_source='scripted_curobo_physics',
         operator_command_names=['target_'+str(i) for i in range(9)],camera_names=camera_names,
-        run_metadata=metadata,seed=int(hashlib.sha256(json.dumps(appearance_spec['appearance'],sort_keys=True).encode()).hexdigest()[:8],16) if appearance_spec else cfg['seed'],generation_method=None if lineage else 'scripted',lineage=lineage,worker_id='gpu-5090-cloth-v1')
+        run_metadata=metadata,seed=int(hashlib.sha256(json.dumps({'appearance':appearance_spec['appearance'],'environment':appearance_spec.get('environment')},sort_keys=True).encode()).hexdigest()[:8],16) if appearance_spec else cfg['seed'],generation_method=None if lineage else 'scripted',lineage=lineage,worker_id='gpu-5090-cloth-v1')
     writer.start(cfg['task_id'])
     import av
     from PIL import Image
