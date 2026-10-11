@@ -44,6 +44,9 @@ SCENES = {
             _number("garment_offset_x_m", "桌面 X 偏移", 0, -.5, .5, .01, "m"),
             _number("garment_offset_y_m", "桌面 Y 偏移", 0, -.3, .3, .01, "m"),
             _number("cloth_iterations", "布料求解迭代数", 30, 4, 64, 1),
+            {"key": "visual_texture", "label": "衣物贴图", "default": "none", "choices": ["none", "cotton", "linen", "denim", "terry"]},
+            {"key": "visual_color", "label": "基础颜色", "default": "#386ba1"},
+            _number("visual_roughness", "外观粗糙度", .9, 0, 1, .05),
         ],
     },
     "bimanual_tabletop_v17_cloth": {
@@ -150,7 +153,11 @@ class IsaacSimAdapter(CollectionAdapter):
         preset = str(params.get("material_preset", "medium"))
         material = json.loads((paths["provenance"].parent / f"config-{preset}.json").read_text())["material"]
         resolved = {p["key"]: params.get(p["key"], material.get(p["key"], p["default"])) for p in self.scenes[CLOTHFORGE_SCENE]["parameters"]}
-        return paths["provenance"].parent, {**resolved, "garment_id": manifest["id"]}
+        from ..services.garment_appearance import PARAMETERS, resolve_appearance
+        appearance = resolve_appearance(registry, record, params)
+        resolved.update({key: appearance[target] for key, target in PARAMETERS.items() if target in appearance})
+        return paths["provenance"].parent, {**resolved, "garment_id": manifest["id"],
+            "appearance": appearance, "garment_asset_id": record.asset_id, "garment_version": record.version}
 
     def validate_config(self, config: dict[str, Any]) -> None:
         if config.get("cloth_generation_plan_id"):
@@ -191,7 +198,7 @@ class IsaacSimAdapter(CollectionAdapter):
                 if field["key"] not in params:
                     continue
                 value = params[field["key"]]
-                if field["key"] == "garment_asset_id":
+                if field["key"] in {"garment_asset_id", "visual_color"}:
                     continue
                 if "choices" in field:
                     if value not in field["choices"]:

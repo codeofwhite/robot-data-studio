@@ -97,24 +97,9 @@ try:
  if appearance_spec:
   appearance=appearance_spec['appearance']
   if hashlib.sha256((run/'trajectory.npz').read_bytes()).hexdigest()!=appearance_spec['source_trajectory_sha256']:raise ValueError('Appearance source trajectory changed')
-  color=tuple(int(appearance['color'][i:i+2],16)/255 for i in (1,3,5))
-  material=UsdShade.Material.Define(stage,'/World/Materials/AppearanceOverride')
-  shader=UsdShade.Shader.Define(stage,str(material.GetPath())+'/Surface');shader.CreateIdAttr('UsdPreviewSurface')
-  shader.CreateInput('diffuseColor',Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(*color))
-  shader.CreateInput('roughness',Sdf.ValueTypeNames.Float).Set(appearance['roughness'])
-  shader.CreateInput('metallic',Sdf.ValueTypeNames.Float).Set(0.)
-  material.CreateSurfaceOutput().ConnectToSource(shader.ConnectableAPI(),'surface')
-  if appearance['texture_path']:
-   texture=Path(appearance['texture_path'])
-   if hashlib.sha256(texture.read_bytes()).hexdigest()!=appearance['texture_sha256']:raise ValueError('Appearance texture changed')
-   reader=UsdShade.Shader.Define(stage,str(material.GetPath())+'/UV');reader.CreateIdAttr('UsdPrimvarReader_float2');reader.CreateInput('varname',Sdf.ValueTypeNames.Token).Set('st')
-   tex=UsdShade.Shader.Define(stage,str(material.GetPath())+'/Color');tex.CreateIdAttr('UsdUVTexture')
-   tex.CreateInput('file',Sdf.ValueTypeNames.Asset).Set(Sdf.AssetPath(str(texture)))
-   tex.CreateInput('st',Sdf.ValueTypeNames.Float2).ConnectToSource(reader.ConnectableAPI(),'result')
-   tex.CreateInput('sourceColorSpace',Sdf.ValueTypeNames.Token).Set('sRGB')
-   tex.CreateInput('scale',Sdf.ValueTypeNames.Float4).Set(Gf.Vec4f(*color,1))
-   tex.CreateInput('wrapS',Sdf.ValueTypeNames.Token).Set('repeat');tex.CreateInput('wrapT',Sdf.ValueTypeNames.Token).Set('repeat')
-   shader.GetInput('diffuseColor').ConnectToSource(tex.ConnectableAPI(),'rgb')
+  sys.path.insert(0,str(ROOT.parents[1]/'packages/robot-data-contracts/src'))
+  from robot_data_contracts.usd_material import create_material
+  material=create_material(stage,'/World/Materials/AppearanceOverride',appearance)
   uv=UsdGeom.PrimvarsAPI(cloth).GetPrimvar('st')
   if not uv or not uv.HasValue():
    rest=original_points if binding else np.asarray(topology['rest_vertices'])

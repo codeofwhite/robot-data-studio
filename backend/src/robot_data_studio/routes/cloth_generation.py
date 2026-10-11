@@ -8,11 +8,7 @@ from .generation import StartRequest, call
 router = APIRouter(prefix='/cloth-generation', tags=['cloth-generation'])
 
 
-class AppearanceRequest(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    texture: str = Field(default='none', pattern=r'^(none|cotton|linen|denim|terry)$')
-    color: str = Field(default='#386ba1', pattern=r'^#[0-9a-fA-F]{6}$')
-    roughness: float = Field(default=.9, ge=0, le=1, allow_inf_nan=False)
+from robot_data_contracts.pbr_material import Appearance as AppearanceRequest
 
 
 class PreviewRequest(BaseModel):

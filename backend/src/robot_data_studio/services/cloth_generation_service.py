@@ -67,7 +67,9 @@ def preview(payload):
         raise ValueError('源 Episode 不能重复')
     plan_id = uuid4().hex
     planner = modules()
-    plan = planner.build_plan(plan_id, [_source(i)[1] for i in ids], payload['appearances'],
+    from .pbr_material_service import resolve
+    appearances = [resolve(raw) for raw in payload['appearances']]
+    plan = planner.build_plan(plan_id, [_source(i)[1] for i in ids], appearances,
                               PROJECT_ROOT / 'assets/sources/robot-cloth-scenes-v1/textures')
     root = plan_directory(plan_id)
     root.mkdir(parents=True)

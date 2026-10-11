@@ -11,6 +11,7 @@ import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { api, API_BASE, bytes } from '@/lib/api';
 import { assetHref, kindLabels, prefixes, outcomeLabel, type AssetDraft, type AssetKind, type AssetRecord, type AssetDetailResponse, type Artifact } from '@/lib/asset-types';
 import { ClothRunPanel } from '@/components/cloth-run-panel';
+import { GarmentAppearancePanel } from '@/components/garment-appearance-panel';
 
 const pretty = (value: unknown) => JSON.stringify(value, null, 2);
 
@@ -106,7 +107,8 @@ export function AssetDetail() {
     <p className="text-sm text-muted-foreground">{record.description}</p>
     <div className="grid gap-5 xl:grid-cols-3">
       <div className="space-y-5 xl:col-span-2">
-        {viewerIndex >= 0 && detail.integrity.status === 'current' && <Card><CardHeader><CardTitle>{record.kind === 'validation' ? '三维轨迹回放' : '三维衣物预览'}</CardTitle></CardHeader><CardContent><iframe title={record.kind === 'validation' ? '三维轨迹回放' : '三维衣物预览'} className="h-[540px] w-full rounded-lg border bg-slate-950" sandbox="allow-scripts" src={artifactUrl(viewerIndex) + '/viewer'} /></CardContent></Card>}
+        {viewerIndex >= 0 && detail.integrity.status === 'current' && <Card><CardHeader><CardTitle>{record.kind === 'validation' ? '三维轨迹回放' : record.tags.includes('clothforge') ? '原始几何预览 · 工位外观见实时相机' : '三维衣物预览'}</CardTitle></CardHeader><CardContent><iframe title={record.kind === 'validation' ? '三维轨迹回放' : record.tags.includes('clothforge') ? '原始几何预览 · 工位外观见实时相机' : '三维衣物预览'} className="h-[540px] w-full rounded-lg border bg-slate-950" sandbox="allow-scripts" src={artifactUrl(viewerIndex) + '/viewer'} /></CardContent></Card>}
+        {record.kind === 'model' && record.tags.includes('clothforge') && <GarmentAppearancePanel key={record.asset_id + ':' + record.version} record={record} disabled={record.version !== latest || detail.integrity.status !== 'current'} />}
         <ClothRunPanel record={record} integrity={detail.integrity} />
         {viewerIndex < 0 && previewIndex >= 0 && detail.integrity.status === 'current' && <Card><CardContent className="pt-5"><img className="max-h-[440px] w-full rounded-lg object-contain" alt={record.name + ' 模型预览'} src={artifactUrl(previewIndex)} /></CardContent></Card>}
         {record.kind === 'material' && record.data.parameters && typeof record.data.parameters === 'object' ? <Card><CardHeader><CardTitle>材料参数</CardTitle></CardHeader><CardContent><dl className="divide-y">{Object.entries(record.data.parameters as Record<string, { value?: unknown; unit?: string }>).map(([key, param]) => <div className="grid grid-cols-3 gap-3 py-3 text-sm" key={key}><dt className="font-mono text-xs">{key}</dt><dd>{pretty(param && typeof param === 'object' ? param.value : param)}</dd><dd className="text-muted-foreground">{param?.unit ?? ''}</dd></div>)}</dl><p className="mt-3 text-xs text-muted-foreground">{record.data.calibrated === true ? '登记为已标定；具体依据见关联记录。' : '合成预设 / 尚未实物标定'}</p></CardContent></Card> : null}

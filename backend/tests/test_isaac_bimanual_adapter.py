@@ -97,3 +97,24 @@ def test_newton_clothforge_uses_same_asset_and_parameter_contract(clothforge_reg
     params = json.loads(command[command.index('--clothforge-params') + 1])
     assert params['friction'] == .8 and params['cloth_iterations'] == 12
     assert '--workstation-usd' in command
+
+
+def test_saved_garment_appearance_reaches_worker_and_can_be_overridden(clothforge_registry):
+    import json
+    registry, _ = clothforge_registry
+    old = registry.get('MDL-clothforge-tshirt-test', 1)
+    from robot_data_contracts.asset import AssetDraft
+    draft = AssetDraft(**old.model_dump(include=set(AssetDraft.model_fields)))
+    draft.data['appearance'] = {'texture': 'none', 'color': '#ff8844', 'roughness': .25}
+    registry.publish(draft, expected_version=1)
+    for backend in ('physx', 'newton'):
+        candidate = clothforge_config({'garment_version': 2})
+        candidate['physics_backend'] = backend
+        command = IsaacSimAdapter().build_collect_command(candidate, Path('/tmp/appearance-test'))
+        params = json.loads(command[command.index('--clothforge-params') + 1])
+        assert params['appearance']['color'] == '#ff8844'
+        assert params['appearance']['roughness'] == .25
+        assert params['visual_color'] == '#ff8844' and params['visual_roughness'] == .25
+        candidate['scene_params']['visual_color'] = '#ffffff'
+        command = IsaacSimAdapter().build_collect_command(candidate, Path('/tmp/appearance-test'))
+        assert json.loads(command[command.index('--clothforge-params') + 1])['appearance']['color'] == '#ffffff'

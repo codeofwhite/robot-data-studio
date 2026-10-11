@@ -65,7 +65,20 @@ def inspect(artifact: AssetArtifact):
 @router.post("/assets", status_code=201)
 def publish(request: PublishRequest):
     try:
-        record, created = AssetRegistry().publish(request.draft, request.expected_version)
+        registry = AssetRegistry()
+        if request.draft.kind == "model" and "clothforge" in request.draft.tags and "appearance" in request.draft.data:
+            from ..services.garment_appearance import resolve_appearance, texture_artifact
+            appearance = resolve_appearance(registry, request.draft)
+            entry = None if appearance.get("material_id") else texture_artifact(registry, appearance["texture"])
+            # Pin the texture with the same immutable artifact contract as the mesh.
+            request.draft.artifacts = [a for a in request.draft.artifacts if a.role != "visual_texture"] + ([entry] if entry else [])
+            from robot_data_contracts.asset import AssetReference
+            request.draft.references = [ref for ref in request.draft.references if ref.role != "visual_material"]
+            if appearance.get("material_id"):
+                request.draft.references.append(AssetReference(asset_id=appearance["material_id"], version=appearance["material_version"], role="visual_material"))
+            from robot_data_contracts.pbr_material import Appearance
+            request.draft.data["appearance"] = {key: value for key, value in appearance.items() if key in Appearance.model_fields or key == "texture_sha256"}
+        record, created = registry.publish(request.draft, request.expected_version)
         return {"record": record, "created": created}
     except (OSError, ValueError) as error:
         raise failure(error) from error
@@ -99,6 +112,29 @@ def cloth_run(run_id: str):
 def cloth_options(asset_id: str, version: int = Query(ge=1)):
     try:
         return newton_cloth_run_manager.options(asset_id, version)
+    except (OSError, ValueError) as error:
+        raise failure(error) from error
+
+
+@router.get("/assets/garment-textures/{texture}")
+def garment_texture(texture: str):
+    from ..services.garment_appearance import texture_artifact
+    try:
+        registry = AssetRegistry()
+        entry = texture_artifact(registry, texture)
+        if entry is None:
+            raise ValueError("纯色没有贴图")
+        return FileResponse(registry.artifact_path(entry), media_type="image/png")
+    except (OSError, ValueError) as error:
+        raise failure(error) from error
+
+
+@router.get("/assets/{asset_id}/appearance-options")
+def garment_appearance(asset_id: str, version: int = Query(ge=1)):
+    from ..services.garment_appearance import appearance_options
+    try:
+        registry = AssetRegistry()
+        return appearance_options(registry, registry.get(asset_id, version))
     except (OSError, ValueError) as error:
         raise failure(error) from error
 

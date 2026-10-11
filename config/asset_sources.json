@@ -32,6 +32,10 @@
     "clothforge-repair-v2": {
       "root": "/data/zhanghejun/ClothForge/data/repair_v2",
       "label": "ClothForge 已验证的衣物配置与轨迹"
+    },
+    "cc0-fabrics-v1": {
+      "root": "/data/zhanghejun/robot-data-studio/assets/sources/cc0-fabrics-v1",
+      "label": "本地 CC0 织物 PBR 材质"
     }
   }
 }

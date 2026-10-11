@@ -12,6 +12,7 @@ dependencies = [
   "uvicorn[standard]>=0.35,<1",
   "pydantic>=2.11,<3",
   "numpy>=2,<3",
+  "python-multipart==0.0.32",
 ]
 
 [project.optional-dependencies]

@@ -8,13 +8,14 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { PbrMaterialLibrary } from '@/components/pbr-material-library';
 import { ValidationOverview } from '@/components/validation-overview';
 import { AssetEditor } from '@/components/asset-detail';
 import { api, API_BASE } from '@/lib/api';
 import { assetHref, kindLabels, outcomeLabel, type AssetKind, type AssetList } from '@/lib/asset-types';
 
 export function AssetLibrary() {
-  const [view, setView] = useState<'overview' | 'index' | 'cloth'>('overview');
+  const [view, setView] = useState<'overview' | 'index' | 'cloth' | 'pbr'>('overview');
   const [q, setQ] = useState('');
   const [kind, setKind] = useState('');
   const [engine, setEngine] = useState('');
@@ -28,7 +29,7 @@ export function AssetLibrary() {
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
   const limit = 30;
-  useEffect(() => { if (new URLSearchParams(window.location.search).get('view') === 'cloth') setView('cloth'); }, []);
+  useEffect(() => { const requested = new URLSearchParams(window.location.search).get('view'); if (requested === 'cloth' || requested === 'pbr') setView(requested); }, []);
   useEffect(() => {
     const controller = new AbortController();
     const timer = setTimeout(() => {
@@ -51,8 +52,8 @@ export function AssetLibrary() {
       <div className="flex gap-2"><Button variant="outline" onClick={() => setTick(tick + 1)}><RefreshCw className={loading ? 'animate-spin' : ''} />刷新</Button><Button onClick={() => setCreating(!creating)}><Plus />登记资产</Button></div>
     </div>
     {creating && <AssetEditor onCancel={() => setCreating(false)} />}
-    <div className="flex flex-wrap gap-2" aria-label="资产页面视图"><Button variant={view === 'cloth' ? 'default' : 'outline'} aria-pressed={view === 'cloth'} onClick={() => setView('cloth')}>衣物仿真</Button><Button variant={view === 'overview' ? 'default' : 'outline'} aria-pressed={view === 'overview'} onClick={() => setView('overview')}>验证概览</Button><Button variant={view === 'index' ? 'default' : 'outline'} aria-pressed={view === 'index'} onClick={() => setView('index')}>资产索引</Button></div>
-    {view === 'cloth' ? <ClothGallery refresh={tick} /> : view === 'overview' ? <ValidationOverview refresh={tick} /> : <>
+    <div className="flex flex-wrap gap-2" aria-label="资产页面视图"><Button variant={view === 'pbr' ? 'default' : 'outline'} onClick={() => setView('pbr')}>织物 PBR 材质</Button><Button variant={view === 'cloth' ? 'default' : 'outline'} aria-pressed={view === 'cloth'} onClick={() => setView('cloth')}>衣物仿真</Button><Button variant={view === 'overview' ? 'default' : 'outline'} aria-pressed={view === 'overview'} onClick={() => setView('overview')}>验证概览</Button><Button variant={view === 'index' ? 'default' : 'outline'} aria-pressed={view === 'index'} onClick={() => setView('index')}>资产索引</Button></div>
+    {view === 'pbr' ? <PbrMaterialLibrary /> : view === 'cloth' ? <ClothGallery refresh={tick} /> : view === 'overview' ? <ValidationOverview refresh={tick} /> : <>
     <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
       {(Object.keys(kindLabels) as AssetKind[]).map(key => <button key={key} className={'rounded-xl border p-4 text-left transition-colors ' + (kind === key ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted/50')} onClick={() => { setKind(kind === key ? '' : key); setOffset(0); }}><span className="block text-sm text-muted-foreground">{kindLabels[key]}</span><strong className="mt-2 block font-mono text-2xl">{data?.counts[key] ?? '—'}</strong></button>)}
     </div>
