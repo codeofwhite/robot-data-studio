@@ -14,7 +14,7 @@ export function previewAppearance(record: AssetRecord, material?: PbrMaterial): 
     material_id: material?.asset_id ?? null, material_version: material?.version ?? null };
 }
 
-type StyleOptions = { styles: { id: string; name: string; defaults: Record<string,number> }[]; fields: Record<string,{label:string;min:number;max:number;step:number}> };
+type StyleOptions = { styles: { id: string; name: string; defaults: Record<string,number|string> }[]; fields: Record<string,{label:string;min:number;max:number;step:number}> };
 type StylePreview = { preview_id:string; style_id:string; parameters:Record<string,number>; mesh:GarmentMesh };
 
 export function ClothGarmentPicker({ variants, materials, selected, onSelectionChange }: {
@@ -30,26 +30,27 @@ export function ClothGarmentPicker({ variants, materials, selected, onSelectionC
   const [styleParameters, setStyleParameters] = useState<Record<string,number>>({});
   const [generated, setGenerated] = useState<StylePreview>();
   const [generating, setGenerating] = useState(false);
+  const stylePrefix = record.data.category==='trousers'?'trouser':record.data.category==='tshirt'?'tshirt':null;
   const material = materials.find(m => m.asset_id === value.material_id && m.version === value.material_version);
   const sizes = [...variants].sort((a,b) => Number((a.data.parameters as Record<string, number>).length_m) - Number((b.data.parameters as Record<string, number>).length_m));
   const dimensions = generated?.parameters ?? record.data.parameters as Record<string, number>;
   useEffect(() => {
-    if (record.data.category !== 'trousers') return;
+    if (!stylePrefix) return;
     const controller = new AbortController();
-    void api<StyleOptions>('/assets/trouser-styles/options', {signal:controller.signal}).then(setStyleOptions).catch(e => {if(!controller.signal.aborted)setError(String(e));});
+    void api<StyleOptions>(`/assets/${stylePrefix}-styles/options`, {signal:controller.signal}).then(setStyleOptions).catch(e => {if(!controller.signal.aborted)setError(String(e));});
     return () => controller.abort();
-  }, [record.data.category]);
+  }, [stylePrefix]);
   useEffect(() => {
     if (!styleId) { setGenerated(undefined); setGenerating(false); return; }
     const controller = new AbortController(); setGenerating(true); setGenerated(undefined); setError('');
     const timer = setTimeout(() => {
-      void api<StylePreview>('/assets/trouser-styles/previews', {method:'POST',signal:controller.signal,body:JSON.stringify({asset_id:record.asset_id,version:record.version,style_id:styleId,parameters:styleParameters})})
+      void api<StylePreview>(`/assets/${stylePrefix}-styles/previews`, {method:'POST',signal:controller.signal,body:JSON.stringify({asset_id:record.asset_id,version:record.version,style_id:styleId,parameters:styleParameters})})
         .then(result => {if(!controller.signal.aborted)setGenerated(result);})
         .catch(e => {if(!controller.signal.aborted)setError(String(e));})
         .finally(() => {if(!controller.signal.aborted)setGenerating(false);});
     }, 600);
     return () => {clearTimeout(timer);controller.abort();};
-  }, [record.asset_id, record.version, styleId, styleParameters]);
+  }, [record.asset_id, record.version, styleId, styleParameters, stylePrefix]);
   useEffect(() => {
     const controller = new AbortController(); setOptions(undefined); setError('');
     void api<AppearanceOptions>(`/assets/${encodeURIComponent(record.asset_id)}/appearance-options?version=${record.version}`, { signal: controller.signal })
@@ -63,7 +64,7 @@ export function ClothGarmentPicker({ variants, materials, selected, onSelectionC
     const { asset_id, kind, name, description, tags, engines, data, references, artifacts } = record;
     const texture = options.textures.find(t => t.id === value.texture);
     try {
-      const result = generated ? await api<{record:AssetRecord}>(`/assets/trouser-styles/previews/${generated.preview_id}/save`, {method:'POST',body:JSON.stringify(value)}) : await api<{ record: AssetRecord }>('/assets', { method: 'POST', body: JSON.stringify({ expected_version: record.version,
+      const result = generated ? await api<{record:AssetRecord}>(`/assets/${stylePrefix}-styles/previews/${generated.preview_id}/save`, {method:'POST',body:JSON.stringify(value)}) : await api<{ record: AssetRecord }>('/assets', { method: 'POST', body: JSON.stringify({ expected_version: record.version,
         draft: { asset_id, kind, name, description, tags, engines, references,
           data: { ...data, appearance: { ...value, texture_sha256: texture?.artifact?.sha256 ?? null } },
           artifacts: [...artifacts.filter(a => a.role !== 'visual_texture'), ...(texture?.artifact ? [texture.artifact] : [])],
@@ -73,13 +74,13 @@ export function ClothGarmentPicker({ variants, materials, selected, onSelectionC
     } catch (e) { setError(String(e)); setBusy(false); }
   }
   return <div className="mt-3 space-y-3" data-garment-picker={record.asset_id}>
-    <label className="block text-xs">{record.data.category==='trousers'?'基础长裤尺寸':'衣长／尺寸变体'}<select aria-label="衣长尺寸" className="mt-1 w-full rounded border bg-background p-2" disabled={busy} value={record.asset_id} onChange={e => {const next=variants.find(v => v.asset_id===e.target.value)!;setRecord(next);if(styleId){const p=next.data.parameters as Record<string,number>;setStyleParameters(current=>({...current,length_m:p.length_m,waist_width_m:p.waist_width_m}));}}}>{sizes.map(v => {
+    <label className="block text-xs">{record.data.category==='trousers'?'基础长裤尺寸':'衣长／尺寸变体'}<select aria-label="衣长尺寸" className="mt-1 w-full rounded border bg-background p-2" disabled={busy} value={record.asset_id} onChange={e => {const next=variants.find(v => v.asset_id===e.target.value)!;setRecord(next);if(styleId){const p=next.data.parameters as Record<string,number>;setStyleParameters(current=>({...current,...Object.fromEntries(Object.keys(styleOptions?.fields??{}).filter(k=>typeof p[k]==='number').map(k=>[k,p[k]]))}));}}}>{sizes.map(v => {
       const p = v.data.parameters as Record<string, number>;
       return <option key={v.asset_id} value={v.asset_id}>{v.name} · 长 {(p.length_m * 100).toFixed(1)} / {p.waist_width_m ? '腰宽' : '宽'} {((p.width_m ?? p.waist_width_m) * 100).toFixed(1)} cm</option>;
     })}</select></label>
     <p className="text-xs text-muted-foreground">长 {(dimensions.length_m * 100).toFixed(1)} · {dimensions.waist_width_m ? '腰宽' : '宽'} {((dimensions.width_m ?? dimensions.waist_width_m) * 100).toFixed(1)} cm{dimensions.sleeve_m ? ` · 袖长参数 ${(dimensions.sleeve_m * 100).toFixed(1)} cm` : ''}</p>
     {styleOptions && <div className="space-y-2 rounded border p-2">
-      <label className="block text-xs">长裤款式<select aria-label="长裤款式" className="ml-2 rounded border bg-background p-1" disabled={busy} value={styleId} onChange={e=>{const id=e.target.value;setStyleId(id);const p=record.data.parameters as Record<string,number>;setStyleParameters({length_m:p.length_m,waist_width_m:p.waist_width_m,...styleOptions.styles.find(s=>s.id===id)?.defaults});}}><option value="">使用所选衣物</option>{styleOptions.styles.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+      <label className="block text-xs">{record.data.category==='trousers'?'长裤款式':'短袖领型'}<select aria-label={record.data.category==='trousers'?'长裤款式':'短袖领型'} className="ml-2 rounded border bg-background p-1" disabled={busy} value={styleId} onChange={e=>{const id=e.target.value;setStyleId(id);const p=record.data.parameters as Record<string,number>;setStyleParameters({...Object.fromEntries(Object.entries(styleOptions.fields).map(([k,f])=>[k,p[k]??f.min])),...Object.fromEntries(Object.entries(styleOptions.styles.find(s=>s.id===id)?.defaults??{}).flatMap(([k,v])=>typeof v==='number'?[[k,v] as const]:[]))});}}><option value="">使用所选衣物</option>{styleOptions.styles.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
       {styleId && Object.entries(styleOptions.fields).map(([key,field])=><label className="block text-xs" key={key}>{field.label} · {((styleParameters[key]??0)*100).toFixed(0)} cm<input aria-label={field.label} className="mt-1 w-full" type="range" min={field.min} max={field.max} step={field.step} disabled={busy} value={styleParameters[key]??field.min} onChange={e=>setStyleParameters(current=>({...current,[key]:Number(e.target.value)}))}/></label>)}
       {styleId && <p role="status" className="text-xs text-muted-foreground">{generating?'正在生成真实网格…':generated?'网格已更新；保存后可进入工位':'调整参数后生成预览'}</p>}
     </div>}

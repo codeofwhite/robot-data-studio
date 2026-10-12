@@ -29,7 +29,7 @@
 
 | 类别 | 标识 | 已有基础尺寸 | 自定义款式／尺寸能力 |
 | --- | --- | --- | --- |
-| 短袖上衣 | `tshirt` | 10 件 | 目前切换已有网格 |
+| 短袖上衣 | `tshirt` | 10 件 | 复用 GarmentCode 圆领／V 领，连续调整衣长、衣宽、领宽与领深 |
 | 长裤 | `trousers` | 10 件 | 直筒／阔腿／收口，连续调整裤长、腰宽、裤脚宽 |
 | 开襟外套 | `open_coat` | 10 件 | 目前切换已有网格 |
 | 毛巾 | `towel` | 10 件 | 目前切换已有网格 |
@@ -38,7 +38,7 @@
 | 短裤 | `shorts` | 10 件 | 目前切换已有网格 |
 | 半身裙 | `skirt` | 10 件 | 目前切换已有网格 |
 
-80 件是基础库规模，不是总资产数量上限，也不代表 80 种独立款式。保存自定义款式后，目录数量会增加；其他七类尚未接入连续尺寸生成。
+80 件是基础库规模，不是总资产数量上限，也不代表 80 种独立款式。保存自定义款式后，目录数量会增加；除长裤与短袖外，其余六类尚未接入连续尺寸生成。
 
 八类共用真实网格缩略图、可旋转 PBR 预览、外观保存和工位入口。ClothForge 批量入口生成 Newton 悬挂／落地轨迹；已有 cuRobo 衣物外观批次仍基于其源示范重渲染，两种流程分别保留。
 
@@ -60,6 +60,7 @@
 | G002 | 真实衣物缩略图与 PBR 实时预览 | 已提交 | 材质、已有尺寸切换、外观保存及工位配置跳转通过 |
 | G003 | 直筒／阔腿长裤与连续尺寸生成 | 已提交 | 两款正常生成、调参、保存；Newton 短轨迹 2/2 通过 |
 | G004 | 长裤收口款 | 已提交 | 16 cm 裤脚预设，生成与保存跳转正常，Newton 短轨迹 1/1 通过 |
+| G005 | 复用 GarmentCode 圆领／V 领短袖 | 已验证 | 两款生成、调参和保存跳转正常，Newton 短轨迹 2/2 通过 |
 
 ### G001：八类基础衣物库
 
@@ -102,7 +103,34 @@
 - **证据**：[生成与保存记录](../data/trouser_styles_v1/63012dc12bab491884b7c04c3ebd8bf8/g004_selection.json)、[运行结果](../data/trouser_styles_v1/63012dc12bab491884b7c04c3ebd8bf8/g004_run.json)、[浏览器结果](../data/trouser_styles_v1/g004_browser.json)、[界面截图](../data/trouser_styles_v1/g004_preview.png)。配置 JSON 解析、差异检查通过；前端代码未修改，本次不重复构建。
 - **提交**：ClothForge `a07e570`；Studio 为本文件首次入库的提交，可用 `git log --diff-filter=A -- docs/CLOTHING_EVOLUTION.md` 查询。未 push。
 
-后续候选仍待讨论：短袖圆领／V 领、直裙／A 字裙。没有批准其实现。
+### G005：复用 GarmentCode 圆领／V 领短袖
+
+**状态：已验证。2026-10-12 用户批准复用上游领口部件，实施与正常流程验证已完成。**
+
+- **目标**：短袖支持圆领与 V 领，调整衣长、衣身宽、领宽与领深后重新生成真实网格；复用 PBR 预览、保存及工位流程。
+- **上游复用**：本地 GarmentCode `CircleNeckHalf`、`VNeckHalf` 和 `linearize`。第一版前后片采用相同领口，曲线采样为版片边界，领口边保持未缝合。
+- **参数来源**：ClothForge `configs/tshirt_styles_v1.json`；运行参数以该配置及代码为准。
+- **涉及文件**：ClothForge `src/clothforge/generate.py`、新增款式配置；Studio `services/trouser_style_service.py`、`routes/assets.py`、`services/cloth_run_service.py`、`config/asset_sources.json`、`components/cloth-garment-picker.tsx` 和本文。
+- **产物位置**：`data/tshirt_styles_v1/` 与既有 `data/cloth_runs/`；新资产保留父模型和版本。
+- **正常流程验证**：两种领口生成、浏览器调参／材质与保存跳转；每款一次 medium 材料 Newton 两秒悬挂轨迹；类型检查、构建和文档链接检查。不新增防御性测试。
+- **结果**：圆领 748 顶点、V 领 720 顶点；两款使用真实上游轮廓，默认领宽 18 cm，领深分别 6／10 cm。浏览器两款切换、领深改为 12 cm、PBR 材质更新、保存副本及对应工位配置跳转通过；原长裤三种预设仍能读取。每款一次 medium 材料、两秒 Newton 悬挂轨迹通过，各保存 61 帧。类型检查、构建、差异与文档链接检查通过；没有新增防御性测试或安装依赖，未验证机器人抓取与实测面料。
+- **证据**：[生成资产](../data/tshirt_styles_v1/g005_selection.json)、[Newton 结果](../data/tshirt_styles_v1/g005_runs.json)、[浏览器结果](../data/tshirt_styles_v1/g005_browser.json)、[圆领截图](../data/tshirt_styles_v1/g005_crew.png)、[V 领截图](../data/tshirt_styles_v1/g005_vneck.png)。
+- **提交**：尚未 commit 或 push。
+
+G005 的文件与行为变化：
+
+| 文件 | 新增／替换行为与原因 |
+| --- | --- |
+| ClothForge `generate.py` | 短袖传入领型时调用上游部件并用 `linearize` 采样，按领口段标记未缝合边；旧基础网格生成规则保留。单件生成从请求读取类别，兼容原长裤请求。 |
+| ClothForge `configs/tshirt_styles_v1.json` | 新增两种领型、四个尺寸控件及默认值，作为 UI 与生成服务共同读取的参数配置。 |
+| Studio `trouser_style_service.py` | 原长裤专用流程扩展为两个类别，共用生成和保存逻辑；按类别选择配置、来源、模型命名及元数据，默认仍为长裤。 |
+| Studio `routes/assets.py` | 新增短袖款式配置、预览与保存 API，允许新来源的三维回放；原长裤 API 地址保留。 |
+| Studio `cloth_run_service.py` | 允许短袖款式来源通过既有参数准备与 Newton 运行流程。 |
+| Studio `config/asset_sources.json` | 新增 `clothforge-tshirt-styles-v1`，保存预览与已注册几何的来源路径。 |
+| Studio `cloth-garment-picker.tsx` | 按类别选择短袖或长裤 API，短袖显示领型和四个滑块；生成后复用 PBR 与保存跳转。仅数值控件参数发送给 API，领型字符串由后端预设提供。 |
+| 本文 | 登记 G005 的批准、当前能力、实现行为和验证结果。 |
+
+后续候选仍待讨论：直裙／A 字裙。没有批准其实现。
 
 ## 后续任务填写模板
 
@@ -129,5 +157,6 @@
 | 2026-10-12 | 用户选择长裤收口款并批准 G004 的三文件范围与正常流程验证；开始执行。 |
 | 2026-10-12 | G004 已验证：收口裤 16 cm 裤脚、浏览器保存跳转及一次 Newton 短轨迹通过。 |
 | 2026-10-12 | 用户要求 commit，保存收口款预设、通用款式提示与共同维护文档；G004 标为已提交，未 push。 |
+| 2026-10-12 | 用户批准 G005 复用 GarmentCode 圆领／V 领；八文件范围完成并验证，Newton 2/2 通过，未 commit 或 push。 |
 
 原始报告与媒体在本机 `data/` 和相邻 ClothForge 项目中，通常不随 Git 分发。历史布料求解器与阶段覆盖记录继续保存在 [CLOTHFORGE_STATUS.md](CLOTHFORGE_STATUS.md)，历史通过结果不自动覆盖新增款式，也不代表机器人抓取或真实面料验证。
