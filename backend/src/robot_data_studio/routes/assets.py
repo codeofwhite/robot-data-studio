@@ -160,6 +160,37 @@ def garment_mesh(asset_id: str, version: int = Query(ge=1)):
         raise failure(error) from error
 
 
+class TrouserPreviewRequest(BaseModel):
+    asset_id: str
+    version: int = Field(ge=1)
+    style_id: str
+    parameters: dict[str, float] = Field(default_factory=dict)
+
+
+@router.get('/assets/trouser-styles/options')
+def trouser_options():
+    from ..services.trouser_style_service import options
+    return options()
+
+
+@router.post('/assets/trouser-styles/previews')
+def trouser_preview(payload: TrouserPreviewRequest):
+    from ..services.trouser_style_service import preview
+    try:
+        return preview(payload.model_dump())
+    except (OSError, ValueError) as error:
+        raise failure(error) from error
+
+
+@router.post('/assets/trouser-styles/previews/{preview_id}/save', status_code=201)
+def save_trouser(preview_id: str, appearance: dict):
+    from ..services.trouser_style_service import save
+    try:
+        return save(preview_id, appearance)
+    except (OSError, ValueError) as error:
+        raise failure(error) from error
+
+
 @router.get("/assets/{asset_id}")
 def detail(asset_id: str, version: int | None = Query(None, ge=1)):
     try:
@@ -199,7 +230,7 @@ def viewer(asset_id: str, version: int, index: int):
             raise AssetNotFound("artifact index does not exist")
         entry = record.artifacts[index]
         if (entry.role not in {"interactive_preview", "interactive_replay"}
-                or entry.source_id not in {"clothforge-pilot-v1", "clothforge-library-v1", "clothforge-repair-v2", "studio-cloth-runs"}):
+                or entry.source_id not in {"clothforge-pilot-v1", "clothforge-library-v1", "clothforge-trouser-styles-v1", "clothforge-repair-v2", "studio-cloth-runs"}):
             raise ValueError("artifact is not an interactive cloth viewer")
         if registry.integrity(record)["status"] != "current":
             raise AssetIntegrityError("viewer evidence is stale")

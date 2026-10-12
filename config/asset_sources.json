@@ -44,6 +44,10 @@
     "clothforge-library-v1": {
       "root": "/data/zhanghejun/ClothForge/data/library_v1",
       "label": "ClothForge 扩展衣物库 v1"
+    },
+    "clothforge-trouser-styles-v1": {
+      "root": "/data/zhanghejun/robot-data-studio/data/trouser_styles_v1",
+      "label": "ClothForge 直筒与阔腿款式"
     }
   }
 }

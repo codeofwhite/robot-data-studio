@@ -7,7 +7,7 @@ import { api, API_BASE } from '@/lib/api';
 import type { AssetRecord } from '@/lib/asset-types';
 import type { Appearance, PbrMaterial } from '@/lib/pbr-material-types';
 
-type GarmentMesh = { vertices: number[][]; faces: number[][]; uv: number[][][] };
+export type GarmentMesh = { vertices: number[][]; faces: number[][]; uv: number[][][] };
 const meshCache = new Map<string, Promise<GarmentMesh>>();
 function loadMesh(record: AssetRecord) {
   const key = `${record.asset_id}:${record.version}`;
@@ -15,8 +15,8 @@ function loadMesh(record: AssetRecord) {
   return meshCache.get(key)!;
 }
 
-export function ClothGarmentPreview({ record, appearance, material, thumbnail = false }: {
-  record: AssetRecord; appearance: Appearance; material?: PbrMaterial; thumbnail?: boolean;
+export function ClothGarmentPreview({ record, appearance, material, thumbnail = false, previewMesh }: {
+  record: AssetRecord; appearance: Appearance; material?: PbrMaterial; thumbnail?: boolean; previewMesh?: GarmentMesh;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const [mesh, setMesh] = useState<GarmentMesh>();
@@ -24,10 +24,11 @@ export function ClothGarmentPreview({ record, appearance, material, thumbnail = 
   const [loaded, setLoaded] = useState(false);
   const [picture, setPicture] = useState('');
   useEffect(() => {
+    if (previewMesh) { setMesh(previewMesh); setError(''); setLoaded(false); return; }
     let cancelled = false; setMesh(undefined); setError(''); setLoaded(false); setPicture('');
     void loadMesh(record).then(data => { if (!cancelled) setMesh(data); }).catch(e => { if (!cancelled) setError(String(e)); });
     return () => { cancelled = true; };
-  }, [record.asset_id, record.version]);
+  }, [record.asset_id, record.version, previewMesh]);
   useEffect(() => {
     if (!mesh || !host.current) return;
     const container = host.current;

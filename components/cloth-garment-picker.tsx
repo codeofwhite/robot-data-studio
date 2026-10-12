@@ -5,7 +5,7 @@ import { api } from '@/lib/api';
 import { assetHref, type AssetRecord } from '@/lib/asset-types';
 import { pbrDefaults, type Appearance, type PbrMaterial } from '@/lib/pbr-material-types';
 import { AppearanceControls, type AppearanceOptions } from './garment-appearance-panel';
-import { ClothGarmentPreview } from './cloth-garment-preview';
+import { ClothGarmentPreview, type GarmentMesh } from './cloth-garment-preview';
 import { Button } from './ui/button';
 
 export function previewAppearance(record: AssetRecord, material?: PbrMaterial): Appearance {
@@ -13,6 +13,9 @@ export function previewAppearance(record: AssetRecord, material?: PbrMaterial): 
   return saved ?? { texture: 'none', color: '#ffffff', roughness: .9, ...pbrDefaults,
     material_id: material?.asset_id ?? null, material_version: material?.version ?? null };
 }
+
+type StyleOptions = { styles: { id: string; name: string; defaults: Record<string,number> }[]; fields: Record<string,{label:string;min:number;max:number;step:number}> };
+type StylePreview = { preview_id:string; style_id:string; parameters:Record<string,number>; mesh:GarmentMesh };
 
 export function ClothGarmentPicker({ variants, materials, selected, onSelectionChange }: {
   variants: AssetRecord[]; materials: PbrMaterial[]; selected: string[]; onSelectionChange: (ids: string[]) => void;
@@ -22,9 +25,31 @@ export function ClothGarmentPicker({ variants, materials, selected, onSelectionC
   const [options, setOptions] = useState<AppearanceOptions>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [styleOptions, setStyleOptions] = useState<StyleOptions>();
+  const [styleId, setStyleId] = useState('');
+  const [styleParameters, setStyleParameters] = useState<Record<string,number>>({});
+  const [generated, setGenerated] = useState<StylePreview>();
+  const [generating, setGenerating] = useState(false);
   const material = materials.find(m => m.asset_id === value.material_id && m.version === value.material_version);
   const sizes = [...variants].sort((a,b) => Number((a.data.parameters as Record<string, number>).length_m) - Number((b.data.parameters as Record<string, number>).length_m));
-  const dimensions = record.data.parameters as Record<string, number>;
+  const dimensions = generated?.parameters ?? record.data.parameters as Record<string, number>;
+  useEffect(() => {
+    if (record.data.category !== 'trousers') return;
+    const controller = new AbortController();
+    void api<StyleOptions>('/assets/trouser-styles/options', {signal:controller.signal}).then(setStyleOptions).catch(e => {if(!controller.signal.aborted)setError(String(e));});
+    return () => controller.abort();
+  }, [record.data.category]);
+  useEffect(() => {
+    if (!styleId) { setGenerated(undefined); setGenerating(false); return; }
+    const controller = new AbortController(); setGenerating(true); setGenerated(undefined); setError('');
+    const timer = setTimeout(() => {
+      void api<StylePreview>('/assets/trouser-styles/previews', {method:'POST',signal:controller.signal,body:JSON.stringify({asset_id:record.asset_id,version:record.version,style_id:styleId,parameters:styleParameters})})
+        .then(result => {if(!controller.signal.aborted)setGenerated(result);})
+        .catch(e => {if(!controller.signal.aborted)setError(String(e));})
+        .finally(() => {if(!controller.signal.aborted)setGenerating(false);});
+    }, 600);
+    return () => {clearTimeout(timer);controller.abort();};
+  }, [record.asset_id, record.version, styleId, styleParameters]);
   useEffect(() => {
     const controller = new AbortController(); setOptions(undefined); setError('');
     void api<AppearanceOptions>(`/assets/${encodeURIComponent(record.asset_id)}/appearance-options?version=${record.version}`, { signal: controller.signal })
@@ -33,12 +58,12 @@ export function ClothGarmentPicker({ variants, materials, selected, onSelectionC
     return () => controller.abort();
   }, [record.asset_id, record.version, materials]);
   async function saveAndOpen() {
-    if (!options) return;
+    if (!options || generating || (styleId && !generated)) return;
     setBusy(true); setError('');
     const { asset_id, kind, name, description, tags, engines, data, references, artifacts } = record;
     const texture = options.textures.find(t => t.id === value.texture);
     try {
-      const result = await api<{ record: AssetRecord }>('/assets', { method: 'POST', body: JSON.stringify({ expected_version: record.version,
+      const result = generated ? await api<{record:AssetRecord}>(`/assets/trouser-styles/previews/${generated.preview_id}/save`, {method:'POST',body:JSON.stringify(value)}) : await api<{ record: AssetRecord }>('/assets', { method: 'POST', body: JSON.stringify({ expected_version: record.version,
         draft: { asset_id, kind, name, description, tags, engines, references,
           data: { ...data, appearance: { ...value, texture_sha256: texture?.artifact?.sha256 ?? null } },
           artifacts: [...artifacts.filter(a => a.role !== 'visual_texture'), ...(texture?.artifact ? [texture.artifact] : [])],
@@ -48,19 +73,24 @@ export function ClothGarmentPicker({ variants, materials, selected, onSelectionC
     } catch (e) { setError(String(e)); setBusy(false); }
   }
   return <div className="mt-3 space-y-3" data-garment-picker={record.asset_id}>
-    <label className="block text-xs">衣长／尺寸变体<select aria-label="衣长尺寸" className="mt-1 w-full rounded border bg-background p-2" disabled={busy} value={record.asset_id} onChange={e => setRecord(variants.find(v => v.asset_id === e.target.value)!)}>{sizes.map(v => {
+    <label className="block text-xs">{record.data.category==='trousers'?'基础长裤尺寸':'衣长／尺寸变体'}<select aria-label="衣长尺寸" className="mt-1 w-full rounded border bg-background p-2" disabled={busy} value={record.asset_id} onChange={e => {const next=variants.find(v => v.asset_id===e.target.value)!;setRecord(next);if(styleId){const p=next.data.parameters as Record<string,number>;setStyleParameters(current=>({...current,length_m:p.length_m,waist_width_m:p.waist_width_m}));}}}>{sizes.map(v => {
       const p = v.data.parameters as Record<string, number>;
       return <option key={v.asset_id} value={v.asset_id}>{v.name} · 长 {(p.length_m * 100).toFixed(1)} / {p.waist_width_m ? '腰宽' : '宽'} {((p.width_m ?? p.waist_width_m) * 100).toFixed(1)} cm</option>;
     })}</select></label>
     <p className="text-xs text-muted-foreground">长 {(dimensions.length_m * 100).toFixed(1)} · {dimensions.waist_width_m ? '腰宽' : '宽'} {((dimensions.width_m ?? dimensions.waist_width_m) * 100).toFixed(1)} cm{dimensions.sleeve_m ? ` · 袖长参数 ${(dimensions.sleeve_m * 100).toFixed(1)} cm` : ''}</p>
-    <ClothGarmentPreview record={record} appearance={value} material={material} />
+    {styleOptions && <div className="space-y-2 rounded border p-2">
+      <label className="block text-xs">长裤款式<select aria-label="长裤款式" className="ml-2 rounded border bg-background p-1" disabled={busy} value={styleId} onChange={e=>{const id=e.target.value;setStyleId(id);const p=record.data.parameters as Record<string,number>;setStyleParameters({length_m:p.length_m,waist_width_m:p.waist_width_m,...styleOptions.styles.find(s=>s.id===id)?.defaults});}}><option value="">使用所选衣物</option>{styleOptions.styles.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+      {styleId && Object.entries(styleOptions.fields).map(([key,field])=><label className="block text-xs" key={key}>{field.label} · {((styleParameters[key]??0)*100).toFixed(0)} cm<input aria-label={field.label} className="mt-1 w-full" type="range" min={field.min} max={field.max} step={field.step} disabled={busy} value={styleParameters[key]??field.min} onChange={e=>setStyleParameters(current=>({...current,[key]:Number(e.target.value)}))}/></label>)}
+      {styleId && <p role="status" className="text-xs text-muted-foreground">{generating?'正在生成真实网格…':generated?'网格已更新；保存后可进入工位':'调整参数后生成预览'}</p>}
+    </div>}
+    <ClothGarmentPreview record={generated ? {...record,asset_id:'preview-'+generated.preview_id} : record} previewMesh={generated?.mesh} appearance={value} material={material} />
     {options && <AppearanceControls value={value} options={options} onChange={setValue} disabled={busy} showPreview={false} />}
     <div className="flex flex-wrap items-center gap-3 text-xs">
-      <Button size="sm" disabled={busy || !options} onClick={() => void saveAndOpen()}>{busy ? '保存中…' : '保存外观并进入工位'}</Button>
+      <Button size="sm" disabled={busy || !options || generating || !!styleId && !generated} onClick={() => void saveAndOpen()}>{busy ? '保存中…' : '保存外观并进入工位'}</Button>
       <a className="text-primary" href={assetHref(record.asset_id, record.version)}>物理调参／详情</a>
-      <label className="flex items-center gap-2"><input type="checkbox" checked={selected.includes(record.asset_id)} onChange={e => onSelectionChange(e.target.checked ? [...selected, record.asset_id] : selected.filter(id => id !== record.asset_id))} />加入批量</label>
+      <label className="flex items-center gap-2"><input type="checkbox" disabled={!!styleId} checked={selected.includes(record.asset_id)} onChange={e => onSelectionChange(e.target.checked ? [...selected, record.asset_id] : selected.filter(id => id !== record.asset_id))} />加入批量</label>
     </div>
-    <p className="text-xs text-muted-foreground">尺寸切换使用对应真实网格；外观在保存后用于工位及录制。</p>
+    <p className="text-xs text-muted-foreground">款式调整会重新生成真实网格；保存后，几何和外观一起用于工位。</p>
     {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
   </div>;
 }
