@@ -8,10 +8,14 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ClothforgeBatchPanel, clothCategoryLabels } from '@/components/clothforge-batch-panel';
 import { PbrMaterialLibrary } from '@/components/pbr-material-library';
 import { ValidationOverview } from '@/components/validation-overview';
 import { AssetEditor } from '@/components/asset-detail';
-import { api, API_BASE } from '@/lib/api';
+import { ClothGarmentPicker, previewAppearance } from './cloth-garment-picker';
+import { ClothGarmentPreview } from './cloth-garment-preview';
+import type { PbrMaterial } from '@/lib/pbr-material-types';
+import { api } from '@/lib/api';
 import { assetHref, kindLabels, outcomeLabel, type AssetKind, type AssetList } from '@/lib/asset-types';
 
 export function AssetLibrary() {
@@ -88,29 +92,41 @@ function ClothGallery({ refresh }: { refresh: number }) {
   const [data, setData] = useState<AssetList>();
   const [error, setError] = useState('');
   const [category, setCategory] = useState('');
+  const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState<string[]>([]);
+  const [materials, setMaterials] = useState<PbrMaterial[]>([]);
+  const [openCategory, setOpenCategory] = useState('');
   useEffect(() => {
     const controller = new AbortController();
-    void api<AssetList>('/assets?q=clothforge&kind=model&engine=newton_vbd&limit=100', { signal: controller.signal }).then(setData).catch(caught => { if (!controller.signal.aborted) setError(String(caught)); });
+    void api<AssetList>('/assets?q=clothforge&kind=model&engine=newton_vbd&limit=250', { signal: controller.signal }).then(setData).catch(caught => { if (!controller.signal.aborted) setError(String(caught)); });
     return () => controller.abort();
   }, [refresh]);
-  const items = (data?.items ?? []).filter(item => !category || item.data.category === category);
+  useEffect(() => {
+    let cancelled = false;
+    void api<{ items: PbrMaterial[] }>('/pbr-materials').then(result => { if (!cancelled) setMaterials(result.items.filter(m => (m.data.category ?? 'fabric') === 'fabric')); }).catch(e => { if (!cancelled) setError(String(e)); });
+    return () => { cancelled = true; };
+  }, []);
+  const items = (data?.items ?? []).filter(item => (!category || item.data.category === category) && (!query || (item.name + ' ' + item.asset_id).toLowerCase().includes(query.toLowerCase())));
   return <div className="space-y-4">
-    <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-lg font-semibold">选择一件衣物开始试验</h2><p className="mt-1 text-sm text-muted-foreground">查看三维形状，选择材料，调整参数，运行悬挂或落地并回看实际轨迹。</p></div><NativeSelect aria-label="衣物类别" value={category} onChange={event => setCategory(event.target.value)}><NativeSelectOption value="">全部衣物</NativeSelectOption><NativeSelectOption value="tshirt">T 恤</NativeSelectOption><NativeSelectOption value="trousers">长裤</NativeSelectOption><NativeSelectOption value="open_coat">开襟外套</NativeSelectOption></NativeSelect></div>
-    <div className="space-y-1 rounded-lg border bg-muted/20 p-3 text-sm"><p>当前目录包含 3 种基础版型，每种版型有 10 个尺寸变体。同类衣物共用结构，主要改变长度、宽度与袖部尺寸。</p><p className="text-xs text-muted-foreground">缩略图自动缩放，展示仿真前形状；请按下方实际尺寸比较大小。材料差异需要通过悬挂或落地回放观察。当前模型尚无口袋、帽子、内衬等款式细节。</p></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">衣物库</h2><p className="mt-1 text-xs text-muted-foreground">按类别展开尺寸变体，预览、调参并进入双臂工位。</p></div><div className="flex gap-2"><Input aria-label="搜索衣物" placeholder="名称或编号" value={query} onChange={e => setQuery(e.target.value)} /><NativeSelect aria-label="衣物类别" value={category} onChange={event => setCategory(event.target.value)}><NativeSelectOption value="">全部类别</NativeSelectOption>{Object.entries(clothCategoryLabels).map(([id, label]) => <NativeSelectOption key={id} value={id}>{label}</NativeSelectOption>)}</NativeSelect></div></div>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {!data && !error && <p className="text-sm text-muted-foreground">正在加载衣物…</p>}
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{items.map(record => {
-      const preview = record.artifacts.findIndex(a => a.role === 'preview');
-      const parameters = record.data.parameters && typeof record.data.parameters === 'object' ? record.data.parameters as Record<string, unknown> : {};
-      const dimensions = (record.data.category === 'trousers' ? [['length_m', '裤长'], ['waist_width_m', '腰部平铺宽'], ['hip_width_m', '臀部平铺宽']] : [['length_m', '衣长'], ['width_m', '衣身平铺宽'], ['sleeve_m', '袖长参数']]).flatMap(([key, label]) => {
-        const value = parameters[key];
-        return typeof value === 'number' && Number.isFinite(value) ? [{ key, label, cm: (value * 100).toFixed(1) }] : [];
-      });
-      return <Card key={record.asset_id} className="overflow-hidden"><a href={assetHref(record.asset_id, record.version)} className="block">
-        {preview >= 0 && record.integrity.status === 'current' && <img loading="lazy" className="h-52 w-full bg-slate-100 object-contain" alt={record.name} src={API_BASE + '/assets/' + encodeURIComponent(record.asset_id) + '/versions/' + record.version + '/artifacts/' + preview} />}
-        <CardContent className="space-y-3 pt-4"><div className="flex items-center justify-between gap-2"><strong>{record.name}</strong><Badge variant="outline">Newton VBD</Badge></div><p className="text-xs text-muted-foreground">基础版型的尺寸变体 · 悬挂 / 落地 · 3 种合成材料预设</p><dl aria-label="实际几何尺寸" className="grid grid-cols-3 gap-2 rounded-md bg-muted/30 p-2">{dimensions.map(dimension => <div key={dimension.key} data-cloth-dimension={dimension.key}><dt className="text-[11px] text-muted-foreground">{dimension.label}</dt><dd className="mt-1 text-sm font-medium tabular-nums">{dimension.cm} cm</dd></div>)}</dl><span className="inline-flex rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground">调参并运行</span>{record.integrity.status !== 'current' && <p className="text-xs text-destructive">来源证据失效，需修复后运行</p>}</CardContent>
-      </a></Card>;
+    <div className="grid items-start gap-3 sm:grid-cols-2 xl:grid-cols-4">{Object.entries(clothCategoryLabels).map(([id, label]) => {
+      const variants = items.filter(a => a.data.category === id).sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true}));
+      if (!variants.length) return null;
+      const first = variants[0];
+      const appearance = previewAppearance(first, materials[0]);
+      const material = materials.find(m => m.asset_id === appearance.material_id && m.version === appearance.material_version);
+      const open = openCategory === id;
+      return <details className={'rounded-xl border p-3 ' + (open ? 'sm:col-span-2' : '')} key={id} data-cloth-category={id} open={open}>
+        <summary className="cursor-pointer list-none text-sm font-medium" onClick={e => { e.preventDefault(); setOpenCategory(open ? '' : id); }}>
+          <span>{open ? '▾' : '▸'} {label}<span className="ml-2 text-xs font-normal text-muted-foreground">{variants.length} 件</span></span>
+          {materials.length > 0 && <div className="mt-2"><ClothGarmentPreview record={first} appearance={appearance} material={material} thumbnail /></div>}
+        </summary>
+        {open && <ClothGarmentPicker key={id} variants={variants} materials={materials} selected={selected} onSelectionChange={setSelected} />}
+      </details>;
     })}</div>
-    {data && <p className="text-xs text-muted-foreground">显示 {items.length} / {data.total} 个尺寸变体。预览仅展示初始几何；每次运行单独检查物理质量。</p>}
+    {data && <p className="text-xs text-muted-foreground">共 {data.total} 件 · 当前匹配 {items.length} 件 · 点击类别展开，点击衣物查看三维预览和调参。</p>}
+    <ClothforgeBatchPanel assets={data?.items} selected={selected} onSelectionChange={setSelected} />
   </div>;
 }

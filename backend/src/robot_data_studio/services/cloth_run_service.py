@@ -264,12 +264,12 @@ class NewtonClothRunManager(ClothRunManager):
             if ref is None:
                 raise ClothRunError("configuration has no garment reference")
             model = self.registry.get(ref.asset_id, ref.version)
-        artifact = next((a for a in model.artifacts if a.role == "provenance" and a.source_id == "clothforge-pilot-v1"), None)
+        artifact = next((a for a in model.artifacts if a.role == "provenance" and a.source_id in {"clothforge-pilot-v1", "clothforge-library-v1"}), None)
         if artifact is None:
             raise ClothRunError("unsupported garment provenance")
         path = self.registry.artifact_path(self.registry.inspect_artifact(artifact))
         manifest = json.loads(path.read_text())
-        if manifest["category"] not in {"tshirt", "trousers", "open_coat"}:
+        if manifest["category"] not in {"tshirt", "trousers", "open_coat", "towel", "napkin", "long_sleeve", "shorts", "skirt"}:
             raise ClothRunError("unsupported garment category")
         mesh = next(a for a in model.artifacts if a.role == "simulation_mesh")
         mesh_path = self.registry.artifact_path(self.registry.inspect_artifact(mesh))

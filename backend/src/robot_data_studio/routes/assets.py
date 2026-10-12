@@ -139,6 +139,27 @@ def garment_appearance(asset_id: str, version: int = Query(ge=1)):
         raise failure(error) from error
 
 
+@router.get("/assets/{asset_id}/garment-mesh")
+def garment_mesh(asset_id: str, version: int = Query(ge=1)):
+    import numpy as np
+    try:
+        registry = AssetRegistry()
+        record = registry.get(asset_id, version)
+        if record.kind != 'model' or 'clothforge' not in record.tags:
+            raise ValueError('请选择 ClothForge 衣物模型')
+        entry = next(a for a in record.artifacts if a.role == 'simulation_mesh')
+        path = registry.artifact_path(registry.inspect_artifact(entry))
+        with np.load(path, allow_pickle=False) as mesh:
+            uv = mesh['rest_triangles'][..., :2].copy()
+            low, high = uv.reshape(-1, 2).min(0), uv.reshape(-1, 2).max(0)
+            uv = (uv - low) / (high - low)
+            return {'asset_id': record.asset_id, 'version': record.version,
+                    'vertices': mesh['vertices'].tolist(), 'faces': mesh['faces'].tolist(),
+                    'uv': uv.tolist(), 'parameters': record.data['parameters']}
+    except (OSError, ValueError) as error:
+        raise failure(error) from error
+
+
 @router.get("/assets/{asset_id}")
 def detail(asset_id: str, version: int | None = Query(None, ge=1)):
     try:
@@ -178,7 +199,7 @@ def viewer(asset_id: str, version: int, index: int):
             raise AssetNotFound("artifact index does not exist")
         entry = record.artifacts[index]
         if (entry.role not in {"interactive_preview", "interactive_replay"}
-                or entry.source_id not in {"clothforge-pilot-v1", "clothforge-repair-v2", "studio-cloth-runs"}):
+                or entry.source_id not in {"clothforge-pilot-v1", "clothforge-library-v1", "clothforge-repair-v2", "studio-cloth-runs"}):
             raise ValueError("artifact is not an interactive cloth viewer")
         if registry.integrity(record)["status"] != "current":
             raise AssetIntegrityError("viewer evidence is stale")

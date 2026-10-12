@@ -40,6 +40,10 @@
     "cc0-surfaces-v1": {
       "root": "/data/zhanghejun/robot-data-studio/assets/sources/cc0-surfaces-v1",
       "label": "本地 CC0 桌面与背景 PBR 材质"
+    },
+    "clothforge-library-v1": {
+      "root": "/data/zhanghejun/ClothForge/data/library_v1",
+      "label": "ClothForge 扩展衣物库 v1"
     }
   }
 }

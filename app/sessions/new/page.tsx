@@ -257,7 +257,10 @@ export default function NewSessionPage() {
           camera_profile_id: cameraProfile,
           ...(rendererProfile ? { renderer_profile_id: rendererProfile } : {}),
           ...(physicsBackend ? { physics_backend: physicsBackend } : {}),
-          scene_params: { ...sceneParams, ...(engine === 'isaac_sim' && scene.startsWith('bimanual_tabletop_v17') ? { environment_appearance: JSON.stringify(environment), camera_lighting: JSON.stringify(cameraLighting) } : {}) },
+          scene_params: {
+            ...Object.fromEntries(Object.entries(sceneParams).filter(([, value]) => value !== null)),
+            ...(engine === 'isaac_sim' && scene.startsWith('bimanual_tabletop_v17') ? { environment_appearance: JSON.stringify(environment), camera_lighting: JSON.stringify(cameraLighting) } : {}),
+          },
         }),
       });
       window.location.href = `/sessions/${session.id}`;
