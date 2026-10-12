@@ -1,6 +1,6 @@
 # GarmentCodeData 导入执行计划
 
-更新日期：2026-10-12。关联任务：G007。状态：阶段 1 已验证，首个批次包完整下载，12 件样本格式检查完成；转换代码、UI 与运行尚未批准。
+更新日期：2026-10-12。关联任务：G007。状态：阶段 1 已验证，首个批次包完整下载，12 件样本格式检查完成；阶段 2 少量转换与正常流程已执行，物理检查仅裙子通过；独立导入页面和全量流程尚未批准。
 
 ## 目标与范围
 
@@ -84,6 +84,8 @@ Studio 注册记录引用转换产物，并保留原始来源引用。已有 `da
 **完成标准**：能准确指出每项模拟输入从哪里获取；明确哪些样本可直接转换、哪些需要重新生成或网格化。确实缺少静止信息的样本可先浏览，但不标为可模拟。
 
 ## 阶段 2：打通少量转换与正常使用
+
+**状态**：少量链路已验证；12 件转换尝试 8 成功、4 失败，三类代表衣物的预览／材质／保存／配置跳转及 Newton 运行完成；物理检查仅 1/3 通过，仍需改善上衣／裤子初始化与失败样本的映射。详细结果见 [格式与转换记录](GARMENTCODEDATA_FORMAT.md)。
 
 **输入**：阶段 1 固定样本清单与确认后的字段映射。
 
@@ -180,9 +182,41 @@ Studio 注册记录引用转换产物，并保留原始来源引用。已有 `da
 | --- | --- | --- |
 | 本计划文档 | 已批准并完成 | 核对文档链接与差异；提交需用户明确要求 |
 | 1：样本与格式 | 已验证 | 首批包及配套文件已取得；12 件、156 文件检查完成，阶段 2 待批准 |
-| 2：转换与正常运行 | 待讨论 | 阶段 1 后确定适配方案、精确文件及验证命令 |
+| 2：转换与正常运行 | 已验证（链路） | 三类正常流程完成；物理检查 1/3，初始化与映射问题保留 |
 | 3：导入 UI | 待讨论 | 阶段 2 后确定真实任务与查询接口 |
 | 4：全量目录与批次 | 待讨论 | 确定下载范围、空间预算与索引存储 |
 | 5：参数化编辑 | 后续候选 | 按类别单独确定生成接口与控件 |
 
-2026-10-12 首先批准三份计划文档；随后单独批准阶段 1：在 `/data/zhanghejun/datasets/GarmentCodeData/v2/phase1/` 保存首批中性人体包、官方文档／元数据和约 12 件样本，使用 `/tmp/garmentcodedata-stage1.py` 检查格式；新增格式文档并更新本文与演进记录。此批准不涵盖阶段 2 转换代码、UI、资产注册或仿真，不安装依赖。
+2026-10-12 首先批准三份计划文档；随后单独批准阶段 1：在 `/data/zhanghejun/datasets/GarmentCodeData/v2/phase1/` 保存首批中性人体包、官方文档／元数据和约 12 件样本，使用 `/tmp/garmentcodedata-stage1.py` 检查格式；新增格式文档并更新本文与演进记录。当时尚未批准阶段 2；随后用户单独批准下列实现与正常流程验证，仍不安装依赖。
+
+
+### 阶段 2 批准范围与文件变化
+
+本轮批准 11 个文件，随后单独批准 `cloth-garment-picker.tsx`，共 12 个文件。数据产物、临时验证脚本、三次 GPU 运行与临时 API／前端／浏览器在验证范围内。未批准独立导入页、全量下载／索引或上游参数编辑。
+
+| 文件 | Before → After → Reason |
+| --- | --- |
+| ClothForge [garmentcodedata.py](../../ClothForge/src/clothforge/garmentcodedata.py)（新增） | 原生 JSON／PLY 不能直接作为模拟输入 → 上游 BoxMesh 重建拓扑、修正静止度量、转移发布姿态并保存 UV／来源 → 避免视觉顶点编号和原模拟编号混用。每件失败保留类型与原因；已有输出报告不覆盖。 |
+| ClothForge [__main__.py](../../ClothForge/src/clothforge/__main__.py) | 只有生成／运行／导出命令 → 增加 `convert-garmentcodedata` → 显式执行固定配置，保持已有命令。 |
+| ClothForge [garmentcodedata_phase2.json](../../ClothForge/configs/garmentcodedata_phase2.json)（新增） | 无外部样本配置 → 固定 12 件、1 cm 分辨率、来源／输出、类别及三件注册清单 → 记录实际转换范围；沿用现有合成材料。 |
+| ClothForge [newton_worker.py](../../ClothForge/src/clothforge/newton_worker.py) | 按简化尺寸查找挂点 → 新资产使用 manifest 明确顶点挂点，旧资产仍用原方法 → 外部衣物不依赖虚构平铺宽度。 |
+| Studio [garmentcodedata_importer.py](../backend/src/robot_data_studio/services/garmentcodedata_importer.py)（新增） | 无该来源注册 → 注册三件模型及九份配置，记录原样本、转换与编辑能力 → 同一导入重复执行不生成重复资产。 |
+| Studio [asset_sources.json](../config/asset_sources.json) | 无该数据源 → 登记 `garmentcodedata-v2-phase2` → 转换结果独立保存，源数据不变。 |
+| Studio [assets.py](../backend/src/robot_data_studio/routes/assets.py) | UV 从简化静止坐标推导 → 外部数据读取独立 `face_uv`，允许新来源交互回放 → 保留图样 UV；原资产路径保持。 |
+| Studio [cloth_run_service.py](../backend/src/robot_data_studio/services/cloth_run_service.py) | 只允许已有 ClothForge 来源 → 明确增加新转换来源 → 复用配置准备、worker、轨迹与结果入口，门槛保持。 |
+| Studio [cloth-garment-picker.tsx](../components/cloth-garment-picker.tsx) | 所有同类资产都显示简化款式控件 → 导入资产声明不支持款式编辑时隐藏控件并清状态；只显示实际拥有的尺寸，包围盒标为外形高／宽 → 保留原版片结构，避免误生成简化款或显示 NaN；本地款式控件保留。 |
+| Studio [GARMENTCODEDATA_FORMAT.md](GARMENTCODEDATA_FORMAT.md) | 只有阶段 1 核对 → 追加转换方法、失败定位、物理指标与证据 → 不将转换／运行完成与物理通过混为一谈。 |
+| Studio 本文 | 阶段 2 待讨论 → 登记批准、实现和验收结果 → 独立页面及全量流程仍单独批准。 |
+| Studio [CLOTHING_EVOLUTION.md](CLOTHING_EVOLUTION.md) | 只记录阶段 1 → 追加阶段 2 及 UI 范围批准与结果 → 保留分阶段追溯。 |
+
+执行使用已有 `.venv-generation` 和 `newton-cloth` 环境。正常验证采用三件 PBR／保存／配置跳转、每件一次两秒 Newton；类型检查、构建与文档链接检查。不新增防御性测试，没有改旧物理门槛，也没有自动重试失败运行。最终 `tsc --noEmit` 与 `npm run build` 均通过；6 个 Python 模块语法与 101 个本地文档链接检查通过，两仓库 `git diff --check` 通过。
+
+转换命令从 ClothForge 根目录执行：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src:third_party/GarmentCode \
+  .venv-generation/bin/python -B -m clothforge convert-garmentcodedata \
+  --config configs/garmentcodedata_phase2.json --output /path/to/new-output
+```
+
+输出目录须为新的转换批次；数据源配置与注册报告路径须明确对应这次输出，不能用旧注册资产指向新结果。后续正式导入 UI 仍在阶段 3。

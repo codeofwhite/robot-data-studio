@@ -150,9 +150,12 @@ def garment_mesh(asset_id: str, version: int = Query(ge=1)):
         entry = next(a for a in record.artifacts if a.role == 'simulation_mesh')
         path = registry.artifact_path(registry.inspect_artifact(entry))
         with np.load(path, allow_pickle=False) as mesh:
-            uv = mesh['rest_triangles'][..., :2].copy()
-            low, high = uv.reshape(-1, 2).min(0), uv.reshape(-1, 2).max(0)
-            uv = (uv - low) / (high - low)
+            if record.data.get('provenance', {}).get('dataset') == 'GarmentCodeData':
+                uv = mesh['face_uv'].copy()
+            else:
+                uv = mesh['rest_triangles'][..., :2].copy()
+                low, high = uv.reshape(-1, 2).min(0), uv.reshape(-1, 2).max(0)
+                uv = (uv - low) / (high - low)
             return {'asset_id': record.asset_id, 'version': record.version,
                     'vertices': mesh['vertices'].tolist(), 'faces': mesh['faces'].tolist(),
                     'uv': uv.tolist(), 'parameters': record.data['parameters']}
@@ -278,7 +281,7 @@ def viewer(asset_id: str, version: int, index: int):
             raise AssetNotFound("artifact index does not exist")
         entry = record.artifacts[index]
         if (entry.role not in {"interactive_preview", "interactive_replay"}
-                or entry.source_id not in {"clothforge-pilot-v1", "clothforge-library-v1", "clothforge-trouser-styles-v1", "clothforge-tshirt-styles-v1", "clothforge-skirt-styles-v1", "clothforge-repair-v2", "studio-cloth-runs"}):
+                or entry.source_id not in {"clothforge-pilot-v1", "clothforge-library-v1", "clothforge-trouser-styles-v1", "clothforge-tshirt-styles-v1", "clothforge-skirt-styles-v1", "garmentcodedata-v2-phase2", "clothforge-repair-v2", "studio-cloth-runs"}):
             raise ValueError("artifact is not an interactive cloth viewer")
         if registry.integrity(record)["status"] != "current":
             raise AssetIntegrityError("viewer evidence is stale")

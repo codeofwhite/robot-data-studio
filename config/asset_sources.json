@@ -56,6 +56,10 @@
     "clothforge-tshirt-styles-v1": {
       "root": "/data/zhanghejun/robot-data-studio/data/tshirt_styles_v1",
       "label": "GarmentCode 圆领／V 领短袖"
+    },
+    "garmentcodedata-v2-phase2": {
+      "root": "/data/zhanghejun/datasets/GarmentCodeData/v2/phase2/native-v2",
+      "label": "GarmentCodeData v2 · ClothForge 转换"
     }
   }
 }

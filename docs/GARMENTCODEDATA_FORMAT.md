@@ -129,7 +129,27 @@ Newton VBD 当前 [newton_worker.py](../../ClothForge/src/clothforge/newton_work
 
 批次概览及材料原值见 [batch_summary.json](../../datasets/GarmentCodeData/v2/phase1/batch_summary.json)。上游材料数值依赖其模拟单位与能量模型；不能直接复制为本地面密度、拉伸／弯曲参数，也不能宣称已对应真实织物。
 
-## 下一阶段的确定事项
+## 阶段 2 的实际转换结果
+
+2026-10-12 按单独批准范围执行。调用上游 `BoxMesh` 重建共享模拟顶点与原生缝合编号，版片内部边长配合重新生成的 `orig_lens` 修正构成完整 `rest_triangles`；UV 单独保存为 `face_uv`，不把材料度量当成纹理坐标。最终采用原始 1 cm 分辨率。
+
+初始 BoxMesh 仍是待收拢的组装姿态，裙子诊断最大拉伸约 11.23，不能直接用于操作。本轮通过原始 boxmesh 表面上的最近点和重心坐标，把已发布 sim 姿态传递到新网格；姿态映射误差写入 manifest，静止形状仍来自版片，不使用 sim 形状替代。
+
+12 件最终尝试中 8 件生成成功，4 件在姿态映射后产生退化三角形，未注册。这 4 件的原始 sim PLY 均未检出同阈值下的退化三角形，故失败归于重建／映射问题，不能归咎于源衣物本身。3.5 cm 首轮还暴露上游短边警告访问未定义 `Edge.name` 的错误；改用原始分辨率后该错误消失。首轮与后续报告均保留，没有删除版片、放宽门槛或修改上游源码。
+
+选定三件链路调试样本：上衣 `rand_07SXFM3OXA`、裤子 `rand_0BC49T2K2O`、裙子 `rand_07JYAR0G1P`。该选择用于少量链路调试，不是随机抽样或总体通过率评估。三件分别注册一个模型与三种已有合成材料配置；人体测量和来源标签仍保留，未开放上游款式编辑。
+
+| 样本 | Newton 运行 | 全程物理检查 | 原因／关键指标 |
+| --- | --- | --- | --- |
+| 上衣 | 完成，61 帧 | 失败 | 初始最大拉伸 1.209，超过 1.15；末帧降至 1.036，不能抹去起始失败 |
+| 裤子 | 完成，61 帧 | 失败 | 初始最大拉伸 1.979，面积比 0.300～1.862；末帧最大拉伸 1.155 |
+| 裙子 | 完成，61 帧 | 通过 | 全程最大拉伸 1.045，无保存帧自交或地面穿透 |
+
+三类的 PBR 预览、Fabric 031 材质切换、保存副本和工位配置跳转均通过。只验证配置传递，没有启动 Isaac 工位 worker、录制图像或机器人任务；不能把浏览器预览视为工位渲染验证。导入衣物显示的是外形包围盒高／宽，不能当成人体尺寸或平铺尺寸。
+
+产物根目录：`/data/zhanghejun/datasets/GarmentCodeData/v2/phase2/native-v2/`。证据：[转换报告](../../datasets/GarmentCodeData/v2/phase2/native-v2/conversion_report.json)、[注册结果](../../datasets/GarmentCodeData/v2/phase2/native-v2/import_result.json)、[浏览器结果](../../datasets/GarmentCodeData/v2/phase2/native-v2/browser_result.json)、[Newton 指标](../../datasets/GarmentCodeData/v2/phase2/native-v2/physics_summary.json)、[完整运行记录](../../datasets/GarmentCodeData/v2/phase2/native-v2/newton_runs.json)。三张预览：[上衣](../../datasets/GarmentCodeData/v2/phase2/native-v2/preview-tshirt.png)、[裤子](../../datasets/GarmentCodeData/v2/phase2/native-v2/preview-trousers.png)、[裙子](../../datasets/GarmentCodeData/v2/phase2/native-v2/preview-skirt.png)。
+
+## 阶段 1 后提出的适配事项（历史快照）
 
 | 内容 | 当前结论 | 下一动作 |
 | --- | --- | --- |
