@@ -32,7 +32,7 @@ def preview(payload):
     spec = options()
     style = next((s for s in spec['styles'] if s['id'] == payload['style_id']), None)
     if style is None:
-        raise ValueError('请选择直筒或阔腿款式')
+        raise ValueError('请选择已配置的长裤款式')
     parameters = {**manifest['parameters'], **style['defaults']}
     for key, value in payload['parameters'].items():
         if key not in spec['fields']:

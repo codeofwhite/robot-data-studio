@@ -77,6 +77,7 @@ Canonical `robot_data_episode` v1 是不可变源数据；QA 接受的 consumer 
 | [`README.md`](../README.md) | 怎么起服务、采集流程、worker 可靠性 |
 | [`DATA_TO_TRAINING_GUIDE_ZH.md`](DATA_TO_TRAINING_GUIDE_ZH.md) | **数据 → 导出 → 训练 → 评测全链路** |
 | [`CLOTHFORGE_STATUS.md`](CLOTHFORGE_STATUS.md) | 布料工作流现状 |
+| [`CLOTHING_EVOLUTION.md`](CLOTHING_EVOLUTION.md) | 衣物分类、款式变化、任务执行范围与变更记录 |
 | [`CUROBO_EXPERT_DEMOS.md`](CUROBO_EXPERT_DEMOS.md) | expert 演示怎么生成 |
 | [`ROBOT_CLOTH_SCENES.md`](ROBOT_CLOTH_SCENES.md) | 布料场景定义 |
 | [`ASSET_REGISTRY.md`](ASSET_REGISTRY.md) | 资产注册表 |
