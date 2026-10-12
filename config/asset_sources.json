@@ -49,6 +49,10 @@
       "root": "/data/zhanghejun/robot-data-studio/data/trouser_styles_v1",
       "label": "ClothForge 直筒与阔腿款式"
     },
+    "clothforge-skirt-styles-v1": {
+      "root": "/data/zhanghejun/robot-data-studio/data/skirt_styles_v1",
+      "label": "GarmentCode 直裙／A 字裙"
+    },
     "clothforge-tshirt-styles-v1": {
       "root": "/data/zhanghejun/robot-data-studio/data/tshirt_styles_v1",
       "label": "GarmentCode 圆领／V 领短袖"

@@ -264,7 +264,7 @@ class NewtonClothRunManager(ClothRunManager):
             if ref is None:
                 raise ClothRunError("configuration has no garment reference")
             model = self.registry.get(ref.asset_id, ref.version)
-        artifact = next((a for a in model.artifacts if a.role == "provenance" and a.source_id in {"clothforge-pilot-v1", "clothforge-library-v1", "clothforge-trouser-styles-v1", "clothforge-tshirt-styles-v1"}), None)
+        artifact = next((a for a in model.artifacts if a.role == "provenance" and a.source_id in {"clothforge-pilot-v1", "clothforge-library-v1", "clothforge-trouser-styles-v1", "clothforge-tshirt-styles-v1", "clothforge-skirt-styles-v1"}), None)
         if artifact is None:
             raise ClothRunError("unsupported garment provenance")
         path = self.registry.artifact_path(self.registry.inspect_artifact(artifact))

@@ -14,8 +14,8 @@ from .cloth_run_service import newton_cloth_run_manager
 from .garment_appearance import resolve_appearance, texture_artifact
 
 SOURCE = 'clothforge-trouser-styles-v1'
-SOURCES = {'trousers':SOURCE,'tshirt':'clothforge-tshirt-styles-v1'}
-CONFIGS = {'trousers':'trouser_styles_v1.json','tshirt':'tshirt_styles_v1.json'}
+SOURCES = {'trousers':SOURCE,'tshirt':'clothforge-tshirt-styles-v1','skirt':'clothforge-skirt-styles-v1'}
+CONFIGS = {'trousers':'trouser_styles_v1.json','tshirt':'tshirt_styles_v1.json','skirt':'skirt_styles_v1.json'}
 
 
 def options(category="trousers"):
@@ -43,6 +43,8 @@ def preview(payload,category="trousers"):
         if not field['min'] <= value <= field['max']:
             raise ValueError(field['label'] + '超出调整范围')
         parameters[key] = value
+    if category == 'skirt':
+        parameters['hem_width_m'] = parameters['waist_width_m'] + 2 * parameters['hem_flare_m']
     preview_id = uuid4().hex
     root = folder(preview_id,category); root.mkdir(parents=True)
     config = json.loads((settings.clothforge_root / 'configs/pilot_v1.json').read_text())
@@ -73,7 +75,8 @@ def save(preview_id, appearance,category="trousers"):
     request = json.loads((root / 'request.json').read_text())
     registry = AssetRegistry()
     model_id = 'MDL-clothforge-' + manifest['id']
-    name = manifest['style_name'] + f" · {'裤长' if category=='trousers' else '衣长'} {manifest['parameters']['length_m']*100:.0f} cm"
+    length_label = {'trousers':'裤长','tshirt':'衣长','skirt':'裙长'}[category]
+    name = manifest['style_name'] + f" · {length_label} {manifest['parameters']['length_m']*100:.0f} cm"
     def artifact(name, role):
         return AssetArtifact(source_id=SOURCES[category], path=f'{preview_id}/garment/{name}', role=role)
     entries = [artifact(n, r) for n, r in [('mesh.npz','simulation_mesh'),('manifest.json','provenance'),
