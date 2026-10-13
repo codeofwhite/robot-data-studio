@@ -18,6 +18,15 @@ BIMANUAL_FRANKA_USD = Path("/data/zhanghejun/simulation-demos/franka-dual-cloth-
 BIMANUAL_CLOTH_USD = PROJECT_ROOT / "assets/sources/robot-cloth-scenes-v1/scenes/fixtures_v4/place_in_basket/v001/cloth.usda"
 
 CLOTHFORGE_SCENE = "bimanual_tabletop_v17_clothforge"
+CLOTH_DROP_SCENE = "clothforge_free_drop"
+CLOTHFORGE_SCENES = {CLOTHFORGE_SCENE, CLOTH_DROP_SCENE}
+SIMULATION_PRESETS = [
+    {"id": "fast", "label": "快速试操作", "values": {"cloth_substeps": 4, "cloth_iterations": 10, "cloth_collision_interval": 0}},
+    {"id": "balanced", "label": "平衡", "values": {"cloth_substeps": 8, "cloth_iterations": 20, "cloth_collision_interval": 5}},
+    {"id": "precise", "label": "精细接触", "values": {"cloth_substeps": 8, "cloth_iterations": 30, "cloth_collision_interval": 1}},
+]
+SIMULATION_KEYS = {"simulation_preset", "cloth_substeps", "cloth_collision_interval"}
+
 BIMANUAL_SCENES = {"bimanual_tabletop_v17", "bimanual_tabletop_v17_cloth", CLOTHFORGE_SCENE}
 
 
@@ -30,6 +39,7 @@ SCENES = {
         "label": "双 Franka 实验台 v17＋ClothForge 衣物",
         "description": "选择 ClothForge 衣物与材料，在桌面上调参操作；Tab 切换主力臂。参数在启动时生效。",
         "family": "bimanual",
+        "simulation_presets": SIMULATION_PRESETS,
         "parameters": [
             {"key": "garment_asset_id", "label": "衣物资产", "default": "MDL-clothforge-tshirt-000", "choices": ["MDL-clothforge-tshirt-000"]},
             _number("garment_version", "衣物资产版本", 1, 1, 100000, 1),
@@ -44,6 +54,9 @@ SCENES = {
             _number("garment_offset_x_m", "桌面 X 偏移", 0, -.5, .5, .01, "m"),
             _number("garment_offset_y_m", "桌面 Y 偏移", 0, -.3, .3, .01, "m"),
             _number("cloth_iterations", "布料求解迭代数", 30, 4, 64, 1),
+            {"key": "simulation_preset", "label": "仿真预设", "default": "precise", "choices": ["fast", "balanced", "precise", "custom"]},
+            _number("cloth_substeps", "物理子步数", 8, 1, 16, 1),
+            _number("cloth_collision_interval", "自碰撞刷新间隔（0：每子步首次；1：每次迭代）", 1, 0, 64, 1),
             {"key": "visual_texture", "label": "衣物贴图", "default": "none", "choices": ["none", "cotton", "linen", "denim", "terry"]},
             {"key": "visual_color", "label": "基础颜色", "default": "#386ba1"},
             _number("visual_roughness", "外观粗糙度", .9, 0, 1, .05),
@@ -111,11 +124,22 @@ SCENES = {
 }
 
 
+SCENES[CLOTH_DROP_SCENE] = {
+    "label": "ClothForge 自由下落 · 无机械臂",
+    "description": "同一 IsaacLab / Newton 纯 VBD 环境观察衣物下落；没有机械臂、MJWarp 或双向耦合。支持暂停、继续、重置，不生成机器人 Episode。",
+    "family": "cloth_observation", "simulation_presets": SIMULATION_PRESETS,
+    "parameters": [dict(p) for p in SCENES[CLOTHFORGE_SCENE]["parameters"]] + [
+        _number("drop_height_m", "最低点距桌面高度", .25, .02, 1, .05, "m"),
+    ],
+}
+VISUAL_SCENES = BIMANUAL_SCENES | {CLOTH_DROP_SCENE}
+
+
 class IsaacSimAdapter(CollectionAdapter):
     adapter_id = "isaac_sim"
     label = "Isaac Sim / Isaac Lab"
     scenes = SCENES
-    control_modes = ("keyboard", "gello")
+    control_modes = ("keyboard", "gello", "scripted")
     camera_profile_ids = ("lab_d435i_dual_v1", "isaac_bimanual_tabletop_visual_v4", "isaac_bimanual_tabletop_visual_v5")
     renderer_profile_ids = ("isaac_performance_v1", "isaac_balanced_v1", "isaac_quality_v1")
     physics_backends = ("physx", "newton")
@@ -132,13 +156,14 @@ class IsaacSimAdapter(CollectionAdapter):
         scenes = {key: {**value, "parameters": [dict(p) for p in value["parameters"]]} for key, value in self.scenes.items()}
         ids = sorted({record.asset_id for record in AssetRegistry().all()
                       if record.kind == "model" and "clothforge" in record.tags})
-        field = scenes[CLOTHFORGE_SCENE]["parameters"][0]
-        field["choices"] = ids
-        if ids and field["default"] not in ids:
-            field["default"] = ids[0]
+        for scene_id in CLOTHFORGE_SCENES:
+            field = scenes[scene_id]["parameters"][0]
+            field["choices"] = ids
+            if ids and field["default"] not in ids:
+                field["default"] = ids[0]
         return scenes
 
-    def _clothforge_selection(self, params):
+    def _clothforge_selection(self, params, scene_id=CLOTHFORGE_SCENE):
         from ..services.asset_service import AssetRegistry
         registry = AssetRegistry()
         record = registry.get(str(params.get("garment_asset_id", "MDL-clothforge-tshirt-000")), int(params.get("garment_version", 1)))
@@ -152,9 +177,16 @@ class IsaacSimAdapter(CollectionAdapter):
             raise ValueError("garment_asset_id=衣物网格和清单必须来自同一目录")
         preset = str(params.get("material_preset", "medium"))
         material = json.loads((paths["provenance"].parent / f"config-{preset}.json").read_text())["material"]
-        resolved = {p["key"]: params.get(p["key"], material.get(p["key"], p["default"])) for p in self.scenes[CLOTHFORGE_SCENE]["parameters"]}
+        resolved = {p["key"]: params.get(p["key"], material.get(p["key"], p["default"])) for p in self.scenes[scene_id]["parameters"]}
         from ..services.garment_appearance import PARAMETERS, resolve_appearance
         appearance = resolve_appearance(registry, record, params)
+        resolved = {key: value for key, value in resolved.items() if key not in SIMULATION_KEYS or key in params}
+        preset_values = next((item["values"] for item in SIMULATION_PRESETS if item["id"] == params.get("simulation_preset")), None)
+        if preset_values is not None:
+            resolved.update(preset_values)
+            resolved.update({key: params[key] for key in preset_values if key in params})
+            if any(resolved[key] != value for key, value in preset_values.items()):
+                resolved["simulation_preset"] = "custom"
         resolved.update({key: appearance[target] for key, target in PARAMETERS.items() if target in appearance})
         return paths["provenance"].parent, {**resolved, "garment_id": manifest["id"],
             "appearance": appearance, "garment_asset_id": record.asset_id, "garment_version": record.version}
@@ -172,28 +204,33 @@ class IsaacSimAdapter(CollectionAdapter):
             raise ValueError("Isaac Sim supports keyboard or GELLO control only")
         if config.get("scene_id") not in self.scenes:
             raise ValueError("unsupported Isaac Sim scene")
-        if config["scene_id"] in BIMANUAL_SCENES:
+        if config["scene_id"] in VISUAL_SCENES:
             from ..services.surface_appearance import resolve_environment
             resolve_environment(config.get('scene_params', {}).get('environment_appearance'))
             from ..services.camera_lighting import resolve_camera_lighting
             resolve_camera_lighting(config.get('scene_params', {}).get('camera_lighting'))
-            if config["control_mode"] != "keyboard":
+            if config["scene_id"] == CLOTH_DROP_SCENE:
+                if config["control_mode"] != "scripted" or str(config.get("physics_backend") or settings.isaac_physics_backend) != "newton":
+                    raise ValueError("自由下落场景使用 Scripted 观察模式和 Newton")
+            elif config["control_mode"] != "keyboard":
                 raise ValueError("双臂实验台 v17 当前仅支持 Keyboard（Tab 切换）")
-            if config["scene_id"] != CLOTHFORGE_SCENE and str(config.get("physics_backend") or settings.isaac_physics_backend) != "physx":
+            if config["scene_id"] not in CLOTHFORGE_SCENES and str(config.get("physics_backend") or settings.isaac_physics_backend) != "physx":
                 raise ValueError("双臂实验台 v17 当前仅支持 PhysX")
             if config.get("camera_profile_id") not in {"isaac_bimanual_tabletop_visual_v4", "isaac_bimanual_tabletop_visual_v5"}:
                 raise ValueError("双臂实验台 v17 请使用实验台四视角 v4 / v5 相机和 960×720")
             for path in (BIMANUAL_ASSET_ROOT / "bimanual_tabletop_lab_v17.usda",
                          BIMANUAL_ASSET_ROOT / "asset_manifest_bimanual_v17.json",
-                         BIMANUAL_ASSET_ROOT / "hdri/photo_studio_01_4k.hdr", BIMANUAL_FRANKA_USD):
+                         BIMANUAL_ASSET_ROOT / "hdri/photo_studio_01_4k.hdr") + (() if config["scene_id"] == CLOTH_DROP_SCENE else (BIMANUAL_FRANKA_USD,)):
                 if not path.is_file():
                     raise ValueError(f"bimanual tabletop asset missing: {path}")
+        if config.get("control_mode") == "scripted" and config["scene_id"] != CLOTH_DROP_SCENE and not generation:
+            raise ValueError("Scripted 观察模式仅用于自由下落场景")
         allowed_params = {
             item["key"] for item in self.scenes[config["scene_id"]]["parameters"]
         }
-        if config['scene_id'] in BIMANUAL_SCENES:
+        if config['scene_id'] in VISUAL_SCENES:
             allowed_params.update({'environment_appearance', 'camera_lighting'})
-        if config['scene_id'] == CLOTHFORGE_SCENE:
+        if config['scene_id'] in CLOTHFORGE_SCENES:
             from ..services.garment_appearance import PARAMETERS
             allowed_params.update(PARAMETERS)
         unknown_params = sorted(set(config.get("scene_params", {})) - allowed_params)
@@ -201,9 +238,11 @@ class IsaacSimAdapter(CollectionAdapter):
             raise ValueError(
                 f"Isaac Sim scene parameter is not allowlisted: {', '.join(unknown_params)}"
             )
-        if config["scene_id"] == CLOTHFORGE_SCENE:
+        if config["scene_id"] in CLOTHFORGE_SCENES:
             params = config.get("scene_params", {})
-            for field in self.scenes[CLOTHFORGE_SCENE]["parameters"]:
+            if SIMULATION_KEYS.intersection(params) and str(config.get("physics_backend") or settings.isaac_physics_backend) != "newton":
+                raise ValueError("simulation_preset=这些仿真参数仅适用于 Newton 衣物工位")
+            for field in self.scenes[config["scene_id"]]["parameters"]:
                 if field["key"] not in params:
                     continue
                 value = params[field["key"]]
@@ -214,9 +253,9 @@ class IsaacSimAdapter(CollectionAdapter):
                         raise ValueError(f"{field['key']}=unsupported choice")
                 elif isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not field["minimum"] <= value <= field["maximum"]:
                     raise ValueError(f"{field['key']}=参数超出范围")
-                elif field["key"] in {"garment_version", "cloth_iterations"} and int(value) != value:
+                elif field["key"] in {"garment_version", "cloth_iterations", "cloth_substeps", "cloth_collision_interval"} and int(value) != value:
                     raise ValueError(f"{field['key']}=必须是整数")
-            self._clothforge_selection(params)
+            self._clothforge_selection(params, config["scene_id"])
         profile_id = str(config.get("camera_profile_id", "lab_d435i_dual_v1"))
         if profile_id not in self.camera_profile_ids:
             raise ValueError(f"unsupported Isaac Sim camera profile: {profile_id}")
@@ -295,7 +334,7 @@ class IsaacSimAdapter(CollectionAdapter):
             command += ["--work-surface-height-m", str(height)]
         if config["scene_id"] == "l_table_basket":
             command += ["--scene-usd", str(settings.isaac_l_table_basket_scene_usd)]
-        if config["scene_id"] in BIMANUAL_SCENES:
+        if config["scene_id"] in VISUAL_SCENES:
             command[command.index("--franka-usd") + 1] = str(BIMANUAL_FRANKA_USD)
             from ..services.surface_appearance import resolve_environment
             from ..services.camera_lighting import resolve_camera_lighting
@@ -310,9 +349,13 @@ class IsaacSimAdapter(CollectionAdapter):
             ]
         if config["scene_id"] == "bimanual_tabletop_v17_cloth":
             command += ["--scene-usd", str(BIMANUAL_CLOTH_USD), "--cloth"]
-        if config["scene_id"] == CLOTHFORGE_SCENE:
-            directory, parameters = self._clothforge_selection(config.get("scene_params", {}))
+        if config["scene_id"] in CLOTHFORGE_SCENES:
+            directory, parameters = self._clothforge_selection(config.get("scene_params", {}), config["scene_id"])
             command += ["--clothforge-dir", str(directory), "--clothforge-params", json.dumps(parameters, ensure_ascii=False, allow_nan=False)]
+        if config["scene_id"] == CLOTH_DROP_SCENE:
+            index = command.index("--franka-usd")
+            del command[index:index + 2]
+            command[command.index("--livestream") + 1] = "0"
         if config.get("generation_plan_id"):
             from ..services.generation_service import plan_directory, report_for
             command[command.index("--control-source") + 1] = "trajectory"

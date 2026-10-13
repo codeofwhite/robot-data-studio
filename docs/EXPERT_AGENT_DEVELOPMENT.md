@@ -239,3 +239,58 @@
 - 视频通过现有 IsaacLab 环境的 imageio-ffmpeg H.264 编码器生成，两个视频实际解码均为 22 帧、2.2 秒，无解码错误。PATH 中的 ffmpeg 缺少 libx264，未安装或升级包。
 
 **未验证与下一步**：没有通过真实浏览器 Tab 按键、WebRTC、完整抓取／抬升任务或其他衣物批次验收。切臂验证通过同一 `active_arm` 控制协议完成。该导入裤子此前独立物理检查已失败；本次仍有较大跟踪偏差，初始化形状与机器人接触需要另外定位。实际低控制频率也需后续优化；在解决前不将 Newton 工位整体标为正式遥操采集就绪。PhysX 报错和资产／场景／后端兼容性 UI 留在后续范围。
+
+## 2026-10-13：Newton 工位仿真预算预设与自定义参数
+
+**目标与范围**：在新建会话页面选择 Newton 衣物工位的计算预算，先提供参数入口与可追溯记录，不把预设命名当作物理真实性或实时性能保证。未修改 PhysX 求解实现、衣物拓扑、材料参数、相机分辨率或安全控制；当前 GPU 0 用户会话未停止或重启。
+
+| 预设 | 物理子步 | VBD 迭代 | 自碰撞刷新间隔 |
+| --- | --- | --- | --- |
+| 快速试操作 `fast` | 4 | 10 | 0：每子步首次迭代 |
+| 平衡 `balanced` | 8 | 20 | 5：每 5 次迭代 |
+| 精细接触 `precise` | 8 | 30 | 1：每次迭代 |
+
+三档均保持自碰撞开启。自定义允许子步 1～16、迭代 4～64、刷新间隔 0～64（整数）。减少计算可能扩大接触或形变误差；更高计算预算不等于材料已标定。新页面默认精细接触，旧会话缺少新增字段时保留衣物原子步和刷新间隔 1。
+
+**文件与数据流**：
+
+- `backend/src/robot_data_studio/adapters/isaac_sim.py` 声明 Newton 专用参数及三档预设，通过现有场景 descriptor 向 UI 提供唯一数值表。会话解析把选择展开为具体数值，数值偏离预设时标为 `custom`；旧会话不会被补入新的数值默认值。非 Newton 会话不能提交这些 Newton 专用字段。
+- `app/sessions/new/page.tsx` 增加“仿真配置 · Newton”。预设、摘要常显，自定义参数默认折叠，手动修改标为自定义；数值从原通用场景区移到专用区域，PhysX 的原迭代控件仍保留。普通场景高级参数也默认折叠。切换 PhysX 时提交过滤掉 Newton 专用字段。
+- `gello-remote/src/gello_remote/isaac_clothforge.py` 让 `newton_garment_config` 接收明确的数值覆盖，在求解器配置与衣物场景描述两个调用点统一应用。保留已有阻尼约定映射和双向耦合。
+- `gello-remote/src/gello_remote/isaaclab_gello.py` 将会话参数传入配置解析器，遥测及 Episode run metadata 新增 `simulation_numerics`，记录生效的子步、迭代、碰撞刷新和阻尼映射；原 `physics_substeps` 继续保留。
+- 本文记录执行与验证。未提交 Git，未改用户已有 README 工作区内容。
+
+**验证环境与命令**：已有 IsaacLab conda 环境，空闲 RTX 5090 GPU 4，独立控制端口 18080，`--headless --livestream 0`；同一 GarmentCodeData 导入长裤（10,459 个顶点）、960×720 四相机、Balanced 渲染。临时脚本 `/tmp/newton-workstation-performance/run.py` 启动有限诊断进程，通过现有键盘协议切换左右臂、发送位移和夹爪命令，保存短录制，最后仅结束本次诊断进程。没有使用当前用户会话作控制测试。
+
+- `npm --prefix robot-data-studio run build` 成功。没有新增依赖。
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=robot-data-studio/backend/src:robot-data-studio/packages/robot-data-contracts/src robot-data-studio/backend/.venv/bin/python -B -m pytest -q -p no:cacheprovider robot-data-studio/backend/tests/test_engine_descriptors.py`：5 passed。
+- 内联检查通过：descriptor → launch JSON 三档参数一致；仅提供预设 ID 会展开数值；旧会话不注入新字段；偏离预设的数值标为自定义。
+- GPU 4 运行 `run.py fast`、`run.py balanced`、`run.py precise`；快速档另做最终补验 `run.py fast fast-final`。短录制均标为 failure，因为这是控制与参数检查，不是已完成的衣物操作任务。首轮快速档后统一了衣物场景描述的配置调用点，最终补验用于检查其与 Episode 求解元数据一致。
+- Python AST 和两仓库 `git diff --check` 检查通过。报告及临时产物保存在 `/tmp/newton-workstation-performance/`。
+
+**首轮测量**：快速档约 0.5 Hz、平衡档约 0.2 Hz、精细档约 0.1 Hz，远低于目标 10 Hz；各档 Episode 分别 7、6、6 帧，四路相机帧数一致，轨迹浮点数组全部有限，求解元数据与所选数值一致。短流程能推进、双臂状态有限，但有跟踪偏差和夹爪响应延迟，因此未认定为可靠遥操或完整接触任务通过。未验证浏览器实际交互、WebRTC 帧率或材质标定精度。本次没有采用降低物理频率、关闭自碰撞或减少录制相机等方式隐藏瓶颈。
+
+**后续重点**：预设入口已连通，正式遥操仍需分段计时定位物理求解、渲染和主机同步开销；仅切换服务器网络或预设不足以解决当前低频问题。
+
+**快速档最终补验**：`fast-final` 每阶段等待至少 24 个物理步，结束时实际控制频率约 0.6 Hz、左臂最大跟踪误差 0.006411 rad；Episode 12 帧，四路各 12 张，所有轨迹浮点数组有限。衣物场景描述中的子步/迭代/自碰撞刷新与 run metadata 完全一致（4/10/0）。右夹爪闭合阶段约 0.020～0.023 m，打开阶段约 0.035 m，说明存在响应但短流程未完全到位；不把该结果写成夹爪完整开合验收通过。汇总入口为 `/tmp/newton-workstation-performance/verification.json`。
+
+## 2026-10-13：运行效率工程记录入口
+
+系统运行速度、瓶颈与前后对比统一维护在 [RUNTIME_PERFORMANCE.md](RUNTIME_PERFORMANCE.md)。本轮新增 Newton 衣物调度优化与分段计时，不修改求解精度；该文档明确区分完整运行、关闭 WebRTC 和仅物理诊断，并记录数据/控制验证限制。
+
+
+本轮附加发现并修复相机时间错误：Newton 衣物遥操每个控制周期只向相机推进一个物理 dt，导致约 12 次采样才刷新图像。旧诊断 Episode 的数组有限和相机帧数一致不等于图像更新正常；本轮此前对照每路仅两张不同图像，不作为新帧验收通过。最终 `runtime-fresh-final` 每路 20/20 张不同图像，数据有限。完整流程和仅物理诊断都约 1.5 Hz，主要耗时位于物理路径，性能目标仍未达成。详细条件、耗时及下一步见运行效率文档。
+
+最终关闭计时正常复验 `runtime-fresh-normal` 仍约 1.5 Hz，四路各 20/20 张不同图像、数据有限、采集时间戳递增，结束跟踪误差 0.007387 rad。没有通过 WebRTC 浏览器或完整布料任务验收；需要继续分析 Newton 物理内部，而不是把运行效率工作标为全部完成。
+
+Nsight 采样结果已写入运行效率文档：报告导出成功，CPU/NVTX 有效，但已有 Nsight 2024.2.3 明确报告 CUDA 12.8 不受支持及 CUPTI 订阅冲突，没有 CUDA 内核/API 数据。该轮标为 `PARTIAL_CPU_ONLY`，没有确定具体最慢内核，没有新增求解器修改。新版 CLI 隔离解包与重采样尚未批准/执行。
+
+## 2026-10-13：ClothForge 自由下落 · 无机械臂
+
+新增 `clothforge_free_drop` 观察场景：在新建 Isaac Sim 会话中选择衣物、外观、仿真预算和距桌面下落高度，使用同一 IsaacLab/Newton 纯 VBD 环境，移除 Franka、MJWarp 与双向耦合；独立观察页面支持暂停/继续/重置/四视角，不生成机器人 Episode。复用衣物加载及版片恢复，新增纯 VBD manager 选择，原双臂默认行为保留。
+
+GPU 4 现场被其他实验占用，用户追加批准改至 GPU 7；没有停止其他实验。纯下落 180 步验证：10,459 顶点、0 动态刚体、2 静态碰撞形状，衣物最低点从 1.010 m 落到约 0.760 m 桌面；四路各 15 张不同图像、数组有限。360 步控制复验的暂停/继续/重置通过，reset epoch 与采集时间可追溯。前端构建、5 项 descriptor 检查、参数传递、语法和 diff 检查通过。
+
+共享 GPU 7 下纯衣物约 14.17 外层物理步/秒（RTF 0.118），仍未实时。双臂对照将初始高度、衣物、材质、预算与相机对齐，软接触容量从 20,918 增至 251,016，但其间共享 GPU 负载变化，不能宣称固定提速倍数。对照记录是失败标记的控制检查，未完成衣物操作任务验收。完整文件变化、失败启动说明、指标与证据见 [运行效率记录](RUNTIME_PERFORMANCE.md)。
+
+新增观察 runtime/page 和 Studio 场景声明/新建页；普通长观察只保留首/末图像与最多 120 个粒子样本，有限验证才逐帧保存，避免持续诊断写盘开销。真实浏览器交互未人工验收，HTTP/WebSocket 链路与图像已验证。没有新增依赖，没有安装新版 Nsight，尚未 commit / push。

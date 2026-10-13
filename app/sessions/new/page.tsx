@@ -20,8 +20,10 @@ import { originalCameraLighting, type CameraLightingRequest } from '@/lib/camera
 import { SurfaceAppearanceControls } from '@/components/surface-appearance-controls';
 import { AppearanceControls, type AppearanceOptions } from '@/components/garment-appearance-panel';
 
+const CLOTH_DROP_SCENE = 'clothforge_free_drop';
 const CLOTHFORGE_SCENE = 'bimanual_tabletop_v17_clothforge';
 const VISUAL_KEYS = ['visual_texture', 'visual_color', 'visual_roughness', 'visual_material_id', 'visual_material_version', 'visual_color_mode', 'visual_roughness_multiplier', 'visual_normal_strength', 'visual_uv_scale'];
+const NUMERICAL_KEYS = ['simulation_preset', 'cloth_substeps', 'cloth_iterations', 'cloth_collision_interval'];
 const MATERIAL_KEYS = ['mass_per_area', 'friction', 'tri_ke', 'tri_ka', 'edge_ke'];
 const MATERIAL_LABELS: Record<string, string> = { light: '轻薄布料', medium: '中等布料', heavy: '厚重布料' };
 
@@ -47,6 +49,7 @@ type Engine = {
     description?: string;
     family: string;
     parameters: SceneParameter[];
+    simulation_presets?: Array<{ id: string; label: string; values: Record<string, number> }>;
   }>;
   camera_profiles: Array<{ id: string; label: string; match_level: string; roles: string[] }>;
   renderer_profiles: Array<{ id: string; label: string; description: string; profile_version: number; rendering_mode: 'performance' | 'balanced' | 'quality' }>;
@@ -79,6 +82,7 @@ export default function NewSessionPage() {
   const [rendererProfile, setRendererProfile] = useState('');
   const [physicsBackend, setPhysicsBackend] = useState('');
   const [advanced, setAdvanced] = useState(false);
+  const [numericalExpanded, setNumericalExpanded] = useState(false);
   const [sceneParams, setSceneParams] = useState<Record<string, number | string | null>>({});
   const [busy, setBusy] = useState(false);
   const [garments, setGarments] = useState<AssetRecord[]>([]);
@@ -89,7 +93,8 @@ export default function NewSessionPage() {
   const [environment, setEnvironment] = useState<EnvironmentAppearance>(originalEnvironment);
   const [surfaceMaterials, setSurfaceMaterials] = useState<PbrMaterial[]>([]);
   useEffect(() => { void api<{ items: PbrMaterial[] }>('/pbr-materials').then(result => setSurfaceMaterials(result.items)).catch(e => setError({ message: String(e) })); }, []);
-  const isClothForge = engine === 'isaac_sim' && scene === CLOTHFORGE_SCENE;
+  const isClothDrop = engine === 'isaac_sim' && scene === CLOTH_DROP_SCENE;
+  const isClothForge = engine === 'isaac_sim' && [CLOTHFORGE_SCENE, CLOTH_DROP_SCENE].includes(scene);
   // `key` is set when the backend named a scene parameter as the reason, so the
   // message can sit against that field instead of only in the page banner.
   const [error, setError] = useState<{ message: string; key?: string }>();
@@ -107,12 +112,12 @@ export default function NewSessionPage() {
   // the task, so they sit beside the scene picker rather than in the advanced
   // numeric block.
   const choiceParameters = useMemo(
-    () => (selected?.parameters ?? []).filter((parameter) => parameter.choices.length > 0 && !VISUAL_KEYS.includes(parameter.key)),
+    () => (selected?.parameters ?? []).filter((parameter) => parameter.choices.length > 0 && !VISUAL_KEYS.includes(parameter.key) && !NUMERICAL_KEYS.includes(parameter.key)),
     [selected],
   );
   const numericParameters = useMemo(
-    () => (selected?.parameters ?? []).filter((parameter) => parameter.choices.length === 0 && parameter.key !== 'garment_version' && !VISUAL_KEYS.includes(parameter.key)),
-    [selected],
+    () => (selected?.parameters ?? []).filter((parameter) => parameter.choices.length === 0 && parameter.key !== 'garment_version' && !VISUAL_KEYS.includes(parameter.key) && (!NUMERICAL_KEYS.includes(parameter.key) || (parameter.key === 'cloth_iterations' && physicsBackend !== 'newton'))),
+    [selected, physicsBackend],
   );
   const episodeLimits = selectedEngine?.session_limits?.target_episodes ?? {
     minimum: 1,
@@ -153,16 +158,18 @@ export default function NewSessionPage() {
   useEffect(() => {
     const defaults = Object.fromEntries((selected?.parameters ?? []).map(parameter => [parameter.key, parameter.default]));
     const query = new URLSearchParams(window.location.search);
-    if (scene === CLOTHFORGE_SCENE && query.get('garment') && query.get('scene') === scene) {
+    if ([CLOTHFORGE_SCENE, CLOTH_DROP_SCENE].includes(scene) && query.get('garment') && query.get('scene') === scene) {
       defaults.garment_asset_id = query.get('garment')!;
       defaults.garment_version = Number(query.get('version') ?? 1);
     }
     setSceneParams(defaults);
-    setAdvanced(scene === CLOTHFORGE_SCENE);
+    setAdvanced(false);
+    setNumericalExpanded(false);
     setError(undefined);
-    if (engine === 'isaac_sim' && ['bimanual_tabletop_v17', 'bimanual_tabletop_v17_cloth', CLOTHFORGE_SCENE].includes(scene)) {
-      setMode('keyboard');
-      setPhysicsBackend('physx');
+    if (engine === 'isaac_sim' && ['bimanual_tabletop_v17', 'bimanual_tabletop_v17_cloth', CLOTHFORGE_SCENE, CLOTH_DROP_SCENE].includes(scene)) {
+      setMode(scene === CLOTH_DROP_SCENE ? 'scripted' : 'keyboard');
+      if (scene === CLOTH_DROP_SCENE) setTarget(1);
+      setPhysicsBackend(scene === CLOTH_DROP_SCENE ? 'newton' : 'physx');
       setCameraProfile('isaac_bimanual_tabletop_visual_v5');
     } else if (cameraProfile.startsWith('isaac_bimanual_tabletop_visual_v')) {
       setCameraProfile(selectedEngine?.camera_profiles[0]?.id ?? '');
@@ -222,6 +229,7 @@ export default function NewSessionPage() {
 
   function updateSceneParam(key: string, value: number | string) {
     setSceneParams((current) => ({ ...current, [key]: value,
+      ...(NUMERICAL_KEYS.includes(key) && key !== 'simulation_preset' ? { simulation_preset: 'custom' } : {}),
       ...(key === 'garment_asset_id' ? { garment_version: garments.find((item) => item.asset_id === value)?.version ?? 1 } : {}),
     }));
     // A rejection no longer applies once the value it named is edited.
@@ -246,7 +254,7 @@ export default function NewSessionPage() {
           dataset_name: dataset,
           scene_id: scene,
           control_mode: mode,
-          target_episodes: target,
+          target_episodes: isClothDrop ? 1 : target,
           ...(usesCollectorPort ? { port } : {}),
           gpu,
           control_fps: fps,
@@ -258,8 +266,8 @@ export default function NewSessionPage() {
           ...(rendererProfile ? { renderer_profile_id: rendererProfile } : {}),
           ...(physicsBackend ? { physics_backend: physicsBackend } : {}),
           scene_params: {
-            ...Object.fromEntries(Object.entries(sceneParams).filter(([, value]) => value !== null)),
-            ...(engine === 'isaac_sim' && scene.startsWith('bimanual_tabletop_v17') ? { environment_appearance: JSON.stringify(environment), camera_lighting: JSON.stringify(cameraLighting) } : {}),
+            ...Object.fromEntries(Object.entries(sceneParams).filter(([key, value]) => value !== null && (physicsBackend === 'newton' || !NUMERICAL_KEYS.includes(key) || key === 'cloth_iterations'))),
+            ...(engine === 'isaac_sim' && (scene.startsWith('bimanual_tabletop_v17') || isClothDrop) ? { environment_appearance: JSON.stringify(environment), camera_lighting: JSON.stringify(cameraLighting) } : {}),
           },
         }),
       });
@@ -314,7 +322,7 @@ export default function NewSessionPage() {
               <CardHeader><CardTitle>2. 数据与任务</CardTitle><CardDescription>原始 Episode 写入 Studio 数据目录，引擎仓库不保存采集结果。</CardDescription></CardHeader>
               <CardContent className="grid gap-4 sm:grid-cols-2">
                 <Field label="Dataset 名称"><Input value={dataset} onChange={(event) => setDataset(event.target.value)} /></Field>
-                <Field label="目标 Episode 数">
+                {!isClothDrop && <Field label="目标 Episode 数">
                   <Input
                     type="number"
                     min={episodeLimits.minimum}
@@ -325,7 +333,8 @@ export default function NewSessionPage() {
                   <p className={`text-xs ${targetValid ? 'text-muted-foreground' : 'text-destructive'}`}>
                     当前引擎允许 {episodeLimits.minimum}～{episodeLimits.maximum} 个 Episode
                   </p>
-                </Field>
+                </Field>}
+                {isClothDrop && <p className="text-sm text-muted-foreground">物理观察会话，不生成机器人 Episode；控制台支持暂停、继续和重置。</p>}
                 <div className="sm:col-span-2">
                   <Label className="mb-2">场景插件</Label>
                   <NativeSelect className="w-full" value={scene} onChange={(event) => setScene(event.target.value)}>
@@ -362,16 +371,17 @@ export default function NewSessionPage() {
                 : <p className="text-sm text-muted-foreground">正在加载衣物外观…</p>}
             </CardContent></Card>}
 
-            {engine === 'isaac_sim' && scene.startsWith('bimanual_tabletop_v17') && <Card><CardHeader><CardTitle>桌面与背景外观</CardTitle></CardHeader><CardContent><SurfaceAppearanceControls value={environment} materials={surfaceMaterials} onChange={setEnvironment} disabled={busy} /><CameraLightingControls value={cameraLighting} onChange={setCameraLighting} disabled={busy} /></CardContent></Card>}
+            {engine === 'isaac_sim' && (scene.startsWith('bimanual_tabletop_v17') || isClothDrop) && <Card><CardHeader><CardTitle>桌面与背景外观</CardTitle></CardHeader><CardContent><SurfaceAppearanceControls value={environment} materials={surfaceMaterials} onChange={setEnvironment} disabled={busy} /><CameraLightingControls value={cameraLighting} onChange={setCameraLighting} disabled={busy} /></CardContent></Card>}
 
             <Card className="instrument-card">
               <CardHeader><CardTitle>3. 控制与相机</CardTitle><CardDescription>Studio 只选择控制方式；GELLO 串口与标定在 Collector 页面完成。</CardDescription></CardHeader>
               <CardContent className="space-y-4">
+                {isClothDrop ? <p className="text-sm">观察模式 · 无机械臂、无固定点 · Newton 纯 VBD</p> : <>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {selectedEngine?.control_modes.includes('gello') && <ModeCard active={mode === 'gello'} icon={Bot} title="GELLO" note="在 Collector 中连接与标定" onClick={() => setMode('gello')} />}
                   {selectedEngine?.control_modes.includes('keyboard') && <ModeCard active={mode === 'keyboard'} icon={Keyboard} title="Keyboard" note="Collector 键盘遥操作" onClick={() => setMode('keyboard')} />}
-                  {selectedEngine?.control_modes.includes('scripted') && <ModeCard active={mode === 'scripted'} icon={Bot} title="Scripted" note="隔离 Worker 确定性批量生成" onClick={() => setMode('scripted')} />}
-                </div>
+                  {engine !== 'isaac_sim' && selectedEngine?.control_modes.includes('scripted') && <ModeCard active={mode === 'scripted'} icon={Bot} title="Scripted" note="隔离 Worker 确定性批量生成" onClick={() => setMode('scripted')} />}
+                </div></>}
                 <div>
                   <Label className="mb-2">Sensor Profile</Label>
                   <NativeSelect className="w-full" value={cameraProfile} onChange={(event) => setCameraProfile(event.target.value)}>
@@ -388,14 +398,40 @@ export default function NewSessionPage() {
                 {Boolean(selectedEngine?.physics_backends.length) && <div>
                   <Label className="mb-2">Physics Backend</Label>
                   <NativeSelect className="w-full" value={physicsBackend} onChange={(event) => setPhysicsBackend(event.target.value)}>
-                    {selectedEngine?.physics_backends.map((backend) => <NativeSelectOption key={backend.id} value={backend.id}>{backend.label}</NativeSelectOption>)}
+                    {selectedEngine?.physics_backends.filter(backend => !isClothDrop || backend.id === 'newton').map((backend) => <NativeSelectOption key={backend.id} value={backend.id}>{backend.label}</NativeSelectOption>)}
                   </NativeSelect>
-                  <p className="mt-2 text-xs text-muted-foreground">{isClothForge && physicsBackend === 'newton'
+                  <p className="mt-2 text-xs text-muted-foreground">{isClothDrop ? '纯 VBD 自由下落，保留自碰撞与桌面接触，复用工位参数。' : isClothForge && physicsBackend === 'newton'
                     ? 'MJWarp＋VBD 双向耦合：双臂与衣物接触，沿用衣物和材料参数。Tab 切换主力臂。'
                     : selectedEngine?.physics_backends.find((backend) => backend.id === physicsBackend)?.description}</p>
                 </div>}
               </CardContent>
             </Card>
+
+            {isClothForge && physicsBackend === 'newton' && <Card className="instrument-card">
+              <CardHeader><CardTitle>仿真配置 · Newton</CardTitle><CardDescription>预设决定计算预算；实际速度与衣物网格有关，参数在新会话启动时生效。</CardDescription></CardHeader>
+              <CardContent className="space-y-3">
+                <NativeSelect className="w-full" aria-label="仿真预设" value={String(sceneParams.simulation_preset ?? 'precise')}
+                  onChange={event => {
+                    const preset = selected?.simulation_presets?.find(item => item.id === event.target.value);
+                    setSceneParams(current => ({ ...current, ...preset?.values, simulation_preset: event.target.value }));
+                    setNumericalExpanded(event.target.value === 'custom');
+                  }}>
+                  {selected?.simulation_presets?.map(item => <NativeSelectOption key={item.id} value={item.id}>{item.label}</NativeSelectOption>)}
+                  <NativeSelectOption value="custom">自定义</NativeSelectOption>
+                </NativeSelect>
+                <p className="text-xs text-muted-foreground">{sceneParams.cloth_substeps ?? 8} 子步 · {sceneParams.cloth_iterations ?? 30} 次迭代 · 自碰撞{Number(sceneParams.cloth_collision_interval ?? 1) === 0 ? '每子步首次迭代刷新' : `每 ${sceneParams.cloth_collision_interval ?? 1} 次迭代刷新`} · 自碰撞开启</p>
+                <Button type="button" variant="outline" onClick={() => setNumericalExpanded(!numericalExpanded)}>自定义参数<ChevronDown className={numericalExpanded ? 'rotate-180' : ''} /></Button>
+                {numericalExpanded && <div className="grid gap-3 sm:grid-cols-2">
+                  {(selected?.parameters ?? []).filter(parameter => NUMERICAL_KEYS.includes(parameter.key) && parameter.key !== 'simulation_preset').map(parameter => <Field key={parameter.key} label={parameter.label}>
+                    <Input type="number" disabled={busy} min={parameter.minimum ?? undefined} max={parameter.maximum ?? undefined} step={parameter.step ?? 1}
+                      value={sceneParams[parameter.key] ?? parameter.default}
+                      onChange={event => updateSceneParam(parameter.key, Number(event.target.value))} />
+                    {error?.key === parameter.key && <p className="text-xs text-destructive">{error.message}</p>}
+                  </Field>)}
+                </div>}
+                <p className="text-xs text-muted-foreground">快速档可能出现更大的形变与接触误差；候选预设尚不代表材料标定精度。每次 Episode 记录实际使用的求解参数。</p>
+              </CardContent>
+            </Card>}
 
             <Card className="instrument-card">
               <CardHeader><CardTitle>4. 运行参数</CardTitle><CardDescription>参数控件完全由当前 ScenePlugin 描述生成。</CardDescription></CardHeader>
@@ -403,7 +439,7 @@ export default function NewSessionPage() {
                 <div className={`grid gap-4 ${usesCollectorPort ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
                   <Field label={selectedEngine?.runtime?.headless ? 'Worker GPU' : 'GPU'}><Input type="number" min={0} value={gpu} onChange={(event) => setGpu(Number(event.target.value))} /></Field>
                   {usesCollectorPort && <Field label="Collector 端口"><Input type="number" min={1024} value={port} onChange={(event) => setPort(Number(event.target.value))} /></Field>}
-                  <Field label="控制频率 (Hz)"><Input type="number" min={1} max={120} value={fps} onChange={(event) => setFps(Number(event.target.value))} /></Field>
+                  <Field label={isClothDrop ? '观察采样频率 (Hz)' : '控制频率 (Hz)'}><Input type="number" min={1} max={120} value={fps} onChange={(event) => setFps(Number(event.target.value))} /></Field>
                 </div>
                 {Boolean(numericParameters.length) && (
                   <>
@@ -449,7 +485,7 @@ export default function NewSessionPage() {
                 <Summary label="Camera" value={selectedEngine?.camera_profiles.find((item) => item.id === cameraProfile)?.label ?? '—'} />
                 <Summary label="Renderer" value={selectedEngine?.renderer_profiles.find((item) => item.id === rendererProfile)?.label ?? '引擎默认'} />
                 <Summary label="Physics" value={selectedEngine?.physics_backends.find((item) => item.id === physicsBackend)?.label ?? '引擎默认'} />
-                <Summary label="Quota" value={`${target} episodes`} />
+                <Summary label="Quota" value={isClothDrop ? '物理观察 · 不生成 Episode' : `${target} episodes`} />
                 <Summary label="Worker" value={usesCollectorPort ? `GPU ${gpu} · :${port}` : `GPU ${gpu} · headless batch`} />
                 <div className="rounded-lg border border-primary/25 bg-primary/5 p-3 text-xs leading-5 text-muted-foreground"><Check className="mr-1 inline size-3.5 text-primary" />状态、动作、图像、时间戳和引擎 provenance 会进入统一 Episode 索引。</div>
                 <Button className="w-full" size="lg" disabled={busy || (isClothForge && (clothLoading || appearanceLoading || !appearanceOptions)) || !dataset.trim() || !selectedEngine || !selected || !targetValid} onClick={submit}>{busy ? '创建中…' : '创建会话'}<ArrowRight /></Button>
