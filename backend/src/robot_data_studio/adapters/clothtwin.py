@@ -8,7 +8,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import Any
 
-from ..config import CONTRACTS_SRC, settings
+from ..config import CONTRACTS_SRC, PROJECT_ROOT, settings
 from ..camera_profiles import validate_session_camera_profile
 from .base import CollectionAdapter, WorkerLaunch, WorkerReadiness
 
@@ -109,6 +109,10 @@ class ClothTwinAdapter(CollectionAdapter):
         }
 
     def validate_config(self, config: dict[str, Any]) -> None:
+        if config.get('isaac_episode_source_id'):
+            from ..services.episode_render_service import validate_job
+            validate_job(config)
+            return
         mode = config["control_mode"]
         scene = config["scene_id"]
         scenes = self.scene_descriptors()
@@ -163,6 +167,20 @@ class ClothTwinAdapter(CollectionAdapter):
         return command
 
     def build_worker_launch(self, config: dict[str, Any], output_dir: Path) -> WorkerLaunch:
+        if config.get('isaac_episode_source_id'):
+            from ..services.episode_render_service import validate_job
+            item = validate_job(config)
+            result = output_dir / 'render-result.json'
+            if result.is_file() and json.loads(result.read_text()).get('status') == 'completed':
+                raise ValueError('渲染任务已完成，请从源 Episode 新建任务')
+            return WorkerLaunch(
+                command=[settings.cloth_render_python, str(PROJECT_ROOT / 'expert_demos/curobo_cloth_v1/render_episode.py'),
+                         '--source', item['path'], '--output', str(output_dir.resolve()), '--gpu', str(config['gpu'])],
+                cwd=PROJECT_ROOT,
+                env_updates={'CUDA_VISIBLE_DEVICES':str(config['gpu']), 'PYTHONDONTWRITEBYTECODE':'1',
+                             'PYTHONPATH':str(CONTRACTS_SRC)},
+                readiness=WorkerReadiness(kind='process', timeout_s=600),
+                resources=(f"gpu:{int(config['gpu'])}", f"output:{output_dir.resolve()}"))
         python_paths = [
             str(CONTRACTS_SRC),
             str(settings.gello_remote_root / "src"),
@@ -175,6 +193,8 @@ class ClothTwinAdapter(CollectionAdapter):
             cwd=settings.gello_remote_root,
             env_updates={
                 "CUDA_VISIBLE_DEVICES": str(config["gpu"]),
+                "EGL_DEVICE_ID": str(config["gpu"]),
+                "PYTHONDONTWRITEBYTECODE": "1",
                 "PYTHONPATH": os.pathsep.join(python_paths),
             },
             readiness=WorkerReadiness(

@@ -69,6 +69,23 @@ def clothforge_config(params=None):
     return c
 
 
+def test_genesis_ipc_single_arm_launch_uses_live_worker_and_one_gpu(clothforge_registry, tmp_path):
+    candidate = clothforge_config()
+    candidate.update(scene_id='genesis_ipc_clothforge_single', physics_backend='genesis_ipc',
+                     camera_profile_id='lab_d435i_dual_v1', width=640, height=480)
+    launch = IsaacSimAdapter().build_worker_launch(candidate, tmp_path / 'live')
+    assert any(part.endswith('/teleop/live.py') for part in launch.command)
+    assert launch.command[launch.command.index('--isaac-python') + 1].endswith('python.sh')
+    assert launch.command[launch.command.index('--garment-dir') + 1] == str(clothforge_registry[1])
+    assert launch.env_updates['CUDA_VISIBLE_DEVICES'] == str(candidate['gpu'])
+    assert launch.readiness.kind == 'tcp'
+    assert not any('49100' in resource for resource in launch.resources)
+    candidate['scene_id'] = 'franka_empty'
+    candidate['scene_params'] = {}
+    with pytest.raises(ValueError, match='仅支持单臂'):
+        IsaacSimAdapter().validate_config(candidate)
+
+
 def test_clothforge_selection_and_parameters_are_passed_to_existing_worker(clothforge_registry):
     import json
     registry, folder = clothforge_registry
@@ -140,3 +157,33 @@ def test_v5_camera_lighting_reaches_worker():
     command = adapter.build_collect_command(candidate, Path('/tmp/camera-lighting-test'))
     resolved = json.loads(command[command.index('--camera-lighting') + 1])
     assert resolved['values']['exposure_ev'] == .5 and resolved['values']['fov_offset_deg'] == 2
+
+
+def test_genesis_ipc_uses_latest_asset_version_and_session_episode_root(clothforge_registry, tmp_path):
+    import json
+    from robot_data_contracts.asset import AssetDraft
+    registry, _ = clothforge_registry
+    latest = registry.get('MDL-clothforge-tshirt-test')
+    registry.publish(AssetDraft(**{k:v for k,v in latest.model_dump().items()
+                                  if k in AssetDraft.model_fields}), expected_version=1)
+    candidate = clothforge_config()
+    candidate.update(scene_id='genesis_ipc_clothforge_single', physics_backend='genesis_ipc',
+                     camera_profile_id='lab_d435i_dual_v1', width=640, height=480,
+                     target_episodes=7)
+    launch = IsaacSimAdapter().build_worker_launch(candidate, tmp_path / 'raw')
+    params = json.loads(launch.command[launch.command.index('--parameters')+1])
+    assert params['garment_version'] == 2
+    assert launch.command[launch.command.index('--episode-root')+1] == str(tmp_path / 'raw')
+    assert launch.command[launch.command.index('--target-episodes')+1] == '7'
+
+
+def test_genesis_rigid_scene_uses_same_worker_without_garment(tmp_path):
+    candidate = config()
+    candidate.update(scene_id='genesis_ipc_rigid_single', physics_backend='genesis_ipc',
+                     camera_profile_id='lab_d435i_dual_v1', width=640, height=480)
+    launch = IsaacSimAdapter().build_worker_launch(candidate, tmp_path / 'rigid')
+    assert '--rigid-only' in launch.command
+    assert '--garment-dir' not in launch.command
+    assert launch.command[launch.command.index('--episode-root')+1] == str(tmp_path / 'rigid')
+    assert launch.env_updates['CUDA_VISIBLE_DEVICES'] == '2'
+    assert IsaacSimAdapter().scene_descriptors()['genesis_ipc_rigid_single']['parameters'] == []

@@ -2,6 +2,9 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
+from ..services import episode_render_service
+from ..services.worker_runtime import ResourceConflict
 
 from ..models import QaUpdate
 from ..services.episode_scanner import episode_detail, list_episodes, update_qa
@@ -61,3 +64,23 @@ def frame(episode_id: int, camera: str, index: int):
     if path is None or not path.is_relative_to(root):
         raise HTTPException(404, "frame not found")
     return FileResponse(path, media_type="image/jpeg")
+
+
+class IsaacRenderRequest(BaseModel):
+    gpu: int = Field(ge=0, le=255)
+
+
+@router.get('/episodes/{episode_id}/isaac-render')
+def render_jobs(episode_id: int):
+    return {'availability':episode_render_service.availability(episode_id),
+            'jobs':episode_render_service.jobs(episode_id)}
+
+
+@router.post('/episodes/{episode_id}/isaac-render', status_code=202)
+def start_render(episode_id: int, payload: IsaacRenderRequest):
+    try:
+        return episode_render_service.start(episode_id, payload.gpu)
+    except ResourceConflict as error:
+        raise HTTPException(409, str(error)) from error
+    except (OSError, ValueError, KeyError) as error:
+        raise HTTPException(422, str(error)) from error

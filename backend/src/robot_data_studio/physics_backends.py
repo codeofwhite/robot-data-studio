@@ -7,6 +7,7 @@ from __future__ import annotations
 PHYSICS_BACKEND_LABELS: dict[str, tuple[str, str]] = {
     "physx": ("PhysX", "NVIDIA PhysX solver, the existing default"),
     "newton": ("Newton", "Newton MJWarp solver driving the scene, rendered by Isaac Sim"),
+    "genesis_ipc": ("Genesis + IPC", "Genesis 刚体／可选 FEM Cloth 与 IPC 接触，Isaac Sim RTX 渲染"),
 }
 
 

@@ -19,6 +19,9 @@ BIMANUAL_CLOTH_USD = PROJECT_ROOT / "assets/sources/robot-cloth-scenes-v1/scenes
 
 CLOTHFORGE_SCENE = "bimanual_tabletop_v17_clothforge"
 CLOTH_DROP_SCENE = "clothforge_free_drop"
+GENESIS_TELEOP_SCENE = "genesis_ipc_clothforge_single"
+GENESIS_RIGID_SCENE = "genesis_ipc_rigid_single"
+GENESIS_SCENES = {GENESIS_TELEOP_SCENE, GENESIS_RIGID_SCENE}
 CLOTHFORGE_SCENES = {CLOTHFORGE_SCENE, CLOTH_DROP_SCENE}
 SIMULATION_PRESETS = [
     {"id": "fast", "label": "快速试操作", "values": {"cloth_substeps": 4, "cloth_iterations": 10, "cloth_collision_interval": 0}},
@@ -134,6 +137,21 @@ SCENES[CLOTH_DROP_SCENE] = {
 }
 VISUAL_SCENES = BIMANUAL_SCENES | {CLOTH_DROP_SCENE}
 
+SCENES[GENESIS_TELEOP_SCENE] = {
+    "label": "单 Franka＋ClothForge · Genesis IPC 遥操采集",
+    "description": "Genesis FEM Cloth＋IPC 物理、Isaac Sim RTX 渲染；统一 Collector 键盘操作并记录 Episode，可选现有 ClothForge 衣物与材料。",
+    "family": "single_arm",
+    "parameters": [dict(p) for p in SCENES[CLOTHFORGE_SCENE]['parameters']
+                   if p['key'] in {'garment_asset_id', 'garment_version', 'material_preset',
+                                   'garment_scale', 'garment_rotation_deg', 'garment_offset_x_m', 'garment_offset_y_m'}],
+}
+
+
+SCENES[GENESIS_RIGID_SCENE] = {
+    "label": "单 Franka＋刚体方块 · Genesis IPC 对照",
+    "description": "Genesis 刚体＋IPC 物理、Isaac Sim RTX 渲染；无布料，固定方块作接触障碍物；复用同一 Collector 遥操与 Episode 采集，显示分段耗时。",
+    "family": "single_arm", "parameters": [],
+}
 
 class IsaacSimAdapter(CollectionAdapter):
     adapter_id = "isaac_sim"
@@ -142,7 +160,7 @@ class IsaacSimAdapter(CollectionAdapter):
     control_modes = ("keyboard", "gello", "scripted")
     camera_profile_ids = ("lab_d435i_dual_v1", "isaac_bimanual_tabletop_visual_v4", "isaac_bimanual_tabletop_visual_v5")
     renderer_profile_ids = ("isaac_performance_v1", "isaac_balanced_v1", "isaac_quality_v1")
-    physics_backends = ("physx", "newton")
+    physics_backends = ("physx", "newton", "genesis_ipc")
     capabilities = {
         "webrtc": True,
         "recording": True,
@@ -156,7 +174,7 @@ class IsaacSimAdapter(CollectionAdapter):
         scenes = {key: {**value, "parameters": [dict(p) for p in value["parameters"]]} for key, value in self.scenes.items()}
         ids = sorted({record.asset_id for record in AssetRegistry().all()
                       if record.kind == "model" and "clothforge" in record.tags})
-        for scene_id in CLOTHFORGE_SCENES:
+        for scene_id in CLOTHFORGE_SCENES | {GENESIS_TELEOP_SCENE}:
             field = scenes[scene_id]["parameters"][0]
             field["choices"] = ids
             if ids and field["default"] not in ids:
@@ -166,7 +184,8 @@ class IsaacSimAdapter(CollectionAdapter):
     def _clothforge_selection(self, params, scene_id=CLOTHFORGE_SCENE):
         from ..services.asset_service import AssetRegistry
         registry = AssetRegistry()
-        record = registry.get(str(params.get("garment_asset_id", "MDL-clothforge-tshirt-000")), int(params.get("garment_version", 1)))
+        version = params.get('garment_version', None if scene_id == GENESIS_TELEOP_SCENE else 1)
+        record = registry.get(str(params.get("garment_asset_id", "MDL-clothforge-tshirt-000")), int(version) if version is not None else None)
         if record.kind != "model" or "clothforge" not in record.tags:
             raise ValueError("garment_asset_id=请选择 ClothForge 衣物模型")
         paths = {a.role: registry.artifact_path(registry.inspect_artifact(a)) for a in record.artifacts if a.role in {"simulation_mesh", "provenance"}}
@@ -204,6 +223,29 @@ class IsaacSimAdapter(CollectionAdapter):
             raise ValueError("Isaac Sim supports keyboard or GELLO control only")
         if config.get("scene_id") not in self.scenes:
             raise ValueError("unsupported Isaac Sim scene")
+        backend = str(config.get('physics_backend') or settings.isaac_physics_backend)
+        if config['scene_id'] in GENESIS_SCENES:
+            if config['control_mode'] != 'keyboard' or backend != 'genesis_ipc':
+                raise ValueError('单臂 Genesis IPC 场景使用 Keyboard 与 Genesis + IPC')
+            params = config.get('scene_params', {})
+            fields = self.scenes[config['scene_id']]['parameters']
+            if set(params) - {field['key'] for field in fields}:
+                raise ValueError('Genesis IPC 示例收到不支持的场景参数')
+            for field in fields:
+                if field['key'] not in params:
+                    continue
+                value = params[field['key']]
+                if field['key'] == 'garment_asset_id':
+                    continue
+                if 'choices' in field:
+                    if value not in field['choices']:
+                        raise ValueError(f"{field['key']}=unsupported choice")
+                elif isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not field['minimum'] <= value <= field['maximum']:
+                    raise ValueError(f"{field['key']}=参数超出范围")
+            if config['scene_id'] == GENESIS_TELEOP_SCENE:
+                self._clothforge_selection(params, GENESIS_TELEOP_SCENE)
+        elif backend == 'genesis_ipc':
+            raise ValueError('Genesis IPC 当前仅支持单臂 ClothForge 与纯刚体场景')
         if config["scene_id"] in VISUAL_SCENES:
             from ..services.surface_appearance import resolve_environment
             resolve_environment(config.get('scene_params', {}).get('environment_appearance'))
@@ -274,6 +316,21 @@ class IsaacSimAdapter(CollectionAdapter):
 
     def build_collect_command(self, config: dict[str, Any], output_dir: Path) -> list[str]:
         self.validate_config(config)
+        if config['scene_id'] in GENESIS_SCENES:
+            if config['scene_id'] == GENESIS_RIGID_SCENE:
+                scene_args = ['--rigid-only']
+            else:
+                directory, parameters = self._clothforge_selection(config.get('scene_params', {}), GENESIS_TELEOP_SCENE)
+                scene_args = ['--garment-dir', str(directory), '--parameters', json.dumps(parameters, ensure_ascii=False)]
+            return [settings.cloth_genesis_python, '-B',
+                    str(PROJECT_ROOT / 'expert_demos/curobo_cloth_v1/teleop/live.py'),
+                    *scene_args,
+                    '--output', str(output_dir), '--isaac-python', settings.cloth_render_python,
+                    '--control-fps', str(config['control_fps']),
+                    '--target-episodes', str(config.get('target_episodes', 50)),
+                    '--collector-ui-root', str(settings.gello_remote_root / 'src/gello_remote/web/genesis'),
+                    '--host', '127.0.0.1', '--port', str(config['port']),
+                    '--width', str(config['width']), '--height', str(config['height'])]
         renderer_profile_id = str(config.get("renderer_profile_id") or "isaac_balanced_v1")
         renderer_profile = load_renderer_profile(renderer_profile_id)
         kit_settings = " ".join(
@@ -370,6 +427,22 @@ class IsaacSimAdapter(CollectionAdapter):
         return command
 
     def build_worker_launch(self, config: dict[str, Any], output_dir: Path) -> WorkerLaunch:
+        if config.get('scene_id') in GENESIS_SCENES:
+            import uuid
+            # Each launch gets fresh state/preview files, including session restarts.
+            work = output_dir / 'teleop' / uuid.uuid4().hex[:12]
+            libraries = Path(settings.cloth_genesis_python).resolve().parents[1] / 'lib'
+            cuda = sorted(libraries.glob('python*/site-packages/nvidia/*/lib'))
+            command = self.build_collect_command(config, work) + ['--episode-root', str(output_dir)]
+            return WorkerLaunch(command=command, cwd=PROJECT_ROOT,
+                env_updates={'CUDA_VISIBLE_DEVICES': str(config['gpu']), 'PYTHONDONTWRITEBYTECODE': '1',
+                    'PYTHONPATH': str(settings.clothforge_root / 'src') + ':' + str(CONTRACTS_SRC),
+                    'LD_LIBRARY_PATH': ':'.join(map(str, cuda)) + ':' + os.environ.get('LD_LIBRARY_PATH', ''),
+                    'GS_CACHE_FILE_PATH': str(output_dir / 'cache/genesis'),
+                    'XDG_CACHE_HOME': str(output_dir / 'cache'), 'OMP_NUM_THREADS': '4'},
+                readiness=WorkerReadiness(kind='tcp', timeout_s=600, host='127.0.0.1', port=int(config['port'])),
+                resources=('simulator:global', f"gpu:{int(config['gpu'])}", f"tcp:{int(config['port'])}",
+                           f"output:{output_dir.resolve()}"))
         if config.get("cloth_generation_plan_id"):
             import sys
             from ..services.cloth_generation_service import plan_directory, report_for, validate_session

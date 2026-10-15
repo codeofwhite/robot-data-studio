@@ -79,4 +79,4 @@ def test_every_adapter_ships_a_physics_backend_list() -> None:
 
 def test_isaac_advertises_physx_and_newton() -> None:
     isaac = next(engine for engine in engine_descriptors() if engine["id"] == "isaac_sim")
-    assert [backend["id"] for backend in isaac["physics_backends"]] == ["physx", "newton"]
+    assert [backend["id"] for backend in isaac["physics_backends"]] == ["physx", "newton", "genesis_ipc"]

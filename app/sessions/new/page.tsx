@@ -22,6 +22,8 @@ import { AppearanceControls, type AppearanceOptions } from '@/components/garment
 
 const CLOTH_DROP_SCENE = 'clothforge_free_drop';
 const CLOTHFORGE_SCENE = 'bimanual_tabletop_v17_clothforge';
+const GENESIS_TELEOP_SCENE = 'genesis_ipc_clothforge_single';
+const GENESIS_RIGID_SCENE = 'genesis_ipc_rigid_single';
 const VISUAL_KEYS = ['visual_texture', 'visual_color', 'visual_roughness', 'visual_material_id', 'visual_material_version', 'visual_color_mode', 'visual_roughness_multiplier', 'visual_normal_strength', 'visual_uv_scale'];
 const NUMERICAL_KEYS = ['simulation_preset', 'cloth_substeps', 'cloth_iterations', 'cloth_collision_interval'];
 const MATERIAL_KEYS = ['mass_per_area', 'friction', 'tri_ke', 'tri_ka', 'edge_ke'];
@@ -94,6 +96,8 @@ export default function NewSessionPage() {
   const [surfaceMaterials, setSurfaceMaterials] = useState<PbrMaterial[]>([]);
   useEffect(() => { void api<{ items: PbrMaterial[] }>('/pbr-materials').then(result => setSurfaceMaterials(result.items)).catch(e => setError({ message: String(e) })); }, []);
   const isClothDrop = engine === 'isaac_sim' && scene === CLOTH_DROP_SCENE;
+  const isGenesisCloth = engine === 'isaac_sim' && scene === GENESIS_TELEOP_SCENE;
+  const isGenesisTeleop = engine === 'isaac_sim' && [GENESIS_TELEOP_SCENE, GENESIS_RIGID_SCENE].includes(scene);
   const isClothForge = engine === 'isaac_sim' && [CLOTHFORGE_SCENE, CLOTH_DROP_SCENE].includes(scene);
   // `key` is set when the backend named a scene parameter as the reason, so the
   // message can sit against that field instead of only in the page banner.
@@ -130,7 +134,7 @@ export default function NewSessionPage() {
   function selectDescriptor(descriptor: Engine) {
     setEngine(descriptor.id);
     setScene(Object.keys(descriptor.scenes)[0] ?? '');
-    setMode(descriptor.control_modes.includes('gello') ? 'gello' : descriptor.control_modes[0]);
+    setMode(descriptor.id === 'genesis' ? 'keyboard' : descriptor.control_modes.includes('gello') ? 'gello' : descriptor.control_modes[0]);
     setCameraProfile(descriptor.camera_profiles[0]?.id ?? '');
     setRendererProfile(descriptor.renderer_profiles.find((profile) => profile.rendering_mode === 'balanced')?.id ?? descriptor.renderer_profiles[0]?.id ?? '');
     setPhysicsBackend(descriptor.physics_backends.find((backend) => backend.id === 'physx')?.id ?? descriptor.physics_backends[0]?.id ?? '');
@@ -138,7 +142,7 @@ export default function NewSessionPage() {
       descriptor.session_limits?.target_episodes?.default ??
         (descriptor.capabilities.batch_generation ? 1 : 50),
     );
-    setFps(descriptor.capabilities.batch_generation ? 20 : 10);
+    setFps(descriptor.id === 'genesis' || descriptor.capabilities.batch_generation ? 20 : 10);
     setAdvanced(false);
   }
 
@@ -158,7 +162,7 @@ export default function NewSessionPage() {
   useEffect(() => {
     const defaults = Object.fromEntries((selected?.parameters ?? []).map(parameter => [parameter.key, parameter.default]));
     const query = new URLSearchParams(window.location.search);
-    if ([CLOTHFORGE_SCENE, CLOTH_DROP_SCENE].includes(scene) && query.get('garment') && query.get('scene') === scene) {
+    if ([CLOTHFORGE_SCENE, CLOTH_DROP_SCENE, GENESIS_TELEOP_SCENE].includes(scene) && query.get('garment') && query.get('scene') === scene) {
       defaults.garment_asset_id = query.get('garment')!;
       defaults.garment_version = Number(query.get('version') ?? 1);
     }
@@ -166,6 +170,15 @@ export default function NewSessionPage() {
     setAdvanced(false);
     setNumericalExpanded(false);
     setError(undefined);
+    if (engine === 'isaac_sim' && [GENESIS_TELEOP_SCENE, GENESIS_RIGID_SCENE].includes(scene)) {
+      setMode('keyboard');
+      setPhysicsBackend('genesis_ipc');
+      setCameraProfile('lab_d435i_dual_v1');
+      setRendererProfile('isaac_performance_v1');
+      setTarget(50);
+    } else if (physicsBackend === 'genesis_ipc') {
+      setPhysicsBackend('physx');
+    }
     if (engine === 'isaac_sim' && ['bimanual_tabletop_v17', 'bimanual_tabletop_v17_cloth', CLOTHFORGE_SCENE, CLOTH_DROP_SCENE].includes(scene)) {
       setMode(scene === CLOTH_DROP_SCENE ? 'scripted' : 'keyboard');
       if (scene === CLOTH_DROP_SCENE) setTarget(1);
@@ -177,8 +190,9 @@ export default function NewSessionPage() {
   }, [selected]);
 
   useEffect(() => {
-    if (!isClothForge) return;
+    if (!isClothForge && !isGenesisCloth) return;
     let cancelled = false;
+    if (isGenesisCloth) setClothLoading(true);
     void api<AssetList>('/assets?q=clothforge&kind=model&limit=250')
       .then((list) => {
         if (cancelled) return;
@@ -187,9 +201,10 @@ export default function NewSessionPage() {
           setSceneParams(current => ({ ...current, garment_version: list.items.find(item => item.asset_id === current.garment_asset_id)?.version ?? 1 }));
         }
       })
-      .catch((caught) => { if (!cancelled) setError({ message: caught instanceof Error ? caught.message : '加载衣物失败' }); });
+      .catch((caught) => { if (!cancelled) setError({ message: caught instanceof Error ? caught.message : '加载衣物失败' }); })
+      .finally(() => { if (!cancelled && isGenesisCloth) setClothLoading(false); });
     return () => { cancelled = true; };
-  }, [isClothForge]);
+  }, [isClothForge, isGenesisCloth]);
 
   const garmentId = String(sceneParams.garment_asset_id ?? '');
   const garmentVersion = Number(sceneParams.garment_version ?? 1);
@@ -237,7 +252,7 @@ export default function NewSessionPage() {
   }
 
   async function submit() {
-    if (!selectedEngine || !selected || (isClothForge && (clothLoading || appearanceLoading || !appearanceOptions))) return;
+    if (!selectedEngine || !selected || (isGenesisCloth && clothLoading) || (isClothForge && (clothLoading || appearanceLoading || !appearanceOptions))) return;
     if (!targetValid) {
       setError({
         message: `目标 Episode 数必须在 ${episodeLimits.minimum}～${episodeLimits.maximum} 之间`,
@@ -303,7 +318,7 @@ export default function NewSessionPage() {
         <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
           <div className="space-y-4">
             <Card className="instrument-card">
-              <CardHeader><CardTitle>1. 仿真引擎</CardTitle><CardDescription>Studio 只编排引擎 Worker，场景能力来自各自插件。</CardDescription></CardHeader>
+              <CardHeader><CardTitle>1. 运行平台与渲染</CardTitle><CardDescription>优先使用 Genesis 原生遥操采集；保存后可在 Episodes 中提交 Isaac 离线渲染。Isaac Sim 平台仍提供独立采集与在线调试场景。</CardDescription></CardHeader>
               <CardContent className="grid gap-3 sm:grid-cols-2">
                 {engines.map((descriptor) => (
                   <ModeCard
@@ -311,7 +326,7 @@ export default function NewSessionPage() {
                     active={engine === descriptor.id}
                     icon={descriptor.id === 'genesis' ? Boxes : Bot}
                     title={descriptor.label}
-                    note={`${Object.keys(descriptor.scenes).length} 个场景 · ${descriptor.control_modes.join(' / ')}`}
+                    note={`${descriptor.id === 'genesis' ? 'Genesis 物理／原生渲染 · ' : descriptor.id === 'isaac_sim' ? 'Isaac Sim RTX 渲染 · ' : ''}${Object.keys(descriptor.scenes).length} 个场景 · ${descriptor.control_modes.join(' / ')}`}
                     onClick={() => selectDescriptor(descriptor)}
                   />
                 ))}
@@ -376,19 +391,19 @@ export default function NewSessionPage() {
             <Card className="instrument-card">
               <CardHeader><CardTitle>3. 控制与相机</CardTitle><CardDescription>Studio 只选择控制方式；GELLO 串口与标定在 Collector 页面完成。</CardDescription></CardHeader>
               <CardContent className="space-y-4">
-                {isClothDrop ? <p className="text-sm">观察模式 · 无机械臂、无固定点 · Newton 纯 VBD</p> : <>
+                {isGenesisTeleop ? <p className="text-sm">Keyboard · 单臂遥操 · 单视角 640×480 · Isaac Sim RTX 实时渲染</p> : isClothDrop ? <p className="text-sm">观察模式 · 无机械臂、无固定点 · Newton 纯 VBD</p> : <>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {selectedEngine?.control_modes.includes('gello') && <ModeCard active={mode === 'gello'} icon={Bot} title="GELLO" note="在 Collector 中连接与标定" onClick={() => setMode('gello')} />}
                   {selectedEngine?.control_modes.includes('keyboard') && <ModeCard active={mode === 'keyboard'} icon={Keyboard} title="Keyboard" note="Collector 键盘遥操作" onClick={() => setMode('keyboard')} />}
                   {engine !== 'isaac_sim' && selectedEngine?.control_modes.includes('scripted') && <ModeCard active={mode === 'scripted'} icon={Bot} title="Scripted" note="隔离 Worker 确定性批量生成" onClick={() => setMode('scripted')} />}
                 </div></>}
-                <div>
+                {!isGenesisTeleop && <div>
                   <Label className="mb-2">Sensor Profile</Label>
                   <NativeSelect className="w-full" value={cameraProfile} onChange={(event) => setCameraProfile(event.target.value)}>
                     {selectedEngine?.camera_profiles.map((profile) => <NativeSelectOption key={profile.id} value={profile.id}>{profile.label} · {profile.roles.join(' + ')} · {profile.match_level}</NativeSelectOption>)}
                   </NativeSelect>
-                </div>
-                {Boolean(selectedEngine?.renderer_profiles.length) && <div>
+                </div>}
+                {!isGenesisTeleop && Boolean(selectedEngine?.renderer_profiles.length) && <div>
                   <Label className="mb-2">Renderer Profile</Label>
                   <NativeSelect className="w-full" value={rendererProfile} onChange={(event) => setRendererProfile(event.target.value)}>
                     {selectedEngine?.renderer_profiles.map((profile) => <NativeSelectOption key={profile.id} value={profile.id}>{profile.label} · {profile.rendering_mode} · v{profile.profile_version}</NativeSelectOption>)}
@@ -396,9 +411,9 @@ export default function NewSessionPage() {
                   <p className="mt-2 text-xs text-muted-foreground">{selectedEngine?.renderer_profiles.find((profile) => profile.id === rendererProfile)?.description}</p>
                 </div>}
                 {Boolean(selectedEngine?.physics_backends.length) && <div>
-                  <Label className="mb-2">Physics Backend</Label>
+                  <Label className="mb-2">物理后端 · 渲染平台保持不变</Label>
                   <NativeSelect className="w-full" value={physicsBackend} onChange={(event) => setPhysicsBackend(event.target.value)}>
-                    {selectedEngine?.physics_backends.filter(backend => !isClothDrop || backend.id === 'newton').map((backend) => <NativeSelectOption key={backend.id} value={backend.id}>{backend.label}</NativeSelectOption>)}
+                    {selectedEngine?.physics_backends.filter(backend => isGenesisTeleop ? backend.id === 'genesis_ipc' : backend.id !== 'genesis_ipc' && (!isClothDrop || backend.id === 'newton')).map((backend) => <NativeSelectOption key={backend.id} value={backend.id}>{backend.label}</NativeSelectOption>)}
                   </NativeSelect>
                   <p className="mt-2 text-xs text-muted-foreground">{isClothDrop ? '纯 VBD 自由下落，保留自碰撞与桌面接触，复用工位参数。' : isClothForge && physicsBackend === 'newton'
                     ? 'MJWarp＋VBD 双向耦合：双臂与衣物接触，沿用衣物和材料参数。Tab 切换主力臂。'
@@ -479,16 +494,16 @@ export default function NewSessionPage() {
             <Card className="instrument-card sticky top-20">
               <CardHeader><CardTitle>会话摘要</CardTitle><CardDescription>创建不等于启动，可在下一页再次确认。</CardDescription></CardHeader>
               <CardContent className="space-y-3 text-sm">
-                <Summary label="Engine" value={selectedEngine?.label ?? '等待后端'} />
+                <Summary label="运行平台" value={selectedEngine?.label ?? '等待后端'} />
                 <Summary label="Task" value={selected?.label ?? '等待场景'} />
                 <Summary label="Control" value={mode.toUpperCase()} />
-                <Summary label="Camera" value={selectedEngine?.camera_profiles.find((item) => item.id === cameraProfile)?.label ?? '—'} />
-                <Summary label="Renderer" value={selectedEngine?.renderer_profiles.find((item) => item.id === rendererProfile)?.label ?? '引擎默认'} />
+                <Summary label="Camera" value={isGenesisTeleop ? '单视角预览 · 640×480' : selectedEngine?.camera_profiles.find((item) => item.id === cameraProfile)?.label ?? '—'} />
+                <Summary label="Renderer" value={isGenesisTeleop ? 'Isaac Sim RTX 实时渲染' : selectedEngine?.renderer_profiles.find((item) => item.id === rendererProfile)?.label ?? '引擎默认'} />
                 <Summary label="Physics" value={selectedEngine?.physics_backends.find((item) => item.id === physicsBackend)?.label ?? '引擎默认'} />
                 <Summary label="Quota" value={isClothDrop ? '物理观察 · 不生成 Episode' : `${target} episodes`} />
                 <Summary label="Worker" value={usesCollectorPort ? `GPU ${gpu} · :${port}` : `GPU ${gpu} · headless batch`} />
-                <div className="rounded-lg border border-primary/25 bg-primary/5 p-3 text-xs leading-5 text-muted-foreground"><Check className="mr-1 inline size-3.5 text-primary" />状态、动作、图像、时间戳和引擎 provenance 会进入统一 Episode 索引。</div>
-                <Button className="w-full" size="lg" disabled={busy || (isClothForge && (clothLoading || appearanceLoading || !appearanceOptions)) || !dataset.trim() || !selectedEngine || !selected || !targetValid} onClick={submit}>{busy ? '创建中…' : '创建会话'}<ArrowRight /></Button>
+                <div className="rounded-lg border border-primary/25 bg-primary/5 p-3 text-xs leading-5 text-muted-foreground"><Check className="mr-1 inline size-3.5 text-primary" />{isGenesisTeleop ? '统一 Collector 支持开始、成功／失败保存、丢弃与复位；Episode 可扫描、QA 和导出。' : '状态、动作、图像、时间戳和引擎 provenance 会进入统一 Episode 索引。'}</div>
+                <Button className="w-full" size="lg" disabled={busy || (isGenesisCloth && clothLoading) || (isClothForge && (clothLoading || appearanceLoading || !appearanceOptions)) || !dataset.trim() || !selectedEngine || !selected || !targetValid} onClick={submit}>{busy ? '创建中…' : '创建会话'}<ArrowRight /></Button>
               </CardContent>
             </Card>
           </aside>
