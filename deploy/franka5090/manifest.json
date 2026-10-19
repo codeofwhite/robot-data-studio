@@ -27,10 +27,10 @@
   },
   "assets": {
     "repository": "codeofwhite/robot-data-studio",
-    "release_tag": "franka5090-assets-v1",
-    "filename": "franka5090-assets-v1.tar.gz",
-    "size_bytes": 30725929,
-    "sha256": "9f5c9f8203e7eb6b133c1d9a09d8af8145f72a3fae4dd5caba621f8d2907fcc3",
+    "release_tag": "franka5090-assets-v2",
+    "filename": "franka5090-assets-v2.tar.gz",
+    "size_bytes": 30728328,
+    "sha256": "0518377f83241a4541002bea7e9509f6e4d7f461c873843a57bd19b6dec410e8",
     "files": {
       "gello-remote/deploy/console/assets/index-BGaI9TJC.js": {
         "size_bytes": 738790,
@@ -73,8 +73,12 @@
         "sha256": "115d330c6c4c457885d0b21766842499b922a6b86001ac8e4791c0fb38d330e7"
       },
       "robot-data-studio/assets/sources/visual-workstation-v1/asset_manifest_bimanual_v17.json": {
-        "size_bytes": 4444,
-        "sha256": "c05e2fea55ea5568c5fbd3f139e30c8ad226af3e3ec1d11a5d960c0c44c2da4a"
+        "size_bytes": 4675,
+        "sha256": "89248ad7c95bc30aa091268d250299afc299d7ab984d0a8ebc9c4a333d9bb725"
+      },
+      "robot-data-studio/assets/sources/visual-workstation-v1/bimanual_link_pose_forward_v17.json": {
+        "size_bytes": 7590,
+        "sha256": "4938a79d427b244766591d4ec656271d16aa04738d1a03ca85070df3209d6553"
       },
       "robot-data-studio/assets/sources/visual-workstation-v1/bimanual_tabletop_lab_v17.usda": {
         "size_bytes": 537276,
