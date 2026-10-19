@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "purpose": "Dual FR3 stationary UI and camera smoke on franka-5090; no physical robot control",
+  "workspace": "~/cloth-teleop",
+  "python": "3.12",
+  "environments": {
+    "backend": "robot-data-studio/backend/.venv",
+    "simulation": ".venvs/isaaclab"
+  },
+  "torch": {
+    "version": "2.11.0+cu128",
+    "torchvision": "0.26.0+cu128",
+    "index": "https://download.pytorch.org/whl/cu128"
+  },
+  "simulation_editables": [
+    "IsaacLab/source/isaaclab",
+    "IsaacLab/source/isaaclab_assets",
+    "IsaacLab/source/isaaclab_physx",
+    "gello-remote",
+    "robot-data-studio/packages/robot-data-contracts"
+  ],
+  "simulation_extra_packages": [
+    "websockets==17.0.1",
+    "opencv-python-headless",
+    "imageio",
+    "imageio-ffmpeg"
+  ],
+  "backend_editables": [
+    "robot-data-studio/backend",
+    "robot-data-studio/packages/robot-data-contracts"
+  ],
+  "frontend_install": "npm ci --no-audit --no-fund",
+  "launch": "bash scripts/start_franka5090.sh --remote-preview",
+  "scenes": [
+    "bimanual_tabletop_v17",
+    "bimanual_tabletop_v17_cloth"
+  ],
+  "gpu": 0,
+  "control_mode": "gello",
+  "physics_backend": "physx",
+  "camera_profile": "isaac_fr3_dual_wrist_v1",
+  "width": 960,
+  "height": 720,
+  "ui_port": 3000,
+  "api_port": 8010,
+  "collector_port": 8080,
+  "validation": [
+    "GPU tensor kernel",
+    "Studio UI and API",
+    "real four-camera previews",
+    "stationary scene observation",
+    "optional short recording"
+  ],
+  "bounds": {
+    "max_scene_attempts": 2,
+    "startup_timeout_seconds": 1200,
+    "observation_seconds": 120,
+    "artifact_budget_bytes": 1073741824
+  },
+  "evidence_directory": "robot-data-studio/data/deploy/franka5090/ui_smoke_001",
+  "limitations": [
+    "No physical dual-USB calibration",
+    "No successful grasp/fold claim",
+    "Cloth parameters and collision geometry unchanged"
+  ],
+  "review_status": "SELF_REVIEWED_PROVISIONAL"
+}

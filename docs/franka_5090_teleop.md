@@ -1,34 +1,71 @@
-# franka-5090 双 GELLO 仿真采集与上机指南
+# 双 FR3／双 GELLO：5090 本机遥操手册
 
-状态：代码与部署准备完成；目标机尚未安装 Studio/Isaac、尚未接通两套实物 GELLO，实际延迟与夹布效果待上机确认。SELF_REVIEWED_PROVISIONAL。
+工作区为 `~/cloth-teleop`。代码来自 GitHub 固定版本，SDK 已单独迁移。
+本轮 UI／仿真验证结果保存在 Studio 的 `data/deploy/franka5090/ui_smoke_001/`；
+以其中实际报告和画面为准。双 USB 实物控制、现场延迟和夹布效果仍需上机确认。
 
-## 1. 目标机与边界
+## 1. 到实验室先准备这些
 
-Codex 项目 franka-5090 对应 SSH 别名 server-245，主机名 lab。2026-10-19 只读检查：RTX5090 32GB，驱动580.126.18，内存60GiB、约51GiB可用，用户所在磁盘约760GiB可用。Node24.21.0在 ~/.local/bin，非交互SSH的PATH需显式加入该目录；Python3.12.3，ROS2 Jazzy。
+- 登录自己的 Linux 图形桌面账号，不在其他同学的桌面启动窗口。
+- 准备两套 GELLO、两根独立 USB 线及对应转接器，给左右两套贴标签。
+- 使用支持 Web Serial 的桌面 Chrome／Edge。当前检查只发现 Firefox；
+  Firefox 不能完成这套 Web Serial 操作。浏览器安装和系统串口授权尚未执行。
+- 这是仿真采集，不需要打开真实 FR3 控制服务或执行真实机械臂回零。
+- GELLO 的电源／总线接口按实验室硬件说明确认；不确定时先拍实物确认，不猜接线。
 
-目标机已有 /home/share/Franka-Controller，包含 GELLO 输入代码及真机动作发布。这轮不修改、不启动它。它的真实机械臂、夹爪、回零与VLA命令不属于仿真采集入口。
+先只插左侧 USB，在终端执行：
 
-当前只发现一个FTDI。第二套由操作者插入，左右身份由操作者分别选择，不能按 ttyUSB 编号自动猜测。当前 zhanghejun 账号没有串口读写权限，FTDI latency_timer=16ms；权限与硬件参数调整另行批准，不在本轮执行。
+```bash
+ls -l /dev/serial/by-id
+id -nG
+```
 
-## 2. 接线与第一次操作
+记下完整的 `usb-...` 标识；再插右侧 USB，重新执行第一条命令，记下新增设备。
+`ttyUSB0/1` 编号可能改变，不能靠编号猜左右。检查两台设备对应的节点是否对当前
+账号可读写，例如：
 
-网页创建会话时选择双臂场景的“双 GELLO”（左右各一套USB）；新双腕配置以960×720提交。相同场景也可选择Keyboard，控制方式在启动时确定，不能在运行中直接混发两类命令。
+```bash
+ls -l /dev/ttyUSB0 /dev/ttyUSB1
+```
 
-两套USB接在打开Collector的那台电脑上，使用桌面Chrome/Edge访问localhost转发地址；USB输入由该浏览器读取，而不是由远端仿真服务器自动扫描。两侧分别设置主臂零位、对应机器人起始姿态、夹爪开闭端点和关节方向，然后启用控制；任一侧缺少校准时不启用。
+若网页看不到端口或报 Permission denied，先停在连接步骤并保留错误。
+当前账号尚未加入 `dialout`，系统权限修改需要管理员单独处理；本手册不默认执行
+`chmod 666`、全局 udev 改动或写入 GELLO EEPROM。
 
-这是纯仿真流程：需要的是两套 GELLO 的USB输入，不需要启动真实FR3控制服务。GELLO的编码器、转接器供电方式以实验室实际硬件说明为准；不要把不确定的电源口、总线口当作USB口。附件教程主要讲软件和时序，没有足够的实物接线图，实际接线仍需现场确认。
+## 2. 启动、校准与第一条录制
 
-1. 在自己的实验室桌面会话中打开终端和 Chrome/Edge；SSH部署终端不等于本机图形桌面。
-2. 先插第一套USB，运行 `ls -l /dev/serial/by-id` 记下标识；再插第二套，确认新增标识。手动记好左右对应，不写入版本库。
-3. Studio启动仿真前确认GPU空闲，选择双臂v17、“双 GELLO”、PhysX及FR3双腕相机配置；部署配置通过环境变量指定FR3资产及本机显示。尚未部署前本步骤不可执行。
-4. Collector点击“Connect LEFT GELLO”，选择左USB；“Connect right USB”选择右USB。两路维持原57600 baud /20Hz轮询，无EEPROM写入。
-5. 保持控制关闭。左右主臂各放到舒适的起始姿态，分别Capture arm home / Capture right robot home。零位对应各自当前仿真姿态，不强制使用同一个Panda默认姿态。
-6. 左右分别采集夹爪完全张开和闭合端点。先小幅移动各关节，核对方向；有反向时关闭控制，再调整对应J1–J7的±方向。不要一次大幅移动。
-7. 两路校准完成后Enable control。看本机Isaac窗口操作，浏览器控制窗口保持可见；后台标签或被遮挡的窗口可能触发浏览器定时器节流。若输入停更，超时后两臂目标共同保持，夹爪保持原命令。
-8. 填写任务指令，Start Recording；完成后Success/Failure保存；不熟练的试操作不自动认定为成功示范。先回放第一条完整视频，再采5–10条种子。
-9. 结束时先关闭Enable control，再停止录制、断开左右USB连接并用Studio停止本次worker。只关闭本次会话，不结束其他进程。
+在自己的桌面终端执行：
 
-现场遇到串口不可访问、未发现第二USB或看不到仿真窗口，先记录现象并停在该步；这些条件尚未在实物上验证。
+```bash
+cd ~/cloth-teleop/robot-data-studio
+bash scripts/start_franka5090.sh
+```
+
+保持终端运行。用 Chrome／Edge 打开 `http://127.0.0.1:3000`。
+若端口被占用，启动脚本会报错并保留已有服务；查看终端给出的日志目录。
+远程验证使用 `--remote-preview`，现场本机使用默认的 `--local-display`。
+启动脚本只运行 UI/API；在网页会话中点击启动，才会创建仿真 worker。
+
+1. 新建 Isaac Sim 会话，选择双臂 v17 场景、**双 GELLO**、**PhysX**、GPU **0**、
+   `isaac_fr3_dual_wrist_v1`、**960×720**，控制频率沿用 **20 Hz**。
+   先确认空工位显示正常，再选 `bimanual_tabletop_v17_cloth` 查看布料。
+2. 启动 worker、打开 Collector。看本机 Isaac 窗口，辅助预览有主视角、俯视和双腕。
+   录制保存的是 **main / left_wrist / right_wrist** 三路，默认 **10 Hz**。
+3. 保持 Enable control 关闭。分别点击左右 GELLO 的连接按钮，手动选已记录的 USB。
+   串口沿用 **57600 baud**；不调整硬件参数。
+4. 两套主臂放在舒适的起始姿态，分别采集左右 arm home，使其对应各自当前仿真姿态。
+   再分别采集夹爪完全张开／闭合端点。每次重启仿真后重新核对，不盲用旧校准。
+5. 启用控制后，先只小幅移动左侧一个关节，再试右侧；确认另一侧保持，随后试夹爪。
+   方向相反时关闭控制，调整对应关节方向后再试。两侧都正确后才一起操作。
+6. 第一条只录 **10–20 秒**：填写任务指令，Start Recording，做少量缓慢动作，
+   然后 Stop／保存并按实际结果标记 Success 或 Failure。试操作不自动算成功示范。
+7. 停止本次 worker，在 Studio 扫描该会话并打开 Episode 审核，确认三路图像、
+   左右动作及时间序列都在。先回放第一条，再开始正式的 5–10 条种子采集。
+8. 退出顺序：关闭 Enable control → 结束并保存录制 → 断开两侧 USB →
+   在 Studio 停止本次 worker → 启动终端按 Ctrl+C 关闭 UI/API。
+
+浏览器控制标签保持前台可见。任一侧样本过期时两臂会一起保持目标；若出现僵住，
+先看左右连接与新样本状态，再看日志，不通过反复重发旧数据绕过看门狗。
 
 ## 3. 控制、数据与低延时
 
@@ -72,33 +109,21 @@ Canonical Episode仍为原始数据；未来LeRobot导出可对应observation.im
 
 教程也注明有些dry_run模式仍会执行Home。所以仿真手册不复制真实FR3 launch/home命令，不把dry_run一词当作“不运动”的保证。以后要操作真机时单独核对该教程与当前真机工程版本。
 
-## 5. 部署清单与下一阶段
+## 5. 已部署目录与排查入口
 
-Collector构建产物在独立结果目录；本轮没有替换原有已构建网页。worker可通过GELLO_WEB_CONSOLE_ROOT选择新产物，部署时须将已核对的新网页与新服务端作为一组安装。
+| 路径（相对 `~/cloth-teleop`） | 内容 |
+| --- | --- |
+| `robot-data-studio` | Studio UI/API、配置和采集数据 |
+| `gello-remote` | 固定版本 worker 和匹配的双 GELLO Collector |
+| `IsaacLab` | 固定官方版本及两个启动补丁 |
+| `isaacsim_6.0.1` | 独立 SDK；`IsaacLab/_isaac_sim` 指向此处 |
+| `.venvs/isaaclab` | 独立仿真 Python 环境 |
 
-本轮只准备代码、测试和部署清单，不在目标机安装包、修改权限或启动服务。目标机原有robot-expert-agent、robot-expert-data及其他用户工程不覆盖。
-
-建议目标目录（当前尚未复制）：
-
-- /home/zhanghejun/robot-data-studio：源代码、config、contracts与选定的台面/布料资产；不复制data、训练权重、数据库、.env、node_modules。
-- /home/zhanghejun/gello-remote：源代码与已构建Collector；不复制数据、环境、校准或历史日志。
-- /home/zhanghejun/IsaacLab：固定版本的必要源代码。
-- /home/zhanghejun/isaacsim_6.0.1：当前可复用的独立Isaac运行时约40GiB；复制前核对许可、依赖和总大小，不复制Conda环境。
-- Studio资产目录下的独立FR3资产闭包，以及首件衣物。解析USD相对依赖后再列入复制清单。
-
-不使用rsync --delete；先dry-run审阅精确文件清单。新建目标目录如已存在则先检查差异，不能覆盖未知改动。数据留在目标机本地磁盘，采集结束后另行同步至训练服务器。
-
-环境配置接口（部署后才能启用）：
-
-```
-ROBOT_DATA_STUDIO_ISAAC_LOCAL_DISPLAY=1
-ROBOT_DATA_STUDIO_ISAAC_ROBOT_MODEL=fr3
-ROBOT_DATA_STUDIO_ISAAC_FR3_USD=<verified absolute FR3 USD path>
-ROBOT_DATA_STUDIO_GELLO_REMOTE_ROOT=/home/zhanghejun/gello-remote
-ROBOT_DATA_STUDIO_ISAACLAB_LAUNCHER=/home/zhanghejun/IsaacLab/isaaclab.sh
-```
-
-后台与worker还需配置目标机自己的Python环境、数据目录和资产目录。准确安装解释器、包、命令以及串口授权命令须在下一轮检查后提出并获批。不要照抄源服务器/data绝对路径。
+- 启动脚本输出 `data/deploy/franka5090/launch_*/`，其中有 `api.log`、`ui.log`。
+- worker 日志与输出目录在 Studio 会话中查看。
+- 本轮启动记录、截图和短视频位于 `data/deploy/franka5090/ui_smoke_001/`。
+- 布料 PhysX 初始化曾有警告；画面显示正常不代表已经验证抓布或折衣成功。
+- 既有旧目录保留；不要为排错删除其他人的环境、进程或数据。
 
 ## 6. 少量示范后如何扩增
 

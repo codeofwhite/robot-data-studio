@@ -9,7 +9,7 @@
 ```bash
 mkdir -p ~/cloth-teleop
 cd ~/cloth-teleop
-git clone --branch feat/genesis-ipc-isaac-teleop git@github.com:codeofwhite/robot-data-studio.git
+git clone --branch feat/genesis-ipc-isaac-teleop https://github.com/codeofwhite/robot-data-studio.git
 cd robot-data-studio
 bash scripts/prepare_franka5090.sh
 ```
@@ -68,3 +68,29 @@ bash scripts/prepare_franka5090.sh --assets-only --archive /absolute/path/franka
 环境就绪后选择双 FR3／PhysX、双 GELLO、相机配置 isaac_fr3_dual_wrist_v1、960×720、本机显示。先分别校准左右主臂与夹爪，再看完整动作和录制三路图像。流程细节见 `docs/franka_5090_teleop.md`。
 
 已验证边界：服务器上创建过双臂场景与四路预览，三路保存接口有静止记录；双 GELLO 实物连接与端到端延迟尚未验证。当前布料 PhysX 初始化警告未解决，不能把部署、相机连通或静止录制称为成功夹布／成功示范。
+
+
+## 5. UI／仿真启动验证与现场入口
+
+运行环境的安装范围记录在 `deploy/franka5090/ui_smoke.json`。这份记录与代码／资产
+manifest 分工不同：前者记录本轮最小 UI／PhysX 环境，后者固定代码与资产版本。
+安装日志、实际版本、截图和运行报告保存在被 Git 忽略的
+`data/deploy/franka5090/ui_smoke_001/`，不提交环境目录或产物。
+
+UI/API 环境和仿真环境准备好后，在自己的桌面运行：
+
+```bash
+cd ~/cloth-teleop/robot-data-studio
+bash scripts/start_franka5090.sh
+```
+
+仅远程预览验证时使用：
+
+```bash
+bash scripts/start_franka5090.sh --remote-preview
+```
+
+脚本读取本机生成的 `env.sh`，检查 UI/API 端口并启动独立进程组；端口冲突时保留
+已有服务。Ctrl+C 只关闭本次 UI/API 进程组。先在 Studio 停止仿真 worker，
+再退出启动脚本。脚本不会安装包、修改串口权限或连接真实机器人。
+现场接线、左右校准和第一条录制见 [遥操手册](franka_5090_teleop.md)。
