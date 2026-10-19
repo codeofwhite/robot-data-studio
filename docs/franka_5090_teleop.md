@@ -29,8 +29,18 @@ ls -l /dev/ttyUSB0 /dev/ttyUSB1
 ```
 
 若网页看不到端口或报 Permission denied，先停在连接步骤并保留错误。
-当前账号尚未加入 `dialout`，系统权限修改需要管理员单独处理；本手册不默认执行
-`chmod 666`、全局 udev 改动或写入 GELLO EEPROM。
+当前账号尚未加入 `dialout`，系统权限修改需要管理员单独处理。管理员批准后，
+可以给当前操作账号加入串口组：
+
+```bash
+sudo usermod -aG dialout "$USER"
+```
+
+然后完整退出图形桌面并重新登录，重新执行 `id -nG` 确认有 `dialout`，再打开浏览器。
+仅新开终端通常不会更新已运行浏览器的组权限。本轮未执行此系统修改。
+不使用 `chmod 666`、全局 udev 改动或写入 GELLO EEPROM。
+Chrome／Edge 也需要管理员预先安装；可以从其官方 Linux 下载入口选择 Ubuntu／Debian 包。
+浏览器没有准备好时，先验证 UI 和仿真显示，暂不做串口连接。
 
 ## 2. 启动、校准与第一条录制
 
