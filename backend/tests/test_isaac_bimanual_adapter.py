@@ -31,7 +31,7 @@ def test_environment_appearance_reaches_worker_without_physics_changes():
     assert command[command.index('--physics-backend')+1] == 'physx'
 
 
-@pytest.mark.parametrize("key,value", [("control_mode", "gello"), ("physics_backend", "newton"),
+@pytest.mark.parametrize("key,value", [("control_mode", "scripted"), ("physics_backend", "newton"),
                                        ("camera_profile_id", "lab_d435i_dual_v1"), ("width", 640)])
 def test_rejects_incompatible_bimanual_launch(key, value):
     candidate = config()
@@ -187,3 +187,41 @@ def test_genesis_rigid_scene_uses_same_worker_without_garment(tmp_path):
     assert launch.command[launch.command.index('--episode-root')+1] == str(tmp_path / 'rigid')
     assert launch.env_updates['CUDA_VISIBLE_DEVICES'] == '2'
     assert IsaacSimAdapter().scene_descriptors()['genesis_ipc_rigid_single']['parameters'] == []
+
+
+def test_dual_gello_local_fr3_launch_selects_explicit_asset(tmp_path, monkeypatch):
+    import dataclasses
+    from robot_data_studio.adapters import isaac_sim
+    asset=tmp_path/"fr3.usd"; asset.write_text("test fixture only")
+    monkeypatch.setattr(isaac_sim,"settings",dataclasses.replace(isaac_sim.settings,
+        isaac_robot_model="fr3",isaac_fr3_usd=str(asset),isaac_local_display=True))
+    candidate=config();candidate["control_mode"]="gello"
+    launch=IsaacSimAdapter().build_worker_launch(candidate,tmp_path/"output")
+    command=launch.command
+    assert command[command.index("--franka-usd")+1] == str(asset)
+    assert command[command.index("--robot-model")+1] == "fr3"
+    assert command[command.index("--livestream")+1] == "0"
+    assert "--local-display" in command and "--headless" not in command
+    assert not any("49100" in resource or "47998" in resource for resource in launch.resources)
+
+
+def test_fr3_wrist_profile_requires_fr3_and_reaches_worker(tmp_path, monkeypatch):
+    from dataclasses import replace
+    from robot_data_studio.adapters import isaac_sim
+    from robot_data_studio.camera_profiles import load_camera_profile
+    asset = tmp_path / "fr3.usd"
+    asset.write_text("#usda 1.0\n")
+    candidate = config()
+    candidate["camera_profile_id"] = "isaac_fr3_dual_wrist_v1"
+    original = isaac_sim.settings
+    monkeypatch.setattr(isaac_sim, "settings", replace(original, isaac_robot_model="panda"))
+    assert "isaac_fr3_dual_wrist_v1" not in IsaacSimAdapter().camera_profile_ids
+    with pytest.raises(ValueError, match="双腕"):
+        IsaacSimAdapter().validate_config(candidate)
+    monkeypatch.setattr(isaac_sim, "settings", replace(original, isaac_robot_model="fr3", isaac_fr3_usd=str(asset)))
+    assert "isaac_fr3_dual_wrist_v1" in IsaacSimAdapter().camera_profile_ids
+    command = IsaacSimAdapter().build_collect_command(candidate, tmp_path / "session")
+    assert command[command.index("--camera-profile-file")+1].endswith("isaac_fr3_dual_wrist_v1.json")
+    assert command[command.index("--workstation-usd")+1].endswith("bimanual_tabletop_lab_v17.usda")
+    profile = load_camera_profile("isaac_fr3_dual_wrist_v1")
+    assert profile["engine_overrides"]["isaac_sim"]["recording_camera_map"] == {"main": "base", "left_wrist": "side", "right_wrist": "wrist"}

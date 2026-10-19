@@ -69,6 +69,9 @@ class Settings:
             "/home/zhanghejun/miniconda3/envs/isaaclab",
         )
     )
+    isaac_local_display: bool = os.getenv("ROBOT_DATA_STUDIO_ISAAC_LOCAL_DISPLAY", "0") == "1"
+    isaac_robot_model: str = os.getenv("ROBOT_DATA_STUDIO_ISAAC_ROBOT_MODEL", "panda")
+    isaac_fr3_usd: str = os.getenv("ROBOT_DATA_STUDIO_ISAAC_FR3_USD", "")
     public_ip: str = os.getenv("ROBOT_DATA_STUDIO_PUBLIC_IP", "219.223.200.145")
     isaac_signaling_port: int = int(os.getenv("ROBOT_DATA_STUDIO_ISAAC_SIGNALING_PORT", "49100"))
     isaac_media_port: int = int(os.getenv("ROBOT_DATA_STUDIO_ISAAC_MEDIA_PORT", "47998"))

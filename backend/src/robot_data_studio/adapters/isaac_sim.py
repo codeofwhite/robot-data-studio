@@ -158,7 +158,10 @@ class IsaacSimAdapter(CollectionAdapter):
     label = "Isaac Sim / Isaac Lab"
     scenes = SCENES
     control_modes = ("keyboard", "gello", "scripted")
-    camera_profile_ids = ("lab_d435i_dual_v1", "isaac_bimanual_tabletop_visual_v4", "isaac_bimanual_tabletop_visual_v5")
+    @property
+    def camera_profile_ids(self):
+        profiles = ("lab_d435i_dual_v1", "isaac_bimanual_tabletop_visual_v4", "isaac_bimanual_tabletop_visual_v5")
+        return profiles + (("isaac_fr3_dual_wrist_v1",) if settings.isaac_robot_model == "fr3" else ())
     renderer_profile_ids = ("isaac_performance_v1", "isaac_balanced_v1", "isaac_quality_v1")
     physics_backends = ("physx", "newton", "genesis_ipc")
     capabilities = {
@@ -246,6 +249,15 @@ class IsaacSimAdapter(CollectionAdapter):
                 self._clothforge_selection(params, GENESIS_TELEOP_SCENE)
         elif backend == 'genesis_ipc':
             raise ValueError('Genesis IPC 当前仅支持单臂 ClothForge 与纯刚体场景')
+        if config["scene_id"] in BIMANUAL_SCENES:
+            if settings.isaac_robot_model not in {"panda", "fr3"}:
+                raise ValueError("Isaac robot model must be panda or fr3")
+            if settings.isaac_robot_model == "fr3" and (not settings.isaac_fr3_usd or not Path(settings.isaac_fr3_usd).is_file() or backend != "physx"):
+                raise ValueError("FR3 requires an existing explicit FR3 USD and PhysX")
+        if config.get("camera_profile_id") == "isaac_fr3_dual_wrist_v1" and (
+            config["scene_id"] not in BIMANUAL_SCENES or settings.isaac_robot_model != "fr3" or backend != "physx"
+        ):
+            raise ValueError("真实双腕配置仅用于双 FR3 / PhysX")
         if config["scene_id"] in VISUAL_SCENES:
             from ..services.surface_appearance import resolve_environment
             resolve_environment(config.get('scene_params', {}).get('environment_appearance'))
@@ -254,15 +266,15 @@ class IsaacSimAdapter(CollectionAdapter):
             if config["scene_id"] == CLOTH_DROP_SCENE:
                 if config["control_mode"] != "scripted" or str(config.get("physics_backend") or settings.isaac_physics_backend) != "newton":
                     raise ValueError("自由下落场景使用 Scripted 观察模式和 Newton")
-            elif config["control_mode"] != "keyboard":
-                raise ValueError("双臂实验台 v17 当前仅支持 Keyboard（Tab 切换）")
+            elif config["control_mode"] not in {"keyboard", "gello"}:
+                raise ValueError("双臂实验台使用 Keyboard 或双 GELLO")
             if config["scene_id"] not in CLOTHFORGE_SCENES and str(config.get("physics_backend") or settings.isaac_physics_backend) != "physx":
                 raise ValueError("双臂实验台 v17 当前仅支持 PhysX")
-            if config.get("camera_profile_id") not in {"isaac_bimanual_tabletop_visual_v4", "isaac_bimanual_tabletop_visual_v5"}:
-                raise ValueError("双臂实验台 v17 请使用实验台四视角 v4 / v5 相机和 960×720")
+            if config.get("camera_profile_id") not in {"isaac_bimanual_tabletop_visual_v4", "isaac_bimanual_tabletop_visual_v5", "isaac_fr3_dual_wrist_v1"}:
+                raise ValueError("双臂实验台 v17 请使用四视角 v4/v5 或 FR3 双腕配置和 960×720")
             for path in (BIMANUAL_ASSET_ROOT / "bimanual_tabletop_lab_v17.usda",
                          BIMANUAL_ASSET_ROOT / "asset_manifest_bimanual_v17.json",
-                         BIMANUAL_ASSET_ROOT / "hdri/photo_studio_01_4k.hdr") + (() if config["scene_id"] == CLOTH_DROP_SCENE else (BIMANUAL_FRANKA_USD,)):
+                         BIMANUAL_ASSET_ROOT / "hdri/photo_studio_01_4k.hdr") + (() if config["scene_id"] == CLOTH_DROP_SCENE else (Path(settings.isaac_fr3_usd) if settings.isaac_robot_model == "fr3" else BIMANUAL_FRANKA_USD,)):
                 if not path.is_file():
                     raise ValueError(f"bimanual tabletop asset missing: {path}")
         if config.get("control_mode") == "scripted" and config["scene_id"] != CLOTH_DROP_SCENE and not generation:
@@ -386,13 +398,18 @@ class IsaacSimAdapter(CollectionAdapter):
             "--kit_args",
             (kit_settings + " --/app/window/width=960 --/app/window/height=720").strip(),
         ]
+        if settings.isaac_local_display and not config.get("generation_plan_id") and config["scene_id"] != CLOTH_DROP_SCENE:
+            command[command.index("--livestream") + 1] = "0"
+            command += ["--local-display"]
         if config["scene_id"] in {"rigid_pick_place", "rigid_cube_lift"}:
             height = config.get("scene_params", {}).get("work_surface_height_m", 0.25)
             command += ["--work-surface-height-m", str(height)]
         if config["scene_id"] == "l_table_basket":
             command += ["--scene-usd", str(settings.isaac_l_table_basket_scene_usd)]
         if config["scene_id"] in VISUAL_SCENES:
-            command[command.index("--franka-usd") + 1] = str(BIMANUAL_FRANKA_USD)
+            command[command.index("--franka-usd") + 1] = (settings.isaac_fr3_usd if settings.isaac_robot_model == "fr3" and config["scene_id"] in BIMANUAL_SCENES else str(BIMANUAL_FRANKA_USD))
+            if config["scene_id"] in BIMANUAL_SCENES:
+                command += ["--robot-model", settings.isaac_robot_model]
             from ..services.surface_appearance import resolve_environment
             from ..services.camera_lighting import resolve_camera_lighting
             environment = resolve_environment(config.get('scene_params', {}).get('environment_appearance'))
@@ -485,8 +502,7 @@ class IsaacSimAdapter(CollectionAdapter):
                 "simulator:global",
                 f"gpu:{int(config['gpu'])}",
                 f"tcp:{int(config['port'])}",
-                f"tcp:{settings.isaac_signaling_port}",
-                f"udp:{settings.isaac_media_port}",
+                *((f"tcp:{settings.isaac_signaling_port}", f"udp:{settings.isaac_media_port}") if not settings.isaac_local_display else ()),
                 f"output:{output_dir.resolve()}",
             )),
         )

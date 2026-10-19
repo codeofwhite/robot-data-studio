@@ -180,11 +180,15 @@ export default function NewSessionPage() {
       setPhysicsBackend('physx');
     }
     if (engine === 'isaac_sim' && ['bimanual_tabletop_v17', 'bimanual_tabletop_v17_cloth', CLOTHFORGE_SCENE, CLOTH_DROP_SCENE].includes(scene)) {
-      setMode(scene === CLOTH_DROP_SCENE ? 'scripted' : 'keyboard');
+      setMode(scene === CLOTH_DROP_SCENE ? 'scripted' : 'gello');
       if (scene === CLOTH_DROP_SCENE) setTarget(1);
       setPhysicsBackend(scene === CLOTH_DROP_SCENE ? 'newton' : 'physx');
-      setCameraProfile('isaac_bimanual_tabletop_visual_v5');
-    } else if (cameraProfile.startsWith('isaac_bimanual_tabletop_visual_v')) {
+      const fr3Cameras = scene !== CLOTH_DROP_SCENE && selectedEngine?.camera_profiles.some(profile => profile.id === 'isaac_fr3_dual_wrist_v1');
+      setCameraProfile(fr3Cameras ? 'isaac_fr3_dual_wrist_v1' : 'isaac_bimanual_tabletop_visual_v5');
+      if (fr3Cameras) setEnvironment({ tabletop: { texture: 'none', color: '#ffffff', roughness: .8,
+        material_id: 'MAT-ambientcg-marble006', material_version: 1, color_mode: 'original',
+        roughness_multiplier: 1, normal_strength: 1, uv_scale: 1 }, background: null });
+    } else if ((cameraProfile.startsWith('isaac_bimanual_tabletop_visual_v') || cameraProfile === 'isaac_fr3_dual_wrist_v1')) {
       setCameraProfile(selectedEngine?.camera_profiles[0]?.id ?? '');
     }
   }, [selected]);
@@ -275,8 +279,8 @@ export default function NewSessionPage() {
           control_fps: fps,
           sim_dt: 0.01,
           physics_steps_per_control: Math.round(1 / (fps * 0.01)),
-          width: cameraProfile.startsWith('isaac_bimanual_tabletop_visual_v') ? 960 : 640,
-          height: cameraProfile.startsWith('isaac_bimanual_tabletop_visual_v') ? 720 : 480,
+          width: (cameraProfile.startsWith('isaac_bimanual_tabletop_visual_v') || cameraProfile === 'isaac_fr3_dual_wrist_v1') ? 960 : 640,
+          height: (cameraProfile.startsWith('isaac_bimanual_tabletop_visual_v') || cameraProfile === 'isaac_fr3_dual_wrist_v1') ? 720 : 480,
           camera_profile_id: cameraProfile,
           ...(rendererProfile ? { renderer_profile_id: rendererProfile } : {}),
           ...(physicsBackend ? { physics_backend: physicsBackend } : {}),
@@ -393,7 +397,7 @@ export default function NewSessionPage() {
               <CardContent className="space-y-4">
                 {isGenesisTeleop ? <p className="text-sm">Keyboard · 单臂遥操 · 单视角 640×480 · Isaac Sim RTX 实时渲染</p> : isClothDrop ? <p className="text-sm">观察模式 · 无机械臂、无固定点 · Newton 纯 VBD</p> : <>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {selectedEngine?.control_modes.includes('gello') && <ModeCard active={mode === 'gello'} icon={Bot} title="GELLO" note="在 Collector 中连接与标定" onClick={() => setMode('gello')} />}
+                  {selectedEngine?.control_modes.includes('gello') && <ModeCard active={mode === 'gello'} icon={Bot} title={engine === 'isaac_sim' && selected?.family === 'bimanual' ? '双 GELLO' : 'GELLO'} note={engine === 'isaac_sim' && selected?.family === 'bimanual' ? '左右各一套 USB，在 Collector 分别校准' : '在 Collector 中连接与标定'} onClick={() => setMode('gello')} />}
                   {selectedEngine?.control_modes.includes('keyboard') && <ModeCard active={mode === 'keyboard'} icon={Keyboard} title="Keyboard" note="Collector 键盘遥操作" onClick={() => setMode('keyboard')} />}
                   {engine !== 'isaac_sim' && selectedEngine?.control_modes.includes('scripted') && <ModeCard active={mode === 'scripted'} icon={Bot} title="Scripted" note="隔离 Worker 确定性批量生成" onClick={() => setMode('scripted')} />}
                 </div></>}
