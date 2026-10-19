@@ -44,6 +44,8 @@ bash scripts/start_franka5090.sh
 保持终端运行。用 Chrome／Edge 打开 `http://127.0.0.1:3000`。
 若端口被占用，启动脚本会报错并保留已有服务；查看终端给出的日志目录。
 远程验证使用 `--remote-preview`，现场本机使用默认的 `--local-display`。
+FR3 启动脚本通过 `ROBOT_DATA_STUDIO_ENABLED_ENGINES=isaac_sim` 只启用本机已部署的引擎，
+不会要求安装 ClothTwin／Genesis。平台不设置此变量时仍保留原来的三个引擎。
 启动脚本只运行 UI/API；在网页会话中点击启动，才会创建仿真 worker。
 
 1. 新建 Isaac Sim 会话，选择双臂 v17 场景、**双 GELLO**、**PhysX**、GPU **0**、

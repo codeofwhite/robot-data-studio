@@ -9,6 +9,7 @@ esac
 source "$STUDIO_ROOT/data/deploy/franka5090/env.sh"
 export PATH="$HOME/.local/bin:$PATH"
 export PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+export ROBOT_DATA_STUDIO_ENABLED_ENGINES="${ROBOT_DATA_STUDIO_ENABLED_ENGINES-isaac_sim}"
 export ROBOT_DATA_STUDIO_PUBLIC_IP="${ROBOT_DATA_STUDIO_PUBLIC_IP:-127.0.0.1}"
 if [[ "$mode" == --remote-preview ]]; then
   export ROBOT_DATA_STUDIO_ISAAC_LOCAL_DISPLAY=0

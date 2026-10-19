@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from .base import CollectionAdapter
 from .clothtwin import ClothTwinAdapter
 from .isaac_sim import IsaacSimAdapter
@@ -11,6 +13,19 @@ _ENGINES: dict[str, CollectionAdapter] = {
     "isaac_sim": IsaacSimAdapter(),
     "roboverse": RoboVerseAdapter(),
 }
+# An explicit deployment selection avoids probing plugins that are not installed.
+# Without this setting, preserve the existing three-engine registry.
+_requested_engines = os.environ.get("ROBOT_DATA_STUDIO_ENABLED_ENGINES")
+if _requested_engines is not None:
+    _enabled_ids = [item.strip() for item in _requested_engines.split(",")]
+    if not all(_enabled_ids) or any(item not in _ENGINES for item in _enabled_ids):
+        raise ValueError(
+            "ROBOT_DATA_STUDIO_ENABLED_ENGINES must list known engine IDs: "
+            + ", ".join(_ENGINES)
+        )
+    _ENGINES = {item: _ENGINES[item] for item in _enabled_ids}
+
+
 _ALIASES = {"clothtwin": "genesis"}
 
 

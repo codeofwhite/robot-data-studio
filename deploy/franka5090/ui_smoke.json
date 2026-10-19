@@ -63,5 +63,8 @@
     "No successful grasp/fold claim",
     "Cloth parameters and collision geometry unchanged"
   ],
-  "review_status": "SELF_REVIEWED_PROVISIONAL"
+  "review_status": "SELF_REVIEWED_PROVISIONAL",
+  "enabled_engines": [
+    "isaac_sim"
+  ]
 }
