@@ -1,5 +1,7 @@
 # RoboData Studio
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 Local-first, engine-neutral simulation data collection platform. Genesis/ClothTwin,
 Isaac Sim/Isaac Lab, and RoboVerse run as isolated engine workers. The Studio owns
 sessions, worker lifecycle, a common Episode contract and indexing; each engine
@@ -9,13 +11,47 @@ workers depend on that package and never import Studio.
 
 **Looking for where to start?** See [`docs/START_HERE.md`](docs/START_HERE.md) — repo map, which door to open by intent, and what the evidence levels do and do not prove.
 
+## Capabilities and requirements
+
+| Area | What the repository provides | Additional requirements |
+| --- | --- | --- |
+| Collection | Sessions, isolated workers, keyboard/GELLO entry points | A compatible engine runtime, worker checkout, and scene assets |
+| Data review | Episode indexing and operator QA | Recorded canonical Episodes |
+| Export and training integration | LeRobot/OpenPI views and consumer checks | The selected exporter, model, and training environment |
+| Dual FR3 deployment | Pinned code and asset preparation | Separate Isaac SDK/environment installation and on-machine validation |
+
+Use **Python 3.12+** for the backend and **Node.js 22.13+** for the frontend.
+The Studio environment manages the UI and API; each simulator, exporter, and
+policy can use its own environment. A fresh clone contains neither collected
+Episodes nor model checkpoints, simulator SDKs, or downloaded asset libraries.
+
+- [Repository map](docs/START_HERE.md)
+- [Data-to-training workflow](docs/DATA_TO_TRAINING_GUIDE_ZH.md)
+- [Dual FR3 / GELLO deployment](docs/franka5090_deployment.md)
+
+### Install the UI and API dependencies
+
+The following commands are installation instructions, not an automatic simulator
+setup. Run them from the repository root in a new or intentionally selected environment:
+
+```bash
+python3.12 -m venv backend/.venv
+backend/.venv/bin/python -m pip install -e './packages/robot-data-contracts' -e './backend[dev]'
+npm ci
+```
+
+Review `.env.example`, copy it to `.env` if you do not already have a local
+configuration, and replace workspace paths for the engines you intend to use.
+The example is sourced by the shell below; its `${...}` variables require shell
+expansion. Starting the UI/API does not install or start a simulation worker.
+
 ## Start locally
 
 Backend (terminal 1):
 
 ```bash
-cd /data/zhanghejun/robot-data-studio
-cp .env.example .env
+cd /absolute/path/to/robot-data-studio
+test -f .env || cp .env.example .env
 set -a
 source .env
 set +a
@@ -26,7 +62,7 @@ PYTHONPATH=packages/robot-data-contracts/src \
 Frontend (terminal 2):
 
 ```bash
-cd /data/zhanghejun/robot-data-studio
+cd /absolute/path/to/robot-data-studio
 npm run dev -- --host 127.0.0.1
 ```
 
@@ -61,6 +97,56 @@ logical `cuda:0`, so the worker does not create contexts on unselected GPUs. Exi
 legacy ClothTwin manifests and the engine-neutral `robot_data_episode` v1 format
 are both validated before indexing. Raw manifests are not rewritten by QA.
 
+### Isaac dual-Franka workstation and ClothForge garments
+
+The v17 workstation reuses the existing USD table, dual Franka robots, materials,
+and lighting. Choose one of these scenes under **Isaac Sim**:
+
+| Scene ID | Content | Physics backend |
+| --- | --- | --- |
+| `bimanual_tabletop_v17` | Workstation with a rigid object | PhysX |
+| `bimanual_tabletop_v17_cloth` | Workstation with the existing rectangular cloth USD | PhysX |
+| `bimanual_tabletop_v17_clothforge` | Workstation with a selectable ClothForge garment | PhysX or Newton |
+
+1. Create a session and select the desired v17 scene. The form defaults to
+   **GELLO** and **PhysX**, with **960×720** cameras. An FR3 deployment selects
+   `isaac_fr3_dual_wrist_v1`; otherwise the form selects
+   `isaac_bimanual_tabletop_visual_v5`. Choose Keyboard explicitly when needed.
+2. For ClothForge, select a registered garment and a `light`, `medium`, or `heavy`
+   material preset. The form loads the garment's preset values; you can override
+   area density, friction, stretch, area constraint, bending, scale, tabletop
+   rotation, X/Y offset, and cloth solver iterations.
+3. To use Newton, select it in **Physics Backend**. This garment route uses
+   **MJWarp + VBD with two-way coupling** for robot–cloth contact. Other v17
+   variants currently require PhysX.
+4. Select the worker GPU, start the worker, and open the Collector. Give the
+   keyboard control area focus and press **Tab** to switch the primary arm.
+   Use the Collector's movement, gripper, recording, and reset controls.
+5. Save and scan the Episode, then review it through the normal QA flow.
+
+Garment parameters take effect at worker startup. Start a new session or restart
+with updated session parameters to apply changes. Garment selection uses the
+Studio Asset Registry; the worker loads the corresponding ClothForge source
+mesh and material configuration without rewriting the original asset. The
+ClothForge source root is configured by `ROBOT_DATA_STUDIO_CLOTHFORGE_ROOT`
+(set it to your ClothForge checkout). This route runs in the existing
+Isaac Lab worker environment and requires its Newton integration when Newton
+is selected; the backend Python environment alone does not provide simulation.
+
+PhysX converts ClothForge material values to its deformable-material model;
+Newton uses the native cloth coefficients, planar pattern rest metric, and seam
+information. Matching input presets does not establish physical equivalence
+between the two solvers. Episodes retain the garment, material parameters, and
+physics configuration for inspection.
+
+The local Newton T-shirt smoke on 2026-10-10 verified startup, tabletop contact,
+control of both arms and grippers, reset, and a 167-frame recording with finite
+state values. With 12 cloth iterations, measured control rate was about 10–11 Hz;
+this is a configuration-specific result. Stable grasp/lift and garment task
+success remain unverified. See the local
+`data/verification/clothforge_newton_v17_20261010/verification_summary.json`
+for evidence; verification artifacts are not included in a fresh checkout.
+
 ### RoboVerse ManiSkill batch
 
 The RoboVerse worker runs PickCube, PushCube, or StackCube as an isolated
@@ -84,16 +170,16 @@ GPU selection remains meaningful because the worker receives
 or keyboard control. When the process completes, scan the session and use the
 same Studio QA, accepted-only export, and consumer-smoke flow as other engines.
 
-The PickCube demo is already cached in this checkout. Fetch the two additional
-official datasets into the same cache before starting PushCube or StackCube:
+Download the official demonstrations required by your tasks into the configured
+cache; an existing local cache is not part of a fresh clone. For example:
 
 ```bash
-/data/zhanghejun/envs/roboverse-maniskill/bin/python \
+"${ROBOT_DATA_STUDIO_ROBOVERSE_PYTHON}" \
   -m mani_skill.utils.download_demo PushCube-v1 \
-  -o /data/zhanghejun/robot-data-studio/data/cache/maniskill
-/data/zhanghejun/envs/roboverse-maniskill/bin/python \
+  -o "${ROBOT_DATA_STUDIO_ROBOVERSE_DEMO_ROOT}"
+"${ROBOT_DATA_STUDIO_ROBOVERSE_PYTHON}" \
   -m mani_skill.utils.download_demo StackCube-v1 \
-  -o /data/zhanghejun/robot-data-studio/data/cache/maniskill
+  -o "${ROBOT_DATA_STUDIO_ROBOVERSE_DEMO_ROOT}"
 ```
 
 ### PickCube state-BC consumer
@@ -143,12 +229,11 @@ An exited worker releases its locks but keeps the immutable run record for audit
 `orphaned` means the persisted PID identity is absent or no longer matches, so
 Studio refuses to signal that PID.
 
-The checked-in `lab_d435i_dual_v1` Sensor Profile selects the active laboratory
-D435i pair: `261722075807` for `agentview` and `261622075579` for `wrist`.
-The historical `261622078553` unit is retained as inactive inventory and is not
-launched by the platform profile. Its RGB intrinsics are intentionally null
-until they are extracted from the physical cameras, so episodes are labeled
-`nominal_pending_intrinsics` instead of calibrated.
+Sensor profiles describe configured camera roles and mounts. Physical-device
+serial numbers and per-device calibration belong to local configuration. A profile
+with missing intrinsics remains `nominal_pending_intrinsics`; select and calibrate
+your own devices before claiming a match to a physical camera setup. Existing
+profile files have not been migrated by this documentation update.
 
 Every v1 episode records native and policy state, operator/requested/safety-filtered/
 actually-submitted actions, control/simulation/capture timestamps, camera calibration,
@@ -158,26 +243,31 @@ Because `franka_empty` has no task evaluator, its automatic outcome is explicitl
 
 ## Verification
 
+Run these checks in environments with their test dependencies installed. Load
+`.env` in this terminal before using the configured engine interpreters. The
+commands are verification entry points, not a claim that every engine has been
+validated on a new machine.
+
 ```bash
-cd /data/zhanghejun/robot-data-studio
+cd /absolute/path/to/robot-data-studio
 PYTHONPATH=backend/src:packages/robot-data-contracts/src \
   backend/.venv/bin/python -m pytest -q backend/tests
 
 PYTHONPATH=packages/robot-data-contracts/src \
-  /home/zhanghejun/miniconda3/envs/genesis/bin/python \
+  "${ROBOT_DATA_STUDIO_COLLECTOR_PYTHON}" \
   -m pytest -q packages/robot-data-contracts/tests
 
-PYTHONPATH=. /data/zhanghejun/envs/roboverse-maniskill/bin/python \
+PYTHONPATH=. "${ROBOT_DATA_STUDIO_ROBOVERSE_PYTHON}" \
   -m unittest discover -s consumers/roboverse_state_bc -t . -p 'test_*.py' -v
 
-cd /data/zhanghejun/robot-data-studio
+cd /absolute/path/to/robot-data-studio
 npm run lint
 npm run build
 ```
 
 Hardware/Genesis execution depends on the interpreter selected by `ROBOT_DATA_STUDIO_COLLECTOR_PYTHON`. The Studio backend environment intentionally does not duplicate the Genesis environment.
 
-Current dependency preflight on this machine: the `genesis` environment can run collection but does not contain LeRobot or TensorFlow Datasets; `softmimicgen` contains `h5py` for Robomimic. Export and consumer interpreters are configured independently. No packages are installed implicitly by Studio.
+A previous development-machine dependency snapshot (not a fresh-clone guarantee): the `genesis` environment can run collection but does not contain LeRobot or TensorFlow Datasets; `softmimicgen` contains `h5py` for Robomimic. Export and consumer interpreters are configured independently. No packages are installed implicitly by Studio.
 
 The export UI distinguishes current LeRobot v3 from OpenPI's vendored LeRobot
 v2.1. Current v3 accepts `physical_joint8` and `fastwam_franka_joint8`; v2.1
@@ -200,7 +290,7 @@ JAX policy forward on a single explicitly selected GPU. The
 trains on seven joint deltas plus an absolute gripper channel, and converts policy
 outputs back to 8-D absolute Franka joint targets. The report records model
 execution, action-contract compatibility, and closed-loop validation separately.
-The default local smoke checkpoint is the existing seed-0, 16-episode,
+A previous development smoke used a seed-0, 16-episode,
 2,000-step Franka joint8 artifact. It is interface-compatible with the worker
 safety layer, but it is not evidence of Isaac task robustness or generalization.
 

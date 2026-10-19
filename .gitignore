@@ -62,3 +62,8 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+
+# Private keys and local credentials
+*.key
+/.secrets/
+/credentials/
