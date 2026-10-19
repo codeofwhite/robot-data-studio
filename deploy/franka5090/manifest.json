@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "deployment": "dual-fr3-gello-v1",
+  "studio": {
+    "repository": "https://github.com/codeofwhite/robot-data-studio",
+    "branch": "feat/genesis-ipc-isaac-teleop",
+    "feature_commit": "ed4d17b85fddfe0a5075c4cd7fe935dbe81141eb"
+  },
+  "gello": {
+    "repository": "git@github.com:codeofwhite/gello-remote.git",
+    "branch": "remote/newton-workstation-fix-20261013",
+    "commit": "7880e9d3e1d7462e7f26705dd8f07a7c31f0613f"
+  },
+  "isaaclab": {
+    "repository": "https://github.com/isaac-sim/IsaacLab.git",
+    "commit": "28a37cecdd433c22d9eabd6a5954add9f13a8951",
+    "patch": "robot-data-studio/data/deploy/franka5090/isaaclab-runtime.patch",
+    "patch_source_commit": "4d241526b4c771953edbb70aaeb4d14ae99c643a",
+    "patch_scope": [
+      "isaaclab.sh",
+      "apps/isaaclab.python.rendering.kit"
+    ]
+  },
+  "isaac_sim": {
+    "required_version": "6.0.1-rc.7+release.42383.32955d8d.gl",
+    "distribution": "separate NVIDIA runtime; not included in Git or asset bundle"
+  },
+  "assets": {
+    "repository": "codeofwhite/robot-data-studio",
+    "release_tag": "franka5090-assets-v1",
+    "filename": "franka5090-assets-v1.tar.gz",
+    "size_bytes": 30725929,
+    "sha256": "9f5c9f8203e7eb6b133c1d9a09d8af8145f72a3fae4dd5caba621f8d2907fcc3",
+    "files": {
+      "gello-remote/deploy/console/assets/index-BGaI9TJC.js": {
+        "size_bytes": 738790,
+        "sha256": "0fd6aaacb3998fa937abcd73f2753b84d70f165c3fa33b33da7235dab24d8a8a"
+      },
+      "gello-remote/deploy/console/assets/index-Vvr_5QNX.css": {
+        "size_bytes": 5413,
+        "sha256": "c76b9ac8239fdcdda66f4cb62f7b18fd9d7885e4bc35d6d8772e85bfdb14afcd"
+      },
+      "gello-remote/deploy/console/index.html": {
+        "size_bytes": 10777,
+        "sha256": "71fd23e7f02c7a8868dd54790244d3efa235e605c6c8dbd6ed7bf9e324958a10"
+      },
+      "robot-data-studio/assets/registry/MAT-ambientcg-marble006/v000001.json": {
+        "size_bytes": 1678,
+        "sha256": "c17b08ee6cdc9bf3a77f9843b70a198017e5ddadfb95dbbfd66dafb15de2a802"
+      },
+      "robot-data-studio/assets/sources/cc0-surfaces-v1/b00ebcdcb8c14e2bbba9fe34fec70708/base_color.png": {
+        "size_bytes": 1859647,
+        "sha256": "2e4aaf57dbfa34babeb1284ec01008ef4b356d69966890722101b0f3fd4c98bc"
+      },
+      "robot-data-studio/assets/sources/cc0-surfaces-v1/b00ebcdcb8c14e2bbba9fe34fec70708/normal.png": {
+        "size_bytes": 3545276,
+        "sha256": "f35b64af22f3d84b6baff79cc35ab13ae33f54994bbf97a99008023c6963efe1"
+      },
+      "robot-data-studio/assets/sources/cc0-surfaces-v1/b00ebcdcb8c14e2bbba9fe34fec70708/roughness.png": {
+        "size_bytes": 481259,
+        "sha256": "0e4779c7de5e0eb60ac277cfd77932cdadbb46ddc2c6c50fa89be7a430c8f654"
+      },
+      "robot-data-studio/assets/sources/fr3-v1/FrankaFR3/configuration/fr3_robot_schema.usd": {
+        "size_bytes": 3060,
+        "sha256": "605dcf77d193bde0d19bb6cc5c7f355a3245cef1368a885a8002f12cf346111f"
+      },
+      "robot-data-studio/assets/sources/fr3-v1/FrankaFR3/fr3.usd": {
+        "size_bytes": 17466296,
+        "sha256": "edd3be9975fa94a9add48a691d7daccb3725c8546d85272d528e36c16a2d2945"
+      },
+      "robot-data-studio/assets/sources/robot-cloth-scenes-v1/scenes/fixtures_v4/place_in_basket/v001/cloth.usda": {
+        "size_bytes": 424235,
+        "sha256": "115d330c6c4c457885d0b21766842499b922a6b86001ac8e4791c0fb38d330e7"
+      },
+      "robot-data-studio/assets/sources/visual-workstation-v1/asset_manifest_bimanual_v17.json": {
+        "size_bytes": 4444,
+        "sha256": "c05e2fea55ea5568c5fbd3f139e30c8ad226af3e3ec1d11a5d960c0c44c2da4a"
+      },
+      "robot-data-studio/assets/sources/visual-workstation-v1/bimanual_tabletop_lab_v17.usda": {
+        "size_bytes": 537276,
+        "sha256": "69e4855966fc63d507653e2dd5cae493f21486c1af2e23dd7f67b1b6dd891ec9"
+      },
+      "robot-data-studio/assets/sources/visual-workstation-v1/hdri/photo_studio_01_4k.hdr": {
+        "size_bytes": 25393729,
+        "sha256": "b6bb7ed3522747f65ffbf50975054727d46516bc24dba98f8a5cd581b1341f28"
+      },
+      "robot-data-studio/data/deploy/franka5090/isaaclab-runtime.patch": {
+        "size_bytes": 3417,
+        "sha256": "a6ac968e7f5bd2ebb6a6f25cb54e7784d40f76341439a76848f5fb98a0d201df"
+      }
+    }
+  },
+  "defaults": {
+    "scene_id": "bimanual_tabletop_v17_cloth",
+    "control_mode": "gello",
+    "camera_profile_id": "isaac_fr3_dual_wrist_v1",
+    "width": 960,
+    "height": 720,
+    "local_display": true
+  },
+  "limitations": [
+    "No physical dual-USB validation yet",
+    "Cloth PhysX initialization warning remains unresolved",
+    "Preparation does not install dependencies or prove runtime readiness"
+  ],
+  "provenance": {
+    "table": "project procedural v17 workstation",
+    "cloth": "existing project cloth fixture; unchanged",
+    "fr3": "existing user-supplied LeHome FR3 USD and schema; unchanged",
+    "marble": "ambientCG Marble006 CC0-1.0",
+    "hdri": "Poly Haven photo_studio_01 CC0; existing workstation metadata"
+  }
+}
