@@ -17,7 +17,7 @@ bash scripts/prepare_franka5090.sh
 两个个人仓库需要 GitHub 访问权限。准备脚本通过现有 Git SSH 身份拉取 gello-remote；Release 附件可以通过已登录的 `gh`，或仅限本仓库的 API token 下载。默认可读当前用户的 `~/.config/cloth-teleop/github-release.token`（仅本人可读，权限600），也可用 `--github-token-file` 指定文件；凭据不会复制到部署目录或Git。跨主机下载重定向不会转发 Authorization 头。SSH 推送身份不能代替 Release API 身份。不要在聊天中粘贴 token。没有这两种授权时，可以先在有权限的电脑下载同名附件，再传入：
 
 ```bash
-bash scripts/prepare_franka5090.sh --archive /absolute/path/franka5090-assets-v1.tar.gz
+bash scripts/prepare_franka5090.sh --archive /absolute/path/franka5090-assets-v2.tar.gz
 ```
 
 这不是复制源服务器的工程快照：代码仍来自 GitHub 固定版本，只有已发布、带 SHA256 的资产附件可离线传入。
@@ -35,7 +35,7 @@ bash scripts/prepare_franka5090.sh --archive /absolute/path/franka5090-assets-v1
 
 新 clone 的 gello-remote 与 IsaacLab 处于 manifest 指定的 detached HEAD；这是依赖锁定，不要在其中盲目 git pull。升级入口是 Studio 分支中的新版 manifest：先审阅 git pull --ff-only 的变化，再显式更新依赖到指定提交。
 
-Release 附件包含：v17 工作台 USD／清单、HDRI、原布料 USD、FR3 USD／schema、Marble006 注册记录与三张贴图、匹配的 Collector 构建产物，以及最小 IsaacLab 启动补丁。不包含 SDK、Conda 环境、数据集、模型权重、录制结果、账号凭据或 GELLO 标定。
+Release 附件包含：v17 工作台 USD／清单、对应静态连杆姿态 JSON、HDRI、原布料 USD、FR3 USD／schema、Marble006 注册记录与三张贴图、匹配的 Collector 构建产物，以及最小 IsaacLab 启动补丁。不包含 SDK、Conda 环境、数据集、模型权重、录制结果、账号凭据或 GELLO 标定。
 
 ## 3. 生成的本机配置
 
@@ -54,13 +54,13 @@ Python 环境预留为 `WORKSPACE/.venvs/isaaclab`；必须完成后续明确批
 以下检查无需设备、GPU或依赖安装：
 
 ```bash
-bash scripts/prepare_franka5090.sh --verify-archive /absolute/path/franka5090-assets-v1.tar.gz
+bash scripts/prepare_franka5090.sh --verify-archive /absolute/path/franka5090-assets-v2.tar.gz
 ```
 
 只下载／整理资产、暂不 clone 依赖时：
 
 ```bash
-bash scripts/prepare_franka5090.sh --assets-only --archive /absolute/path/franka5090-assets-v1.tar.gz
+bash scripts/prepare_franka5090.sh --assets-only --archive /absolute/path/franka5090-assets-v2.tar.gz
 ```
 
 本机试用还需要：独立 Python 依赖环境、对应 Isaac SDK、支持 Web Serial 的浏览器、登录操作者自己的图形桌面，以及两套独立 USB 的串口权限。不得向其他实验室用户桌面注入窗口。
@@ -94,3 +94,34 @@ bash scripts/start_franka5090.sh --remote-preview
 已有服务。Ctrl+C 只关闭本次 UI/API 进程组。先在 Studio 停止仿真 worker，
 再退出启动脚本。脚本不会安装包、修改串口权限或连接真实机器人。
 现场接线、左右校准和第一条录制见 [遥操手册](franka_5090_teleop.md)。
+
+
+### 资产 v2：补齐静态姿态依赖
+
+`franka5090-assets-v2` 共 15 个文件，补齐了 v1 遗漏的
+`bimanual_link_pose_forward_v17.json`。仅将文件中的源机绝对轨迹路径替换成通用来源标识，
+机器人、基座与连杆位姿数值保持不变；场景清单同步记录新的文件哈希及原文件哈希。
+v1 Release 和原始源文件保留。已有 v1 清单升级时，先校验旧哈希并备份，再替换为
+v2 清单；准备脚本仍拒绝覆盖未知差异，不能跳过资产检查。
+
+### 2026-10-19 单卡 5090 实测
+
+v2 包及 15 个成员哈希均通过；原 v1 清单已备份。UI/API、CUDA 计算、
+空工位四路相机与布料四路相机均实际运行。布料场景使用现有 headless、
+`livestream=0` 模式单独启动 worker，保存了 100 帧、10 秒的静止 Episode：
+main／left_wrist／right_wrist 各 960×720。视频为 H.264／yuv420p／faststart，
+完整解码通过；这不是遥操示范，也不是成功训练数据。
+
+尚未通过的项目：
+
+- TCP SOCKS 远程测试中的 WebRTC 主画面失败，SDK 报 NvscStreamingSess 错误；
+  四路 WebSocket 辅助预览可见。现场优先本机 Isaac 窗口，本机 WebRTC 尚未验证。
+- 完整日志报告 `/World/Cloth` 的 `Deformable body view is not valid`。
+  布料可见、可录制不代表柔体物理有效，必须修复后再验证夹布和正式任务采集。
+- USD 引用中的 cotton 材料绑定被忽略；FR3 的 hand_tcp／link8 有质量／惯量警告。
+  本轮未修改材料、碰撞或惯量，也未将 PhysX 自动回退当作物理验证通过。
+- 第二套 USB、串口组权限、Chrome／Edge、双 GELLO 控制与端到端延迟仍待现场确认。
+
+静止录制末段控制频率快照约 20.5 Hz、预览约 9.6 Hz；这不是设备到画面的延迟测量。
+本轮仿真已停止，未留下 GPU 仿真任务。报告及视频位于
+`data/deploy/franka5090/ui_smoke_001/`，原始 Episode 保留在对应会话目录。

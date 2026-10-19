@@ -4,6 +4,12 @@
 本轮 UI／仿真验证结果保存在 Studio 的 `data/deploy/franka5090/ui_smoke_001/`；
 以其中实际报告和画面为准。双 USB 实物控制、现场延迟和夹布效果仍需上机确认。
 
+2026-10-19：已在 5090 保存三路 960×720、10 秒静止录像，但布料日志仍报
+`Deformable body view is not valid`。因此先进行空工位双 GELLO 校准；
+布料可用于检查画面与录制，修复柔体物理之前不开始正式夹布示范采集。
+远程 WebRTC 主画面本轮未通过，四路辅助预览可用；现场先看本机 Isaac 窗口。
+
+
 ## 1. 到实验室先准备这些
 
 - 登录自己的 Linux 图形桌面账号，不在其他同学的桌面启动窗口。
@@ -61,7 +67,9 @@ FR3 启动脚本通过 `ROBOT_DATA_STUDIO_ENABLED_ENGINES=isaac_sim` 只启用�
 1. 新建 Isaac Sim 会话，选择双臂 v17 场景、**双 GELLO**、**PhysX**、GPU **0**、
    `isaac_fr3_dual_wrist_v1`、**960×720**，控制频率沿用 **20 Hz**。
    先确认空工位显示正常，再选 `bimanual_tabletop_v17_cloth` 查看布料。
-2. 启动 worker、打开 Collector。看本机 Isaac 窗口，辅助预览有主视角、俯视和双腕。
+2. 启动 worker、打开 Collector。首次运行会编译 RTX 着色器，可能需要数分钟；
+   日志中的 `Waiting for compilation of ray tracing shaders` 是编译进度，不要反复点击启动。
+   看本机 Isaac 窗口，辅助预览有主视角、俯视和双腕。
    录制保存的是 **main / left_wrist / right_wrist** 三路，默认 **10 Hz**。
 3. 保持 Enable control 关闭。分别点击左右 GELLO 的连接按钮，手动选已记录的 USB。
    串口沿用 **57600 baud**；不调整硬件参数。
